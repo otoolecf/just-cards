@@ -1,0 +1,6 @@
+# Local-only development variables for `wrangler dev`.
+# Copy this file to `.dev.vars` and fill in real values.
+
+# Example:
+# OPENAI_API_KEY=your-key-here
+

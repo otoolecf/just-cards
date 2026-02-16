@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://just-cards.local/schemas/rulepack/v0.json",
+  "title": "RulePack v0",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "capabilities",
+    "baseAceValue",
+    "rankValues",
+    "modifiers",
+    "modifierResolution"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "rulepack/v0"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "value:base-ranks",
+          "value:modifier-set",
+          "value:op-algebra",
+          "routing:target-kinds",
+          "settlement:pool-transfer",
+          "trace:explain",
+          "resolution:first-match"
+        ]
+      }
+    },
+    "baseAceValue": {
+      "type": "number"
+    },
+    "rankValues": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      },
+      "required": ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"],
+      "properties": {
+        "2": { "type": "number" },
+        "3": { "type": "number" },
+        "4": { "type": "number" },
+        "5": { "type": "number" },
+        "6": { "type": "number" },
+        "7": { "type": "number" },
+        "8": { "type": "number" },
+        "9": { "type": "number" },
+        "10": { "type": "number" },
+        "J": { "type": "number" },
+        "Q": { "type": "number" },
+        "K": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "modifiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "when", "operation"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "when": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["kind", "rank"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "rank_is" },
+                  "rank": {
+                    "type": "string",
+                    "enum": ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["kind", "value"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "is_face" },
+                  "value": { "type": "boolean" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["kind", "value"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "is_ace" },
+                  "value": { "type": "boolean" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["kind", "tag"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "has_tag" },
+                  "tag": { "type": "string" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["kind", "tag"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "context_has_tag" },
+                  "tag": { "type": "string" }
+                }
+              }
+            ]
+          },
+          "operation": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["kind", "value"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "set" },
+                  "value": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["kind", "value"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "add" },
+                  "value": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["kind", "value"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "multiply" },
+                  "value": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["kind", "value"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "clamp_min" },
+                  "value": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["kind", "value"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "const": "clamp_max" },
+                  "value": { "type": "number" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "modifierResolution": {
+      "type": "string",
+      "enum": ["last_match_wins", "first_match_wins"]
+    }
+  },
+  "additionalProperties": false
+}
