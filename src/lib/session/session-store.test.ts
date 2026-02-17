@@ -128,4 +128,17 @@ describe('session store', () => {
 		);
 		expect(() => buildSessionStateView('missing')).toThrow('Session "missing" not found');
 	});
+
+	it('returns persisted score mode metadata in session state view', () => {
+		const session = createSession({
+			config: {
+				scoreModeId: 'rummy',
+				scoreRulePack: createRulePack()
+			}
+		});
+
+		const view = buildSessionStateView(session.id);
+
+		expect(view.config.scoreModeId).toBe('rummy');
+	});
 });

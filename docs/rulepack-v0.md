@@ -114,6 +114,16 @@ The score keeper now supports pattern-driven scoring in a dedicated event form:
 Pattern matches are detected by `detectPatterns` and then scored by
 `patternScoring` mapping inside `deriveState` for the round.
 
+### Manual Delta Rounds (v0)
+
+The score keeper also supports direct signed deltas:
+
+- `type: add_delta`
+- `entries[]` with `{ target, delta }`
+
+This is the primitive used for manual score entry and externally-derived scores
+that do not require card-by-card evaluation.
+
 ## Explainability / Trace
 
 `deriveState(..., { trace: true })` emits stage entries:
@@ -184,6 +194,6 @@ const events = [
 
 Not yet fully implemented in engine:
 
-- Rich trigger orchestration beyond event ordering
+- Rich trigger orchestration beyond the current finite runtime trigger primitives
 - Multi-condition predicates (`AND`/`OR`) and expression trees
 - Percentage/split settlement operations

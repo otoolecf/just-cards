@@ -6,6 +6,7 @@ interface CreateSessionPayload {
 	config?: {
 		scoreRulePack?: unknown;
 		gameplayRulePack?: unknown;
+		scoreModeId?: string;
 		trace?: boolean;
 	};
 	sessionId?: string;

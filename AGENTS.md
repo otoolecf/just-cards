@@ -46,6 +46,13 @@ Default assumption: Cloudflare-first and JavaScript/TypeScript-first unless arch
 4. Mobile-first UX decisions are required for all user-facing features.
 5. Keep the system lightweight; avoid unnecessary services and dependencies.
 
+## Ruleset Persistence (Pre-Cloudflare)
+
+1. Use `RulesetStore` abstraction for ruleset persistence; do not bind game logic directly to SQLite/D1 APIs.
+2. Local development/testing should use the SQLite adapter by default (`node:sqlite`) unless explicitly overridden.
+3. Treat local SQLite as the temporary persistence layer until Cloudflare storage adapters are wired.
+4. Cloudflare migration work should swap adapters behind the same interface, not rewrite service/API contracts.
+
 ## Security and Secrets Policy
 
 1. Never commit secrets, API keys, tokens, or account identifiers.
@@ -81,4 +88,3 @@ Use `/Users/ConnorO/git_repos/just-cards/docs/templates/tdd-spec-template.md` as
 4. Do not introduce heavyweight infrastructure without documented need.
 5. Do not make broad, unrelated refactors while delivering a scoped feature.
 6. Do not skip the spec-first TDD flow.
-

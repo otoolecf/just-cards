@@ -7,6 +7,7 @@ import {
 export interface SessionConfig {
 	scoreRulePack?: unknown;
 	gameplayRulePack?: unknown;
+	scoreModeId?: string;
 	trace?: boolean;
 }
 
@@ -51,6 +52,10 @@ export interface SessionStateView {
 	createdAt: string;
 	updatedAt: string;
 	eventCount: number;
+	config: {
+		scoreModeId?: string;
+		trace?: boolean;
+	};
 	state: ScoreState;
 	events: Array<{
 		id: string;
@@ -155,6 +160,10 @@ export function buildSessionStateView(sessionId: string): SessionStateView {
 		createdAt: session.createdAt,
 		updatedAt: session.updatedAt,
 		eventCount: session.events.length,
+		config: {
+			scoreModeId: session.config.scoreModeId,
+			trace: session.config.trace
+		},
 		state,
 		events
 	};

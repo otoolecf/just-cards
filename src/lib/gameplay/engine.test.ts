@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createGameplayRulePack, deriveGameState, type GameEvent } from './engine';
+import { createValidatorRulePack } from './validator';
 
 describe('gameplay engine', () => {
 	it('init_game_sets_players_turn_and_zones', () => {
@@ -228,5 +229,47 @@ describe('gameplay engine', () => {
 
 		expect(state.trace?.some((entry) => entry.stage === 'validate')).toBe(true);
 		expect(state.validationIssues?.map((issue) => issue.code)).toContain('no_game_initialized');
+	});
+
+	it('zone_move_can_enforce_validator_pack', () => {
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['alice', 'bob'], dealerIndex: 0 },
+			{ type: 'set_phase', phase: 'play' },
+			{
+				type: 'deal_cards',
+				playerId: 'alice',
+				cards: [{ rank: '9' }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'meld' },
+				cards: [{ rank: '9' }]
+			}
+		];
+
+		const validatorPack = createValidatorRulePack({
+			canPlay: [
+				{
+					id: 'meld-must-be-set',
+					predicate: { actionTypes: ['meld'] },
+					match: { kind: 'all_same_rank', minCards: 2 },
+					failureCode: 'invalid_meld'
+				}
+			],
+			requireRules: true
+		});
+
+		const state = deriveGameState(events, createGameplayRulePack({ startingPhase: 'play' }), {
+			playValidation: {
+				rulePack: validatorPack,
+				zoneMoveActionType: 'meld'
+			}
+		});
+
+		expect(state.validationIssues?.some((issue) => issue.code === 'play_validation_failed')).toBe(true);
+		expect(state.playerZones.alice.hand).toEqual([{ rank: '9' }]);
+		expect(state.tableZones.meld).toEqual([]);
 	});
 });

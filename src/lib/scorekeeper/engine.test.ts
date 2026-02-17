@@ -569,4 +569,39 @@ describe('scorekeeper engine', () => {
 		expect(state.trace?.some((entry) => entry.stage === 'score')).toBe(true);
 		expect(state.trace?.some((entry) => entry.stage === 'route')).toBe(true);
 	});
+
+	it('derive_state_supports_add_delta_manual_scoring_events', () => {
+		const state = deriveState(
+			[
+				{
+					type: 'add_delta',
+					entries: [
+						{ target: { kind: 'player', id: 'alice' }, delta: 12 },
+						{ target: { kind: 'team', id: 'north_south' }, delta: 5 }
+					]
+				}
+			],
+			createRulePack()
+		);
+
+		expect(state.totalsByTarget['player:alice']).toBe(12);
+		expect(state.totalsByTarget['team:north_south']).toBe(5);
+		expect(state.totalsByPlayer.alice).toBe(12);
+	});
+
+	it('derive_state_add_delta_respects_undo_redo', () => {
+		const state = deriveState(
+			[
+				{
+					type: 'add_delta',
+					entries: [{ target: { kind: 'player', id: 'alice' }, delta: 10 }]
+				},
+				{ type: 'undo' },
+				{ type: 'redo' }
+			],
+			createRulePack()
+		);
+
+		expect(state.totalsByPlayer.alice).toBe(10);
+	});
 });

@@ -11,6 +11,8 @@ This document defines the gameplay-state primitive that tracks:
 `gameplay/v0` is intentionally narrow: it tracks state, order, and legal move scaffolding.
 Action legality is handled by the gameplay validator (`src/lib/gameplay/validator.ts`).
 Scoring remains separate and is handled by the score primitives in `scorekeeper`.
+When needed, `deriveGameState` can enforce validator rules for `zone_move` via
+`DeriveGameplayStateOptions.playValidation`.
 
 ## Inputs
 
@@ -24,6 +26,9 @@ Scoring remains separate and is handled by the score primitives in `scorekeeper`
   - `end_round`
   - `undo` / `redo`
 - `GameplayRulePack`
+- Optional derive options:
+  - `playValidation.rulePack` (`validator/v0`)
+  - `playValidation.zoneMoveActionType` (example: `meld`)
 
 ## Core Behaviors
 
@@ -75,3 +80,4 @@ Scoring remains separate and is handled by the score primitives in `scorekeeper`
 - Gameplay plan: [`specs/2026-02-16-gameplay-v0-hand-state.md`](./specs/2026-02-16-gameplay-v0-hand-state.md)
 - Runtime schema checks: [`specs/2026-02-16-rulepack-runtime-schema-validation.md`](./specs/2026-02-16-rulepack-runtime-schema-validation.md)
 - Validator behavior: [`specs/2026-02-16-gameplay-v0-validator.md`](./specs/2026-02-16-gameplay-v0-validator.md)
+- Canonical primitive catalog: [`primitives-kb-v0.md`](./primitives-kb-v0.md)

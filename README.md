@@ -28,6 +28,43 @@ Run SvelteKit local dev server:
 npm run dev
 ```
 
+Quick run order (scoring-page-first):
+
+```sh
+npm run check   # optional but recommended before first run
+npm run dev
+```
+
+Ruleset storage (local-first):
+
+```sh
+# optional; defaults to sqlite in development/test
+export RULESET_STORE_DRIVER=sqlite
+# optional; default is .local/rulesets.sqlite
+export RULESET_SQLITE_PATH=.local/rulesets.sqlite
+```
+
+Then open:
+
+```text
+http://localhost:5173
+```
+
+Manual smoke test:
+
+1. Create a session using `Standard`, `Rummy`, or `Cribbage`.
+2. Add at least one round with player card rows or quick-text format (`Alice: A H 10S`).
+3. Verify standings, event count, and recent events update.
+4. Use `Undo`/`Redo` and confirm totals change.
+5. Submit one pattern round (target + cards) to confirm pattern scoring reflects.
+6. Create a ruleset draft via `POST /api/rulesets` and verify it appears in `GET /api/rulesets`.
+
+End-to-end test:
+
+```sh
+npm run test:e2e
+```
+
 Run Cloudflare local runtime:
 
 ```sh
@@ -46,6 +83,18 @@ Build app:
 
 ```sh
 npm run build
+```
+
+Build output check:
+
+```sh
+npm run check
+```
+
+Install Playwright browser binaries once (before first run):
+
+```sh
+npx playwright install chromium
 ```
 
 Deploy to Cloudflare Workers:

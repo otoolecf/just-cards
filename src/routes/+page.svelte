@@ -1,2 +1,1080 @@
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
+<script lang="ts">
+import { onDestroy } from 'svelte';
+	import { Select, Tabs } from 'bits-ui';
+	import {
+		PATTERN_PRESETS,
+		SCORE_MODE_OPTIONS,
+		buildAddRoundEvent,
+		buildPatternRoundEvent,
+		getPatternPreset,
+		getModePreset,
+		parseCardsFromText,
+		parseNamedRoundText,
+		parsePatternScoringText,
+		type PatternModePreset
+	} from '$lib/session/score-session-commands';
+	import ScoreInput from '$lib/components/score-input.svelte';
+	import ScoreButton from '$lib/components/score-button.svelte';
+	import CardTapInput from '$lib/components/card-tap-input.svelte';
+	import { type CardInput } from '$lib/scorekeeper/engine';
+	import {
+		createSession,
+		getSessionState,
+		postSessionEvent,
+		type SessionStateView
+	} from '$lib/session/score-session-api';
+
+	type FeedbackKind = 'idle' | 'error' | 'loading' | 'success';
+	type AddRoundMode = 'rows' | 'text';
+	type SelectOption = {
+		value: string;
+		label: string;
+	};
+
+	const POLL_INTERVAL_MS = 3000;
+
+	const gameModeItems = SCORE_MODE_OPTIONS.map((mode): SelectOption => ({ value: mode.id, label: mode.name }));
+	const patternPackItems = PATTERN_PRESETS.map((pack): SelectOption => ({ value: pack.id, label: pack.name }));
+
+	type Feedback = {
+		kind: FeedbackKind;
+		message: string;
+	};
+
+	let activeSessionId = '';
+	let joinSessionId = '';
+	let sessionState: SessionStateView | null = null;
+	let lastSynced = '';
+	let isPolling = false;
+	let isBusy = false;
+	let isPosting = false;
+	let feedback: Feedback = { kind: 'idle', message: '' };
+
+	let setupPlayers = ['Player 1', 'Player 2'];
+	let sessionRoster: string[] = [];
+	let setupPlayerCount = 2;
+	let selectedModeId = SCORE_MODE_OPTIONS[0]?.id ?? '';
+	let selectedPatternPackId = PATTERN_PRESETS[0]?.id ?? '';
+	let modePatternPack: PatternModePreset | undefined = PATTERN_PRESETS[0];
+
+	let addRoundMode: AddRoundMode = 'rows';
+	let quickRoundText = '';
+	let playerCardsById: Record<string, string> = {};
+
+	let patternCardsText = '';
+	let patternTargetId = '';
+	let patternScoringText = PATTERN_PRESETS[0]?.defaultPatternScoring ?? '';
+	let patternTargetItems: SelectOption[] = [];
+
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+	function setFeedback(kind: FeedbackKind, message: string): void {
+		feedback = { kind, message };
+	}
+
+	function dedupePlayers(values: string[]): string[] {
+		const result: string[] = [];
+		const seen = new Set<string>();
+		for (const value of values) {
+			const normalized = value.trim();
+			if (!normalized) {
+				continue;
+			}
+			if (seen.has(normalized)) {
+				continue;
+			}
+			seen.add(normalized);
+			result.push(normalized);
+		}
+		return result;
+	}
+
+	function getModeName(): string {
+		const mode = getModePreset(selectedModeId);
+		return mode?.name ?? SCORE_MODE_OPTIONS[0]?.name ?? '';
+	}
+
+	function syncSetupPlayers(): void {
+		const target = Math.max(2, setupPlayerCount);
+		setupPlayerCount = target;
+
+		if (setupPlayers.length < target) {
+			const next = [...setupPlayers];
+			for (let index = setupPlayers.length; index < target; index++) {
+				next.push(`Player ${index + 1}`);
+			}
+			setupPlayers = next;
+		}
+		if (setupPlayers.length > target) {
+			setupPlayers = setupPlayers.slice(0, target);
+		}
+	}
+
+	function syncPlayerInputsForRoster(players: string[]): void {
+		const next: Record<string, string> = {};
+		for (const player of players) {
+			next[player] = playerCardsById[player] ?? '';
+		}
+		playerCardsById = next;
+	}
+
+	function getSelectLabel(options: SelectOption[], value: string): string {
+		return options.find((option) => option.value === value)?.label ?? value;
+	}
+
+	function getActivePlayers(): string[] {
+		const preferredRoster = activeSessionId ? sessionRoster : setupPlayers;
+		if (!sessionState) {
+			return dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setupPlayers);
+		}
+		const active = dedupePlayers([
+			...dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setupPlayers),
+			...Object.keys(sessionState.state.totalsByPlayer)
+		]);
+		return active;
+	}
+
+	$: activePlayers = getActivePlayers();
+	$: {
+		modePatternPack = getPatternPreset(selectedPatternPackId) ?? PATTERN_PRESETS[0];
+	}
+	$: patternTargetItems = activePlayers.map((player) => ({ value: player, label: player }));
+	$: if (!selectedPatternPackId && PATTERN_PRESETS[0]) {
+		selectedPatternPackId = PATTERN_PRESETS[0].id;
+		patternScoringText = PATTERN_PRESETS[0].defaultPatternScoring;
+	}
+	$: if (sessionState && sessionState.state.totalsByPlayer && !patternTargetId && activePlayers.length > 0) {
+		patternTargetId = activePlayers[0];
+	}
+
+	$: if (activeSessionId) {
+		clearIntervalIfNeeded();
+		startPolling();
+	}
+
+	const recentEvents = (): SessionStateView['events'] => {
+		if (!sessionState) {
+			return [];
+		}
+		return [...sessionState.events].slice(-5).reverse();
+	};
+
+	const sortedStandings = (): Array<[string, number]> => {
+		if (!sessionState) {
+			return [];
+		}
+		return Object.entries(sessionState.state.totalsByPlayer).sort((left, right) => {
+			if (right[1] !== left[1]) {
+				return right[1] - left[1];
+			}
+			return left[0].localeCompare(right[0]);
+		});
+	};
+
+	function clearIntervalIfNeeded(): void {
+		if (pollTimer) {
+			clearInterval(pollTimer);
+			pollTimer = null;
+		}
+		isPolling = false;
+	}
+
+	async function loadSession(force = false): Promise<void> {
+		if (!activeSessionId || isBusy) {
+			return;
+		}
+		if (!force) {
+			isBusy = true;
+		}
+		try {
+			const state = await getSessionState(activeSessionId);
+			sessionState = state;
+			const persistedModeId = state.config?.scoreModeId;
+			if (persistedModeId && getModePreset(persistedModeId)) {
+				selectedModeId = persistedModeId;
+			}
+			if (sessionRoster.length === 0) {
+				const knownPlayers = dedupePlayers(Object.keys(state.state.totalsByPlayer));
+				if (knownPlayers.length > 0) {
+					sessionRoster = knownPlayers;
+				}
+			}
+			lastSynced = new Date().toLocaleTimeString();
+			const roster = getActivePlayers();
+			syncPlayerInputsForRoster(roster);
+			if (activeSessionId && patternTargetId === '' && activePlayers.length > 0) {
+				patternTargetId = activePlayers[0];
+			}
+			if (!sessionState.state.validationIssues || sessionState.state.validationIssues.length === 0) {
+				setFeedback('success', 'Session synced.');
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unable to sync session.';
+			setFeedback('error', message);
+		} finally {
+			if (!force) {
+				isBusy = false;
+			}
+		}
+	}
+
+	function startPolling(): void {
+		if (pollTimer || isPolling) {
+			return;
+		}
+		isPolling = true;
+		pollTimer = setInterval(() => {
+			void loadSession();
+		}, POLL_INTERVAL_MS);
+	}
+
+	async function createSessionAndStart(): Promise<void> {
+		if (isPosting || isBusy) {
+			return;
+		}
+		const modePreset = getModePreset(selectedModeId);
+		const config = modePreset?.createRulePack() ?? null;
+		if (!config) {
+			setFeedback('error', 'No game mode selected.');
+			return;
+		}
+		const names = dedupePlayers(setupPlayers);
+		if (names.length < 2) {
+			setFeedback('error', 'At least two players are required.');
+			return;
+		}
+
+		isPosting = true;
+		setFeedback('loading', `Creating ${getModeName()} session...`);
+		try {
+			const created = await createSession({ scoreModeId: selectedModeId, scoreRulePack: config, trace: false });
+			activeSessionId = created.sessionId;
+			joinSessionId = created.sessionId;
+			sessionState = null;
+			sessionRoster = names;
+			setupPlayers = names;
+			syncSetupPlayers();
+			syncPlayerInputsForRoster(names);
+			await loadSession(true);
+			setFeedback('success', `Session ${created.sessionId} created.`);
+			startPolling();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unable to create session.';
+			setFeedback('error', message);
+		} finally {
+			isPosting = false;
+		}
+	}
+
+	async function joinSession(): Promise<void> {
+		if (isPosting || isBusy) {
+			return;
+		}
+		const sessionId = joinSessionId.trim();
+		if (!sessionId) {
+			setFeedback('error', 'Session id is required.');
+			return;
+		}
+
+		activeSessionId = sessionId;
+		isPosting = true;
+		setFeedback('loading', 'Loading session...');
+		try {
+			await loadSession(true);
+			const knownPlayers = dedupePlayers(Object.keys(sessionState?.state.totalsByPlayer ?? {}));
+			sessionRoster = knownPlayers.length > 0 ? knownPlayers : dedupePlayers(setupPlayers);
+			setupPlayers = [...sessionRoster];
+			if (setupPlayers.length === 0) {
+				setupPlayers = ['Player 1', 'Player 2'];
+				sessionRoster = [...setupPlayers];
+			}
+			syncPlayerInputsForRoster(getActivePlayers());
+			setFeedback('success', `Joined session ${sessionId}.`);
+			startPolling();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unable to load session.';
+			setFeedback('error', message);
+		} finally {
+			isPosting = false;
+		}
+	}
+
+	function clearInputsAfterSubmit(): void {
+		if (addRoundMode === 'rows') {
+			const cleared: Record<string, string> = {};
+			for (const player of activePlayers) {
+				cleared[player] = '';
+			}
+			playerCardsById = cleared;
+		} else {
+			quickRoundText = '';
+		}
+		patternCardsText = '';
+	}
+
+	function submitAddRound(): void {
+		if (!activeSessionId || isPosting) {
+			return;
+		}
+		isPosting = true;
+		setFeedback('loading', 'Submitting round...');
+
+		const errors: string[] = [];
+		let parsedEntries: { playerId: string; cards: CardInput[] }[] = [];
+
+		if (addRoundMode === 'rows') {
+			for (const player of activePlayers) {
+				const rawCards = playerCardsById[player] ?? '';
+				const parsed = parseCardsFromText(rawCards);
+				if (parsed.errors.length > 0) {
+					errors.push(`${player}: ${parsed.errors.join(' ')}`);
+					continue;
+				}
+				if (parsed.cards.length > 0) {
+					parsedEntries.push({ playerId: player, cards: parsed.cards });
+				}
+			}
+		} else {
+			const named = parseNamedRoundText(quickRoundText);
+			if (named.errors.length > 0) {
+				errors.push(...named.errors);
+			}
+			parsedEntries = named.entries;
+		}
+
+		if (errors.length > 0) {
+			setFeedback('error', errors.join(' '));
+			isPosting = false;
+			return;
+		}
+		if (parsedEntries.length === 0) {
+			setFeedback('error', 'Add at least one player score entry.');
+			isPosting = false;
+			return;
+		}
+
+			postSessionEvent(activeSessionId, buildAddRoundEvent(parsedEntries))
+				.then((state) => {
+					sessionState = state;
+					clearInputsAfterSubmit();
+					lastSynced = new Date().toLocaleTimeString();
+					setFeedback('success', 'Round added.');
+			})
+			.catch((error) => {
+				setFeedback('error', error instanceof Error ? error.message : 'Unable to add round.');
+			})
+			.finally(() => {
+				isPosting = false;
+			});
+	}
+
+	async function submitPatternRound(): Promise<void> {
+		if (!activeSessionId || isPosting) {
+			return;
+		}
+		if (!patternTargetId || !patternTargetId.trim()) {
+			setFeedback('error', 'Pattern target is required.');
+			return;
+		}
+		const preset = getPatternPreset(selectedPatternPackId);
+		if (!preset) {
+			setFeedback('error', 'Select a pattern pack.');
+			return;
+		}
+		const parsedCards = parseCardsFromText(patternCardsText);
+		if (parsedCards.errors.length > 0) {
+			setFeedback('error', parsedCards.errors.join(' '));
+			return;
+		}
+		if (parsedCards.cards.length === 0) {
+			setFeedback('error', 'Pattern entries require at least one card.');
+			return;
+		}
+		const scoring = parsePatternScoringText(patternScoringText);
+		if (scoring.errors.length > 0) {
+			setFeedback('error', scoring.errors.join(' '));
+			return;
+		}
+
+		isPosting = true;
+		setFeedback('loading', 'Submitting pattern round...');
+		try {
+			const state = await postSessionEvent(
+				activeSessionId,
+				buildPatternRoundEvent({
+					targetId: patternTargetId,
+					cards: parsedCards.cards,
+					patternPack: preset.patternPack,
+					patternScoring: scoring.scoring
+				})
+			);
+			sessionState = state;
+			patternCardsText = '';
+			lastSynced = new Date().toLocaleTimeString();
+			setFeedback('success', 'Pattern round submitted.');
+		} catch (error) {
+			setFeedback('error', error instanceof Error ? error.message : 'Unable to submit pattern round.');
+		} finally {
+			isPosting = false;
+		}
+	}
+
+	async function submitUndo(): Promise<void> {
+		if (!activeSessionId || isPosting) {
+			return;
+		}
+		isPosting = true;
+		setFeedback('loading', 'Undoing...');
+		try {
+			sessionState = await postSessionEvent(activeSessionId, { type: 'undo' });
+			lastSynced = new Date().toLocaleTimeString();
+			setFeedback('success', 'Undo applied.');
+		} catch (error) {
+			setFeedback('error', error instanceof Error ? error.message : 'Unable to undo.');
+		} finally {
+			isPosting = false;
+		}
+	}
+
+	async function submitRedo(): Promise<void> {
+		if (!activeSessionId || isPosting) {
+			return;
+		}
+		isPosting = true;
+		setFeedback('loading', 'Redoing...');
+		try {
+			sessionState = await postSessionEvent(activeSessionId, { type: 'redo' });
+			lastSynced = new Date().toLocaleTimeString();
+			setFeedback('success', 'Redo applied.');
+		} catch (error) {
+			setFeedback('error', error instanceof Error ? error.message : 'Unable to redo.');
+		} finally {
+			isPosting = false;
+		}
+	}
+
+	function updatePlayerName(index: number, value: string): void {
+		const next = [...setupPlayers];
+		next[index] = value;
+		setupPlayers = next;
+	}
+
+	function changePatternPack(nextPatternPackId: string): void {
+		const nextPreset = getPatternPreset(nextPatternPackId);
+		if (!nextPreset) {
+			return;
+		}
+		selectedPatternPackId = nextPreset.id;
+		patternScoringText = nextPreset.defaultPatternScoring;
+	}
+
+	function resetSession(): void {
+		activeSessionId = '';
+		joinSessionId = '';
+		sessionState = null;
+		sessionRoster = [];
+		quickRoundText = '';
+		patternCardsText = '';
+		lastSynced = '';
+		clearIntervalIfNeeded();
+		setFeedback('idle', '');
+	}
+
+	function describeEventType(event: SessionStateView['events'][number]): string {
+		const scoreEvent = event.scoreEvent;
+		if (scoreEvent.type === 'add_round') {
+			if ('playerCards' in scoreEvent && scoreEvent.playerCards) {
+				return `add_round (players: ${Object.keys(scoreEvent.playerCards).length})`;
+			}
+			if ('entries' in scoreEvent) {
+				return `add_round (entries: ${scoreEvent.entries.length})`;
+			}
+			return 'add_round';
+		}
+		if (scoreEvent.type === 'add_pattern_round') {
+			return `add_pattern_round (player targets: ${scoreEvent.entries.length})`;
+		}
+		if (scoreEvent.type === 'undo') {
+			return 'undo';
+		}
+		if (scoreEvent.type === 'redo') {
+			return 'redo';
+		}
+		return scoreEvent.type;
+	}
+
+	onDestroy(() => {
+		clearIntervalIfNeeded();
+	});
+</script>
+
+<svelte:head>
+	<title>Scorekeeper</title>
+</svelte:head>
+
+<main class="score-page">
+	<header class="top">
+		<h1>Scorekeeper</h1>
+		<p class="subtitle">Fast one-device scoring for live card games.</p>
+	</header>
+
+	<section class="panel">
+		<div class="status">
+			{#if feedback.kind === 'loading'}
+				<p class="status-loading">{feedback.message}</p>
+			{:else if feedback.kind === 'error'}
+				<p class="status-error">{feedback.message}</p>
+			{:else if feedback.kind === 'success'}
+				<p class="status-success">{feedback.message}</p>
+			{/if}
+		</div>
+		<div class="session-summary">
+			<p><strong>Session:</strong> {activeSessionId || 'Not started'}</p>
+			<p><strong>Game mode:</strong> {getModeName()}</p>
+			{#if sessionState}
+				<p><strong>Events:</strong> {sessionState.eventCount}</p>
+			{/if}
+			<p><strong>Last synced:</strong> {lastSynced || 'never'}</p>
+		</div>
+	</section>
+
+		{#if !activeSessionId}
+		<section class="panel">
+			<h2>Start a score session</h2>
+			<div class="field-group">
+				<label for="game-mode">Game mode</label>
+				<Select.Root
+					type="single"
+					items={gameModeItems}
+					bind:value={selectedModeId}
+					onValueChange={(nextValue) => (selectedModeId = nextValue)}
+				>
+					<Select.Trigger id="game-mode" class="control select-trigger">
+						<span>{getSelectLabel(gameModeItems, selectedModeId)}</span>
+						<span aria-hidden="true">▾</span>
+					</Select.Trigger>
+					<Select.Portal>
+						<Select.Content class="select-content" sideOffset={6}>
+							<Select.Viewport class="select-viewport">
+								{#each gameModeItems as mode (mode.value)}
+									<Select.Item value={mode.value} class="select-item">
+										{mode.label}
+									</Select.Item>
+								{/each}
+							</Select.Viewport>
+						</Select.Content>
+					</Select.Portal>
+				</Select.Root>
+				<p class="hint">{getModeName()}</p>
+			</div>
+
+			<div class="grid-two">
+				<div class="field-group">
+					<label for="player-count">Players</label>
+					<ScoreInput
+						id="player-count"
+						type="number"
+						min="2"
+						value={`${setupPlayerCount}`}
+						onValueChange={(nextValue) => {
+							const value = Number.parseInt(nextValue || '2', 10);
+							setupPlayerCount = Number.isNaN(value) ? 2 : Math.max(2, value);
+							syncSetupPlayers();
+						}}
+					/>
+				</div>
+				<div class="field-group">
+					<label for="player-name-0">Players names</label>
+					{#each setupPlayers as name, index}
+						<ScoreInput
+							id={`player-name-${index}`}
+							type="text"
+							placeholder={`Player ${index + 1}`}
+							value={name}
+							onValueChange={(value) => updatePlayerName(index, value)}
+						/>
+					{/each}
+				</div>
+			</div>
+			<ScoreButton variant="primary" type="button" onPress={() => void createSessionAndStart()} disabled={isPosting}>
+				Create session
+			</ScoreButton>
+		</section>
+
+		<section class="panel">
+			<h2>Join existing session</h2>
+			<label for="join-session-id">Session ID</label>
+			<div class="join-row">
+				<ScoreInput
+					id="join-session-id"
+					type="text"
+					placeholder="sess-abc12345"
+					value={joinSessionId}
+					onValueChange={(value) => (joinSessionId = value)}
+				/>
+			<ScoreButton type="button" onPress={() => void joinSession()} disabled={isPosting}>
+				Join
+			</ScoreButton>
+			</div>
+		</section>
+	{:else}
+		<div class="actions">
+			<ScoreButton onPress={() => void loadSession()} disabled={isBusy || isPosting}>Refresh</ScoreButton>
+			<ScoreButton onPress={() => void resetSession()} disabled={isPosting}>Close session</ScoreButton>
+		</div>
+
+		<section class="panel score-spotlight">
+			<h2>Current score</h2>
+			{#if sortedStandings().length > 0}
+				<ol class="score-leaderboard">
+					{#each sortedStandings() as [player, total], index}
+						<li class={`score-row ${index === 0 ? 'leader' : ''}`.trim()}>
+							<div class="score-player">{player}</div>
+							<div class="score-total">{total}</div>
+						</li>
+					{/each}
+				</ol>
+			{:else}
+				<p class="empty">No totals yet. Add a round to start.</p>
+			{/if}
+		</section>
+
+		<section class="panel">
+			<h2>Validation</h2>
+			{#if sessionState?.state.validationIssues && sessionState.state.validationIssues.length > 0}
+				<ul>
+					{#each sessionState.state.validationIssues as issue}
+						<li class="error">{issue.code}: {issue.message}</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="empty">No validation issues.</p>
+			{/if}
+		</section>
+
+		<section class="panel">
+			<h2>Add round</h2>
+			<Tabs.Root bind:value={addRoundMode} class="segmented">
+				<Tabs.List>
+					<Tabs.Trigger
+						value="rows"
+						class={`mode-trigger ${addRoundMode === 'rows' ? 'active' : ''}`.trim()}
+					>
+						Player card rows
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="text"
+						class={`mode-trigger ${addRoundMode === 'text' ? 'active' : ''}`.trim()}
+					>
+						Quick text
+					</Tabs.Trigger>
+				</Tabs.List>
+					<Tabs.Content value="rows">
+						{#each activePlayers as player}
+							<div class="field-group">
+								<p class="input-label">{player}</p>
+								<CardTapInput
+									labelPrefix={player}
+									value={playerCardsById[player] ?? ''}
+									valueChanged={(value) => {
+										const next = {
+											...playerCardsById,
+											[player]: value
+										};
+										playerCardsById = next;
+									}}
+								/>
+							</div>
+						{/each}
+					</Tabs.Content>
+					<Tabs.Content value="text">
+						<label for="quick-round">Quick round text</label>
+						<ScoreInput
+							as="textarea"
+							id="quick-round"
+							rows={4}
+							placeholder="Alice: A H 10S
+Bob: 2D 3D 4D"
+							value={quickRoundText}
+							onValueChange={(value) => (quickRoundText = value)}
+						/>
+					</Tabs.Content>
+				</Tabs.Root>
+
+				<div class="button-row">
+				<ScoreButton variant="primary" type="button" onPress={() => void submitAddRound()} disabled={isPosting}>
+					Add round
+				</ScoreButton>
+				<ScoreButton type="button" onPress={() => void submitUndo()} disabled={isPosting}>Undo</ScoreButton>
+				<ScoreButton type="button" onPress={() => void submitRedo()} disabled={isPosting}>Redo</ScoreButton>
+			</div>
+		</section>
+
+		<section class="panel">
+			<h2>Pattern round (optional)</h2>
+			<div class="field-group">
+				<label for="pattern-player">Target player</label>
+				<Select.Root type="single" items={patternTargetItems} bind:value={patternTargetId}>
+					<Select.Trigger id="pattern-player" class="control select-trigger">
+						<span>{getSelectLabel(patternTargetItems, patternTargetId) || 'Select player'}</span>
+						<span aria-hidden="true">▾</span>
+					</Select.Trigger>
+					<Select.Portal>
+						<Select.Content class="select-content" sideOffset={6}>
+							<Select.Viewport class="select-viewport">
+								{#each patternTargetItems as player (player.value)}
+									<Select.Item value={player.value} class="select-item">
+										{player.label}
+									</Select.Item>
+								{/each}
+							</Select.Viewport>
+						</Select.Content>
+					</Select.Portal>
+				</Select.Root>
+			</div>
+			<div class="field-group">
+				<label for="pattern-pack">Pattern pack</label>
+				<Select.Root
+					type="single"
+					items={patternPackItems}
+					bind:value={selectedPatternPackId}
+					onValueChange={changePatternPack}
+				>
+					<Select.Trigger id="pattern-pack" class="control select-trigger">
+						<span>{getSelectLabel(patternPackItems, selectedPatternPackId)}</span>
+						<span aria-hidden="true">▾</span>
+					</Select.Trigger>
+					<Select.Portal>
+						<Select.Content class="select-content" sideOffset={6}>
+							<Select.Viewport class="select-viewport">
+								{#each patternPackItems as pack (pack.value)}
+									<Select.Item value={pack.value} class="select-item">
+										{pack.label}
+									</Select.Item>
+								{/each}
+							</Select.Viewport>
+						</Select.Content>
+					</Select.Portal>
+				</Select.Root>
+				<p class="hint">{modePatternPack?.description}</p>
+			</div>
+			<div class="field-group">
+				<p class="input-label">Cards</p>
+				<CardTapInput
+					labelPrefix="pattern"
+					value={patternCardsText}
+					valueChanged={(value) => (patternCardsText = value)}
+				/>
+			</div>
+			<div class="field-group">
+				<label for="pattern-scoring">Pattern scoring (patternId: points)</label>
+				<ScoreInput
+					as="textarea"
+					id="pattern-scoring"
+					rows={3}
+					placeholder="pair: 10
+run: 5"
+					value={patternScoringText}
+					onValueChange={(value) => (patternScoringText = value)}
+				/>
+			</div>
+			<div class="button-row">
+				<ScoreButton type="button" onPress={() => void submitPatternRound()} disabled={isPosting}>
+					Add pattern round
+				</ScoreButton>
+			</div>
+		</section>
+
+		<section class="panel">
+			<h2>Recent events ({sessionState?.eventCount ?? 0})</h2>
+			{#if sessionState && sessionState.events.length > 0}
+				<ul>
+					{#each recentEvents() as event}
+						<li>
+							<div>{describeEventType(event)}</div>
+							<div class="small">source: {event.source} @ {event.createdAt}</div>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="empty">No events yet.</p>
+			{/if}
+		</section>
+	{/if}
+</main>
+
+<style>
+	:global(body) {
+		margin: 0;
+		font-family: Manrope, 'Avenir Next', 'Segoe UI', sans-serif;
+		background: #eef2f7;
+		color: var(--foreground);
+	}
+
+	:global(:root) {
+		--surface: #ffffff;
+		--surface-2: #f7f9fc;
+		--surface-subtle: #eef2f7;
+		--foreground: #111827;
+		--muted: #526178;
+		--line: #d5dce7;
+		--success: #166534;
+		--error: #b91c1c;
+		--panel-border: #d7deea;
+		--brand: #0f766e;
+		--brand-soft: #ccfbf1;
+		--shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.05);
+		--shadow-md: 0 10px 24px rgba(17, 24, 39, 0.08);
+	}
+
+	.score-page {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 20px 16px 28px;
+		display: grid;
+		gap: 12px;
+	}
+
+	.top h1 {
+		margin: 0;
+		font-size: 2rem;
+		letter-spacing: -0.02em;
+	}
+
+	.subtitle {
+		margin: 4px 0 0;
+		color: var(--muted);
+		font-size: 1.05rem;
+	}
+
+	.panel {
+		border: 1px solid var(--panel-border);
+		padding: 14px;
+		border-radius: 14px;
+		display: grid;
+		gap: 10px;
+		background: var(--surface);
+		box-shadow: var(--shadow-sm);
+	}
+
+	h2 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.status-loading {
+		color: var(--muted);
+		font-size: 0.9rem;
+	}
+
+	.status-error {
+		color: var(--error);
+		font-weight: 600;
+	}
+
+	.status-success {
+		color: var(--success);
+		font-weight: 600;
+	}
+
+	.session-summary {
+		display: grid;
+		gap: 4px;
+		font-size: 0.92rem;
+	}
+
+	.field-group {
+		display: grid;
+		gap: 4px;
+	}
+
+	.field-group label {
+		font-size: 0.86rem;
+		font-weight: 600;
+	}
+
+	.input-label {
+		margin: 0;
+		font-size: 0.86rem;
+		font-weight: 600;
+	}
+
+	.hint {
+		color: var(--muted);
+		font-size: 0.82rem;
+		margin: 0;
+	}
+
+	:global(.control) {
+		font: inherit;
+		font-size: 1rem;
+		color: var(--foreground);
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		padding: 10px 12px;
+		width: 100%;
+		box-sizing: border-box;
+		min-height: 44px;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	}
+
+	:global(.control:hover) {
+		border-color: #97a7be;
+	}
+
+	:global(.control:focus-visible) {
+		outline: 0;
+		border-color: var(--brand);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent);
+	}
+
+	:global(.control:disabled) {
+		color: var(--muted);
+		background: var(--surface-2);
+	}
+
+	:global(.control-textarea) {
+		resize: vertical;
+	}
+
+	.actions {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 10px;
+	}
+
+	.score-spotlight {
+		background:
+			linear-gradient(160deg, color-mix(in srgb, var(--brand-soft) 58%, #ffffff) 0%, #ffffff 72%),
+			var(--surface);
+	}
+
+	.score-leaderboard {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		gap: 8px;
+	}
+
+	.score-row {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		align-items: baseline;
+		gap: 8px;
+		padding: 10px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--line);
+		background: var(--surface);
+	}
+
+	.score-row.leader {
+		border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 18%, transparent);
+	}
+
+	.score-player {
+		font-weight: 700;
+		font-size: 1rem;
+	}
+
+	.score-total {
+		font-weight: 800;
+		font-size: 1.35rem;
+		line-height: 1;
+		letter-spacing: -0.02em;
+	}
+
+	.join-row,
+	.button-row,
+	:global(.segmented) {
+		display: grid;
+		gap: 10px;
+	}
+
+	@media (min-width: 700px) {
+		.join-row,
+		.button-row,
+		:global(.segmented) {
+			grid-template-columns: auto auto;
+		}
+	}
+
+	:global(.segmented .mode-trigger) {
+		width: 100%;
+		padding: 10px 14px;
+		border-radius: 12px;
+		border: 1px solid var(--line);
+		background: var(--surface-2);
+		color: var(--foreground);
+		min-height: 44px;
+	}
+
+	:global(.segmented .mode-trigger.active) {
+		background: var(--brand-soft);
+		border-color: var(--brand);
+		color: #0f172a;
+		font-weight: 700;
+	}
+
+	:global(.select-trigger) {
+		display: inline-flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 8px;
+	}
+
+	:global(.select-content) {
+		min-width: 240px;
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		box-shadow: var(--shadow-md);
+		overflow: hidden;
+		font-size: 0.95rem;
+		z-index: 50;
+	}
+
+	:global(.select-viewport) {
+		max-height: 240px;
+		padding: 6px;
+	}
+
+	:global(.select-item) {
+		padding: 10px 12px;
+		border-radius: 10px;
+		cursor: pointer;
+		line-height: 1.2;
+	}
+
+	:global(.select-item[data-highlighted]),
+	:global(.select-item[data-selected]) {
+		background: var(--brand-soft);
+	}
+
+	.grid-two {
+		display: grid;
+		gap: 10px;
+	}
+
+	@media (min-width: 700px) {
+		.grid-two {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	.empty {
+		color: var(--muted);
+		font-size: 0.9rem;
+	}
+
+	.small {
+		font-size: 0.8rem;
+		color: var(--muted);
+	}
+
+	.error {
+		color: var(--error);
+	}
+</style>

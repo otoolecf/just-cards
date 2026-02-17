@@ -1,4 +1,5 @@
 import type { CardInput } from '$lib/scorekeeper/engine';
+import { validateCanPlay, type ValidatorRulePack } from '$lib/gameplay/validator';
 
 export type GameplayPhase = string;
 
@@ -148,6 +149,11 @@ export interface DeriveGameplayStateOptions {
 	trace?: boolean;
 	strictValidation?: boolean;
 	context?: GameActionContext;
+	playValidation?: {
+		rulePack: ValidatorRulePack;
+		zoneMoveActionType?: string;
+		strictValidation?: boolean;
+	};
 }
 
 const DEFAULT_PHASES: GameplayPhase[] = ['pregame', 'deal', 'play', 'scoring', 'round_end'];
@@ -376,7 +382,8 @@ function removeCardsFromZone(cards: CardInput[], requested: CardInput[]): { remo
 function validateGameEvent(
 	event: Exclude<GameEvent, { type: 'undo' | 'redo' }>,
 	rulePack: GameplayRulePack,
-	state: GameplayState
+	state: GameplayState,
+	options: DeriveGameplayStateOptions
 ): GameplayValidationIssue[] {
 	const issues: GameplayValidationIssue[] = [];
 
@@ -464,6 +471,38 @@ function validateGameEvent(
 			const { remaining } = removeCardsFromZone(sourceCards, event.cards);
 			if (remaining.length === sourceCards.length) {
 				issues.push({ code: 'source_card_missing', message: 'Requested card(s) are not in source zone' });
+			}
+		}
+
+		if (issues.length === 0 && options.playValidation) {
+			const currentPlayerId =
+				state.currentTurnIndex >= 0 && state.currentTurnIndex < state.turnOrder.length
+					? state.turnOrder[state.currentTurnIndex]
+					: undefined;
+			const validation = validateCanPlay(
+				{
+					actorId: event.actorId,
+					actionType: options.playValidation.zoneMoveActionType ?? 'play',
+					phase: state.phase,
+					cards: event.cards
+				},
+				options.playValidation.rulePack,
+				{
+					currentPlayerId,
+					phase: state.phase
+				},
+				{
+					strictValidation: options.playValidation.strictValidation
+				}
+			);
+
+			if (!validation.isValid) {
+				for (const issue of validation.issues) {
+					issues.push({
+						code: 'play_validation_failed',
+						message: `Zone move failed play validation (${issue.code}): ${issue.message}`
+					});
+				}
 			}
 		}
 
@@ -635,7 +674,7 @@ export function deriveGameState(
 	});
 
 	applied.forEach((event, eventIndex) => {
-		const issues = validateGameEvent(event, resolvedRulePack, state);
+		const issues = validateGameEvent(event, resolvedRulePack, state, options);
 		if (issues.length > 0) {
 			for (const issue of issues) {
 				validationIssues.push(issue);

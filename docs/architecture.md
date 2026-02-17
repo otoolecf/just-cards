@@ -67,6 +67,16 @@ Event log model:
 - `redo`
 - `correction`
 
+#### Scorekeeper UI decisions (2026-02-17)
+
+- `bits-ui` is used for select-like interactions and tab-like controls to keep accessible primitives and consistent behavior across form controls:
+  - `Select.Root` + `Select.Trigger` + `Select.Content` + `Select.Item`.
+- Reusable text/number control wrapper exists as `src/lib/components/score-input.svelte` so native inputs and textareas share one styling contract (`control`, `control-textarea`) and behavior.
+- Visual consistency is driven by a shared token set in page-level styles (surface, foreground, muted, line, success/error) for predictable contrast and spacing.
+- All scoring flows continue to use event-based server truth:
+  - UI posts events to `POST /api/sessions/{sessionId}`.
+  - Session and standings always come from `GET /api/sessions/{sessionId}`.
+
 Current scaffolding exposes an in-memory backend API for this flow at:
 `/api/sessions` and `/api/sessions/{sessionId}`.
 
@@ -119,6 +129,14 @@ Separate primitives should be modeled explicitly:
 `scorekeeper` currently wires `PatternDetector` through `ScoreEvent.type = add_pattern_round` and maps
 `patternId` to points with explicit `patternScoring` metadata in `deriveState`.
 
+Runtime orchestration now exists in `src/lib/runtime/game-runtime.ts`:
+
+- mixed event stream support (`gameplay`, `score`, `manual_score`)
+- optional validator enforcement on `zone_move` application
+- declarative scoring triggers from gameplay events (`event_cards`, `player_zone`)
+- scoring execution with `card_values`, `pattern`, and `fixed` scorer primitives
+- manual score delta support through `ScoreEvent.type = add_delta`
+
 Example mappings:
 
 - Rummy meld gating (set/run minimum length) belongs to `Validator`.
@@ -128,6 +146,12 @@ Example mappings:
 
 Canonical Rule IR details are documented in:
 `/Users/ConnorO/git_repos/just-cards/docs/rulepack-v0.md`
+
+Canonical LLM/SLM primitive authoring reference is documented in:
+`/Users/ConnorO/git_repos/just-cards/docs/primitives-kb-v0.md`
+
+Ruleset persistence abstraction (local SQLite now, Cloudflare-backed later) is documented in:
+`/Users/ConnorO/git_repos/just-cards/docs/ruleset-storage-v0.md`
 
 ## Future Rule Ingestion Pipeline
 
@@ -139,6 +163,12 @@ High-level flow:
 4. Validate against strict JSON schema from `src/lib/scorekeeper/rulepack-schema.json`.
 5. Run simulation checks/tests for obvious contradictions.
 6. Save as draft rule pack for user review/publish.
+
+Current implementation path for step 6:
+
+- persist via `RulesetStore` abstraction
+- local dev/test default: SQLite (`node:sqlite`)
+- deployment target migration: D1 adapter behind same interface
 
 Safety requirements:
 
@@ -153,6 +183,14 @@ Safety requirements:
 - PWA installability and app-like feel.
 - Fast reconnect/resume after intermittent network drops.
 - Optional offline-first scorekeeper workflow (sync on reconnect).
+
+### PWA and mobile friendliness status
+
+- Current scorekeeper screen now includes installability hooks in `+layout.svelte` with manifest and service worker registration for basic offline/return behavior (`static/manifest.webmanifest`, `static/sw.js`).
+- Control sizing is normalized for touch:
+  - `min-height: 44px` for entry controls and buttons.
+  - clear tap-friendly spacing and compact layout breaks at mobile-first breakpoints.
+- Pattern of polling-based updates remains appropriate for single-operator scorekeeping until websocket multiplayer UI work starts.
 
 ## Phased Delivery Plan
 

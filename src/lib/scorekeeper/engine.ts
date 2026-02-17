@@ -110,6 +110,11 @@ interface RoundEntry {
 	cards: CardInput[];
 }
 
+export interface DeltaEntry {
+	target: ScoringTarget;
+	delta: number;
+}
+
 export interface PatternScoringRule {
 	patternId: string;
 	points: number;
@@ -132,6 +137,10 @@ export type ScoreEvent =
 			patternScoring: PatternScoringRule[];
 			entries: PatternRoundEntry[];
 			matchOptions?: PatternMatchOptions;
+	  }
+	| {
+			type: 'add_delta';
+			entries: DeltaEntry[];
 	  }
 	| {
 			type: 'settle_pool';
@@ -732,6 +741,38 @@ function applyPatternRoundTotals(
 	return validationIssues;
 }
 
+function applyDeltaTotals(
+	totalsByTarget: Record<string, number>,
+	entries: DeltaEntry[],
+	trace: ScoreTraceEntry[] | undefined,
+	eventIndex: number
+): void {
+	for (const entry of entries) {
+		const key = targetKey(entry.target);
+		totalsByTarget[key] = (totalsByTarget[key] ?? 0) + entry.delta;
+		if (trace) {
+			trace.push({
+				eventIndex,
+				stage: 'score',
+				message: 'Manual score delta applied',
+				data: {
+					target: key,
+					delta: entry.delta
+				}
+			});
+			trace.push({
+				eventIndex,
+				stage: 'route',
+				message: 'Manual score delta routed to scoring target',
+				data: {
+					target: key,
+					delta: entry.delta
+				}
+			});
+		}
+	}
+}
+
 function applyPoolSettlement(
 	totalsByTarget: Record<string, number>,
 	event: Extract<ScoreEvent, { type: 'settle_pool' }>,
@@ -840,11 +881,11 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 		}
 	}
 
-	const appliedMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'settle_pool' }>> = [];
-	const undoneMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'settle_pool' }>> = [];
+	const appliedMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' }>> = [];
+	const undoneMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' }>> = [];
 
 	events.forEach((event) => {
-		if (event.type === 'add_round' || event.type === 'add_pattern_round' || event.type === 'settle_pool') {
+		if (event.type === 'add_round' || event.type === 'add_pattern_round' || event.type === 'add_delta' || event.type === 'settle_pool') {
 			appliedMutations.push(event);
 			undoneMutations.length = 0;
 			return;
@@ -883,6 +924,10 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 					mutation.matchOptions
 				)
 			);
+			return;
+		}
+		if (mutation.type === 'add_delta') {
+			applyDeltaTotals(totalsByTarget, mutation.entries, trace, eventIndex);
 			return;
 		}
 
