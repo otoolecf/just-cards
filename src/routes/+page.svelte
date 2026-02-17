@@ -514,8 +514,14 @@ import { onDestroy } from 'svelte';
 
 <main class="score-page">
 	<header class="top">
-		<h1>Scorekeeper</h1>
-		<p class="subtitle">Fast one-device scoring for live card games.</p>
+		<div>
+			<h1>Scorekeeper</h1>
+			<p class="subtitle">Fast one-device scoring for live card games.</p>
+		</div>
+		<nav class="jc-mode-links" aria-label="Mode links">
+			<a href="/" class="jc-mode-link" aria-current="page">Score</a>
+			<a href="/play" class="jc-mode-link">Play</a>
+		</nav>
 	</header>
 
 	<section class="panel">
@@ -549,7 +555,7 @@ import { onDestroy } from 'svelte';
 					bind:value={selectedModeId}
 					onValueChange={(nextValue) => (selectedModeId = nextValue)}
 				>
-					<Select.Trigger id="game-mode" class="control select-trigger">
+					<Select.Trigger id="game-mode" class="jc-control control select-trigger">
 						<span>{getSelectLabel(gameModeItems, selectedModeId)}</span>
 						<span aria-hidden="true">▾</span>
 					</Select.Trigger>
@@ -715,7 +721,7 @@ Bob: 2D 3D 4D"
 			<div class="field-group">
 				<label for="pattern-player">Target player</label>
 				<Select.Root type="single" items={patternTargetItems} bind:value={patternTargetId}>
-					<Select.Trigger id="pattern-player" class="control select-trigger">
+					<Select.Trigger id="pattern-player" class="jc-control control select-trigger">
 						<span>{getSelectLabel(patternTargetItems, patternTargetId) || 'Select player'}</span>
 						<span aria-hidden="true">▾</span>
 					</Select.Trigger>
@@ -740,7 +746,7 @@ Bob: 2D 3D 4D"
 					bind:value={selectedPatternPackId}
 					onValueChange={changePatternPack}
 				>
-					<Select.Trigger id="pattern-pack" class="control select-trigger">
+					<Select.Trigger id="pattern-pack" class="jc-control control select-trigger">
 						<span>{getSelectLabel(patternPackItems, selectedPatternPackId)}</span>
 						<span aria-hidden="true">▾</span>
 					</Select.Trigger>
@@ -804,29 +810,6 @@ run: 5"
 </main>
 
 <style>
-	:global(body) {
-		margin: 0;
-		font-family: Manrope, 'Avenir Next', 'Segoe UI', sans-serif;
-		background: #eef2f7;
-		color: var(--foreground);
-	}
-
-	:global(:root) {
-		--surface: #ffffff;
-		--surface-2: #f7f9fc;
-		--surface-subtle: #eef2f7;
-		--foreground: #111827;
-		--muted: #526178;
-		--line: #d5dce7;
-		--success: #166534;
-		--error: #b91c1c;
-		--panel-border: #d7deea;
-		--brand: #0f766e;
-		--brand-soft: #ccfbf1;
-		--shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.05);
-		--shadow-md: 0 10px 24px rgba(17, 24, 39, 0.08);
-	}
-
 	.score-page {
 		max-width: 760px;
 		margin: 0 auto;
@@ -837,29 +820,37 @@ run: 5"
 
 	.top h1 {
 		margin: 0;
-		font-size: 2rem;
+		font-size: clamp(2rem, 6vw, 2.5rem);
 		letter-spacing: -0.02em;
+		line-height: 0.96;
+	}
+
+	.top {
+		display: grid;
+		gap: 10px;
 	}
 
 	.subtitle {
-		margin: 4px 0 0;
+		margin: 6px 0 0;
 		color: var(--muted);
-		font-size: 1.05rem;
+		font-size: var(--jc-type-lg);
+		line-height: 1.2;
 	}
 
 	.panel {
-		border: 1px solid var(--panel-border);
-		padding: 14px;
-		border-radius: 14px;
+		border: 1px solid var(--line);
+		padding: 15px;
+		border-radius: 16px;
 		display: grid;
-		gap: 10px;
+		gap: 12px;
 		background: var(--surface);
 		box-shadow: var(--shadow-sm);
 	}
 
 	h2 {
 		margin: 0;
-		font-size: 1rem;
+		font-size: 1.03rem;
+		letter-spacing: -0.01em;
 	}
 
 	.status-loading {
@@ -879,8 +870,8 @@ run: 5"
 
 	.session-summary {
 		display: grid;
-		gap: 4px;
-		font-size: 0.92rem;
+		gap: 5px;
+		font-size: var(--jc-type-sm);
 	}
 
 	.field-group {
@@ -889,49 +880,20 @@ run: 5"
 	}
 
 	.field-group label {
-		font-size: 0.86rem;
+		font-size: var(--jc-type-sm);
 		font-weight: 600;
 	}
 
 	.input-label {
 		margin: 0;
-		font-size: 0.86rem;
+		font-size: var(--jc-type-sm);
 		font-weight: 600;
 	}
 
 	.hint {
 		color: var(--muted);
-		font-size: 0.82rem;
+		font-size: var(--jc-type-xs);
 		margin: 0;
-	}
-
-	:global(.control) {
-		font: inherit;
-		font-size: 1rem;
-		color: var(--foreground);
-		background: var(--surface);
-		border: 1px solid var(--line);
-		border-radius: 12px;
-		padding: 10px 12px;
-		width: 100%;
-		box-sizing: border-box;
-		min-height: 44px;
-		transition: border-color 0.15s ease, box-shadow 0.15s ease;
-	}
-
-	:global(.control:hover) {
-		border-color: #97a7be;
-	}
-
-	:global(.control:focus-visible) {
-		outline: 0;
-		border-color: var(--brand);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent);
-	}
-
-	:global(.control:disabled) {
-		color: var(--muted);
-		background: var(--surface-2);
 	}
 
 	:global(.control-textarea) {
@@ -963,7 +925,7 @@ run: 5"
 		grid-template-columns: 1fr auto;
 		align-items: baseline;
 		gap: 8px;
-		padding: 10px 12px;
+		padding: 11px 12px;
 		border-radius: 12px;
 		border: 1px solid var(--line);
 		background: var(--surface);
@@ -981,7 +943,7 @@ run: 5"
 
 	.score-total {
 		font-weight: 800;
-		font-size: 1.35rem;
+		font-size: 1.5rem;
 		line-height: 1;
 		letter-spacing: -0.02em;
 	}
@@ -994,6 +956,11 @@ run: 5"
 	}
 
 	@media (min-width: 700px) {
+		.top {
+			grid-template-columns: 1fr auto;
+			align-items: end;
+		}
+
 		.join-row,
 		.button-row,
 		:global(.segmented) {
@@ -1009,6 +976,7 @@ run: 5"
 		background: var(--surface-2);
 		color: var(--foreground);
 		min-height: 44px;
+		transition: background-color var(--jc-motion-fast) var(--jc-ease-standard), border-color var(--jc-motion-fast) var(--jc-ease-standard);
 	}
 
 	:global(.segmented .mode-trigger.active) {
@@ -1032,7 +1000,7 @@ run: 5"
 		border-radius: 12px;
 		box-shadow: var(--shadow-md);
 		overflow: hidden;
-		font-size: 0.95rem;
+		font-size: var(--jc-type-sm);
 		z-index: 50;
 	}
 
@@ -1046,6 +1014,7 @@ run: 5"
 		border-radius: 10px;
 		cursor: pointer;
 		line-height: 1.2;
+		transition: background-color var(--jc-motion-fast) var(--jc-ease-standard);
 	}
 
 	:global(.select-item[data-highlighted]),
@@ -1066,11 +1035,11 @@ run: 5"
 
 	.empty {
 		color: var(--muted);
-		font-size: 0.9rem;
+		font-size: var(--jc-type-sm);
 	}
 
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--jc-type-xs);
 		color: var(--muted);
 	}
 

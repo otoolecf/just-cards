@@ -150,10 +150,10 @@
 
 	.tap-btn {
 		min-height: 40px;
-		border: 1px solid var(--line, #d5dce7);
+		border: 1px solid var(--jc-line, #c8d5e2);
 		border-radius: 10px;
-		background: var(--surface-2, #f7f9fc);
-		color: var(--foreground, #111827);
+		background: var(--jc-surface-elevated, #f6faff);
+		color: var(--jc-text, #132336);
 		font: inherit;
 		font-size: 0.92rem;
 	}
@@ -183,24 +183,24 @@
 
 	.suit-clubs .suit-symbol,
 	.suit-spades .suit-symbol {
-		color: #0f172a;
+		color: var(--jc-text, #132336);
 	}
 
 	.suit-diamonds .suit-symbol,
 	.suit-hearts .suit-symbol {
-		color: #dc2626;
+		color: var(--jc-error, #b42318);
 	}
 
 	.suit-btn.selected {
-		border-color: var(--brand, #0f766e);
-		background: var(--brand-soft, #ccfbf1);
+		border-color: var(--jc-brand, #0f6b63);
+		background: var(--jc-brand-soft, #d5f3ee);
 		font-weight: 700;
 	}
 
 	.suit-hint {
 		margin: 0;
 		font-size: 0.82rem;
-		color: var(--muted, #526178);
+		color: var(--jc-text-muted, #3d4f63);
 	}
 
 	.token-row {
@@ -212,9 +212,9 @@
 	.token-chip {
 		min-height: 34px;
 		padding: 4px 10px;
-		border: 1px solid var(--line, #d5dce7);
+		border: 1px solid var(--jc-line, #c8d5e2);
 		border-radius: 999px;
-		background: #ffffff;
+		background: var(--jc-surface, #ffffff);
 		font: inherit;
 		font-size: 0.86rem;
 		font-weight: 700;
@@ -222,18 +222,18 @@
 
 	.chip-clubs,
 	.chip-spades {
-		color: #111827;
+		color: var(--jc-text, #132336);
 	}
 
 	.chip-diamonds,
 	.chip-hearts {
-		color: #dc2626;
+		color: var(--jc-error, #b42318);
 	}
 
 	.token-empty {
 		margin: 0;
 		font-size: 0.85rem;
-		color: var(--muted, #526178);
+		color: var(--jc-text-muted, #3d4f63);
 	}
 
 	.meta-row {
@@ -246,7 +246,7 @@
 	.token-preview {
 		margin: 0;
 		font-size: 0.82rem;
-		color: var(--muted, #526178);
+		color: var(--jc-text-muted, #3d4f63);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -254,9 +254,9 @@
 
 	.clear-btn {
 		min-height: 34px;
-		border: 1px solid var(--line, #d5dce7);
+		border: 1px solid var(--jc-line, #c8d5e2);
 		border-radius: 8px;
-		background: #ffffff;
+		background: var(--jc-surface, #ffffff);
 		padding: 4px 8px;
 		font: inherit;
 		font-size: 0.85rem;

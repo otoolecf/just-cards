@@ -23,7 +23,7 @@
 	<textarea
 		id={id}
 		rows={rows}
-		class={className ? `control control-textarea ${className}` : 'control control-textarea'}
+		class={className ? `jc-control control control-textarea ${className}` : 'jc-control control control-textarea'}
 		placeholder={placeholder}
 		{disabled}
 		bind:value
@@ -34,7 +34,7 @@
 		id={id}
 		type={type}
 		min={min}
-		class={className ? `control ${className}` : 'control'}
+		class={className ? `jc-control control ${className}` : 'jc-control control'}
 		placeholder={placeholder}
 		{disabled}
 		bind:value

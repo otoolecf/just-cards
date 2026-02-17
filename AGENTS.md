@@ -9,7 +9,8 @@ Before making code changes, read in this order:
 1. `/Users/ConnorO/git_repos/just-cards/docs/README.md`
 2. `/Users/ConnorO/git_repos/just-cards/docs/inspiration.md`
 3. `/Users/ConnorO/git_repos/just-cards/docs/architecture.md`
-4. `/Users/ConnorO/git_repos/just-cards/AGENTS.md`
+4. `/Users/ConnorO/git_repos/just-cards/docs/ui-primitives-v0.md` (required for UI/style work)
+5. `/Users/ConnorO/git_repos/just-cards/AGENTS.md`
 
 ## Project Mission and Scope
 
@@ -45,6 +46,20 @@ Default assumption: Cloudflare-first and JavaScript/TypeScript-first unless arch
 3. Server-side authoritative state for multiplayer game rooms.
 4. Mobile-first UX decisions are required for all user-facing features.
 5. Keep the system lightweight; avoid unnecessary services and dependencies.
+
+## UI Primitive Contract (Required)
+
+1. Use shared UI primitives from:
+   `/Users/ConnorO/git_repos/just-cards/docs/ui-primitives-v0.md`
+2. Use semantic token variables/classes (`--jc-*`, `jc-*`) instead of introducing one-off hex colors or ad-hoc control styles.
+3. If a new semantic color/typography/motion token is needed, add it in:
+   `/Users/ConnorO/git_repos/just-cards/src/lib/ui/design-primitives.ts`
+   and update tests in:
+   `/Users/ConnorO/git_repos/just-cards/src/lib/ui/design-primitives.test.ts`
+4. Preserve accessibility guarantees:
+   - maintain WCAG contrast test pass state
+   - keep touch targets at least `44px` for interactive controls
+5. For any UI styling changes, update `docs/ui-primitives-v0.md` when the design contract changes.
 
 ## Ruleset Persistence (Pre-Cloudflare)
 

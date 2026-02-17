@@ -8,6 +8,7 @@ This folder holds project planning and architecture docs.
 - [`architecture.md`](./architecture.md): Technical architecture plan, stack decisions, and phased roadmap.
 - [`rulepack-v0.md`](./rulepack-v0.md): Canonical Rule IR schema, pipeline stages, capabilities, and boundaries.
 - [`primitives-kb-v0.md`](./primitives-kb-v0.md): Canonical LLM/SLM primitive catalog for runtime bundle generation.
+- [`ui-primitives-v0.md`](./ui-primitives-v0.md): Canonical UI token and accessibility primitive catalog.
 - [`ruleset-storage-v0.md`](./ruleset-storage-v0.md): Local-first ruleset storage abstraction and Cloudflare migration boundary.
 - [`rulepack-schema.json`](./../src/lib/scorekeeper/rulepack-schema.json): JSON Schema artifact used by runtime validation.
 - [`scorekeeper-rules.md`](./scorekeeper-rules.md): Score engine abstraction, modifier model, and customization examples.
@@ -23,6 +24,11 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-17-game-rules-runtime-v0.md`](./specs/2026-02-17-game-rules-runtime-v0.md): Runtime orchestration spec for gameplay validation + scoring triggers + manual scoring.
 - [`specs/2026-02-17-primitives-kb-docs.md`](./specs/2026-02-17-primitives-kb-docs.md): TDD spec for canonical primitive knowledge-base docs.
 - [`specs/2026-02-17-local-ruleset-store-abstraction.md`](./specs/2026-02-17-local-ruleset-store-abstraction.md): TDD spec for local SQLite ruleset storage abstraction.
+- [`specs/2026-02-17-mobile-pwa-play-surface.md`](./specs/2026-02-17-mobile-pwa-play-surface.md): TDD spec for mobile-first play surface UX driven by gameplay primitives.
+- [`specs/2026-02-17-play-hand-actions-and-zone-labels.md`](./specs/2026-02-17-play-hand-actions-and-zone-labels.md): TDD spec for hand-first play actions and configurable zone labels.
+- [`specs/2026-02-17-play-mobile-layout-and-zone-profiles.md`](./specs/2026-02-17-play-mobile-layout-and-zone-profiles.md): TDD spec for mobile hand panel layout and profile-driven zone visibility/labels.
+- [`specs/2026-02-17-ui-primitives-wcag-pass.md`](./specs/2026-02-17-ui-primitives-wcag-pass.md): TDD spec for shared UI primitives and WCAG contrast enforcement.
+- [`specs/2026-02-17-ui-polish-pass-2.md`](./specs/2026-02-17-ui-polish-pass-2.md): TDD spec for typography/motion/spacing polish pass.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 
@@ -30,4 +36,5 @@ This folder holds project planning and architecture docs.
 
 - Update `inspiration.md` when core user needs or constraints change.
 - Update `architecture.md` when technology choices, hosting strategy, or major system design changes.
+- Update `ui-primitives-v0.md` whenever UI token contracts, accessibility guarantees, or styling workflow rules change.
 - Keep docs lightweight and decision-focused; avoid implementation detail that belongs in code comments or ADRs.

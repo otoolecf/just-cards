@@ -48,6 +48,7 @@ Then open:
 
 ```text
 http://localhost:5173
+http://localhost:5173/play
 ```
 
 Manual smoke test:
@@ -58,6 +59,7 @@ Manual smoke test:
 4. Use `Undo`/`Redo` and confirm totals change.
 5. Submit one pattern round (target + cards) to confirm pattern scoring reflects.
 6. Create a ruleset draft via `POST /api/rulesets` and verify it appears in `GET /api/rulesets`.
+7. Open `/play`, select a hand card, and move it to `Board` to verify animated zone transitions.
 
 End-to-end test:
 

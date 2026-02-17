@@ -187,6 +187,11 @@ Safety requirements:
 ### PWA and mobile friendliness status
 
 - Current scorekeeper screen now includes installability hooks in `+layout.svelte` with manifest and service worker registration for basic offline/return behavior (`static/manifest.webmanifest`, `static/sw.js`).
+- A mobile-first play surface prototype is available at `/play`, driven from `gameplay/v0` primitives (`GameEvent` -> `GameplayState` -> UI view model) with card movement animations and hand/board/seat rendering.
+- Play surface labels are configurable per zone (`board`, `discard`, etc.) at the view-model layer so future generated games can rename UI semantics without changing gameplay primitive IDs.
+- Play surface zone visibility and hints are profile-driven (visible-zone list + label/hint maps), allowing game-specific zone UX without game-specific rendering code branches.
+- UI visual design primitives are centralized (shared token layer + contrast tests) to keep Score/Play surfaces consistent as generated game UIs expand:
+  - `/Users/ConnorO/git_repos/just-cards/docs/ui-primitives-v0.md`
 - Control sizing is normalized for touch:
   - `min-height: 44px` for entry controls and buttons.
   - clear tap-friendly spacing and compact layout breaks at mobile-first breakpoints.
