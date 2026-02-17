@@ -11,6 +11,7 @@ This folder holds project planning and architecture docs.
 - [`ui-profile-v0.md`](./ui-profile-v0.md): Canonical ruleset-driven UI profile primitive contract.
 - [`ui-primitives-v0.md`](./ui-primitives-v0.md): Canonical UI token and accessibility primitive catalog.
 - [`ruleset-generation-v0.md`](./ruleset-generation-v0.md): End-to-end generation scaffold (`url|text` -> `RuleFacts` -> `runtime-bundle/v1`).
+- [`ruleset-explainability-v0.md`](./ruleset-explainability-v0.md): Human-readable/auditable rules payload contract for layman guide UX.
 - [`ruleset-golden-evals-v0.md`](./ruleset-golden-evals-v0.md): Offline confidence suite for source-link extraction and compile quality gates.
 - [`ruleset-confidence-v0.md`](./ruleset-confidence-v0.md): Bundle-level runtime/UI confidence checks and smoke simulation gate.
 - [`ruleset-storage-v0.md`](./ruleset-storage-v0.md): Local-first ruleset storage abstraction and Cloudflare migration boundary.
@@ -39,6 +40,8 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-17-ruleset-generation-v0.md`](./specs/2026-02-17-ruleset-generation-v0.md): TDD spec for URL/prose input generation pipeline.
 - [`specs/2026-02-17-ruleset-golden-evals-v0.md`](./specs/2026-02-17-ruleset-golden-evals-v0.md): TDD spec for golden fixture eval gating before LLM spend.
 - [`specs/2026-02-17-ruleset-confidence-suite-v0.md`](./specs/2026-02-17-ruleset-confidence-suite-v0.md): TDD spec for runtime/UI bundle confidence checks.
+- [`specs/2026-02-17-ruleset-serviceability-hardening.md`](./specs/2026-02-17-ruleset-serviceability-hardening.md): TDD spec for natural-language scoring extraction hardening in golden cases.
+- [`specs/2026-02-17-layman-guide-and-audit-v0.md`](./specs/2026-02-17-layman-guide-and-audit-v0.md): TDD spec for play-surface guide tab and explainable/auditable rules.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 

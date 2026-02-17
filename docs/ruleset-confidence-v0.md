@@ -20,12 +20,17 @@ Validate that a `runtime-bundle/v1` is not only schema-valid, but also operation
 - `validateUiProfile(uiProfile, runtimeRulePack)` must pass
 - quick targets must align with visible table zones
 
-3. Runtime smoke simulation
+3. Explainability integrity
+- bundle should include `ruleset-explain/v0` for layman guide UX
+- objective and turn-flow fields must be non-empty
+- source/audit metadata must be present for generated bundles
+
+4. Runtime smoke simulation
 - deterministic gameplay event stream is synthesized
 - no gameplay or score validation issues should occur
 - if end-round triggers exist, at least one generated scoring event should fire
 
-4. Play-surface model compatibility
+5. Play-surface model compatibility
 - play profile derived from `ui-profile/v0`
 - `buildPlaySurfaceView` must succeed with non-empty labels
 

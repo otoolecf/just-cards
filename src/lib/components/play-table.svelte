@@ -14,18 +14,19 @@
 		createHandMoveEvent,
 		type PlayCardView
 	} from '$lib/gameplay/play-surface-model';
-	import {
-		drawTopAllowedZoneIdsFromUiProfile,
-		playSurfaceActionLabelsFromUiProfile,
+import {
+	drawTopAllowedZoneIdsFromUiProfile,
+	playSurfaceActionLabelsFromUiProfile,
 		playSurfaceProfileFromUiProfile,
 		quickPlayZoneIdsFromUiProfile,
 		visibleZones,
-		zoneHintMap,
-		zoneLabelMap
-	} from '$lib/gameplay/play-surface-profiles';
-	import type { RuntimeRulesetBundle } from '$lib/rulesets/types';
-	import { generateUiProfileFromRuntime, type UiPrimaryAction } from '$lib/ui/ui-profile';
-	import ScoreButton from '$lib/components/score-button.svelte';
+	zoneHintMap,
+	zoneLabelMap
+} from '$lib/gameplay/play-surface-profiles';
+import type { RuntimeRulesetBundle } from '$lib/rulesets/types';
+import { buildRulesetGuideModel } from '$lib/rulesets/guide-model';
+import { generateUiProfileFromRuntime, type UiPrimaryAction } from '$lib/ui/ui-profile';
+import ScoreButton from '$lib/components/score-button.svelte';
 
 	export let rulesetBundle: RuntimeRulesetBundle | undefined = undefined;
 	export let rulesetName: string | undefined = undefined;
@@ -51,9 +52,19 @@
 
 	const FALLBACK_GAMEPLAY_RULE_PACK = defaultGameplayRulePack();
 	const ACTIVE_GAMEPLAY_RULE_PACK = rulesetBundle?.runtimeRulePack.gameplayRulePack ?? FALLBACK_GAMEPLAY_RULE_PACK;
-	const ACTIVE_UI_PROFILE = rulesetBundle?.uiProfile ?? generateUiProfileFromRuntime({ gameplayRulePack: ACTIVE_GAMEPLAY_RULE_PACK });
-	const ACTIVE_SURFACE_PROFILE = playSurfaceProfileFromUiProfile(ACTIVE_UI_PROFILE);
-	const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
+const ACTIVE_UI_PROFILE = rulesetBundle?.uiProfile ?? generateUiProfileFromRuntime({ gameplayRulePack: ACTIVE_GAMEPLAY_RULE_PACK });
+const ACTIVE_RUNTIME_BUNDLE: RuntimeRulesetBundle = rulesetBundle ?? {
+	bundleVersion: 'runtime-bundle/v1',
+	gameId: 'demo-open-table',
+	displayName: 'Demo Open Table',
+	runtimeRulePack: {
+		gameplayRulePack: ACTIVE_GAMEPLAY_RULE_PACK
+	},
+	uiProfile: ACTIVE_UI_PROFILE
+};
+const ACTIVE_SURFACE_PROFILE = playSurfaceProfileFromUiProfile(ACTIVE_UI_PROFILE);
+const GUIDE_MODEL = buildRulesetGuideModel(ACTIVE_RUNTIME_BUNDLE);
+const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 	const TABLE_ZONE_IDS = TABLE_ZONES.map((zone) => zone.id);
 	const TABLE_ZONE_LABELS = zoneLabelMap(ACTIVE_SURFACE_PROFILE);
 	const TABLE_ZONE_HINTS = zoneHintMap(ACTIVE_SURFACE_PROFILE);
@@ -267,6 +278,7 @@
 					<Tabs.Trigger value="table" class={`surface-tab ${surfaceTab === 'table' ? 'surface-tab-active' : ''}`.trim()}>Table</Tabs.Trigger>
 					<Tabs.Trigger value="actions" class={`surface-tab ${surfaceTab === 'actions' ? 'surface-tab-active' : ''}`.trim()}>Actions</Tabs.Trigger>
 					<Tabs.Trigger value="log" class={`surface-tab ${surfaceTab === 'log' ? 'surface-tab-active' : ''}`.trim()}>Log</Tabs.Trigger>
+					<Tabs.Trigger value="guide" class={`surface-tab ${surfaceTab === 'guide' ? 'surface-tab-active' : ''}`.trim()}>Guide</Tabs.Trigger>
 				</Tabs.List>
 
 				<Tabs.Content value="table" class="surface-content">
@@ -319,6 +331,53 @@
 							<li>{eventLabel(event)}</li>
 						{/each}
 					</ul>
+				</Tabs.Content>
+
+				<Tabs.Content value="guide" class="surface-content guide-panel">
+					<section class="guide-card">
+						<h2>Objective</h2>
+						<p>{GUIDE_MODEL.objective}</p>
+					</section>
+					<section class="guide-card">
+						<h2>Quick Start</h2>
+						<ul>
+							{#each GUIDE_MODEL.quickStart as line}
+								<li>{line}</li>
+							{/each}
+						</ul>
+					</section>
+					<section class="guide-card">
+						<h2>Scoring</h2>
+						<ul>
+							{#each GUIDE_MODEL.scoringHighlights as line}
+								<li>{line}</li>
+							{/each}
+						</ul>
+					</section>
+					<section class="guide-card">
+						<h2>Zone Guide</h2>
+						<ul>
+							{#each GUIDE_MODEL.zoneGuide as line}
+								<li>{line}</li>
+							{/each}
+						</ul>
+					</section>
+					<section class="guide-card">
+						<h2>Audit Trail</h2>
+						<ul>
+							{#each GUIDE_MODEL.auditTrail as line}
+								<li>{line}</li>
+							{/each}
+						</ul>
+						{#if GUIDE_MODEL.diagnostics.length > 0}
+							<p class="guide-subhead">Diagnostics</p>
+							<ul>
+								{#each GUIDE_MODEL.diagnostics as line}
+									<li>{line}</li>
+								{/each}
+							</ul>
+						{/if}
+					</section>
 				</Tabs.Content>
 			</Tabs.Root>
 		</section>
@@ -522,7 +581,7 @@
 
 	.surface-tab-list {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 6px;
 		margin-bottom: 8px;
 	}
@@ -623,6 +682,50 @@
 		border: 1px solid var(--play-line);
 		background: var(--jc-surface);
 		font-size: 0.9rem;
+	}
+
+	.guide-panel {
+		gap: 10px;
+	}
+
+	.guide-card {
+		border: 1px solid var(--play-line);
+		border-radius: 11px;
+		padding: 10px;
+		background: var(--jc-surface);
+	}
+
+	.guide-card h2 {
+		margin: 0;
+		font-size: 0.94rem;
+	}
+
+	.guide-card p {
+		margin: 6px 0 0;
+		font-size: 0.9rem;
+		color: color-mix(in srgb, var(--play-fg) 82%, #2c4968);
+	}
+
+	.guide-card ul {
+		margin: 8px 0 0;
+		padding-left: 16px;
+		display: grid;
+		gap: 4px;
+	}
+
+	.guide-card li {
+		font-size: 0.84rem;
+		line-height: 1.3;
+		color: color-mix(in srgb, var(--play-fg) 82%, #2d4a69);
+	}
+
+	.guide-subhead {
+		margin-top: 10px !important;
+		font-size: 0.78rem !important;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--play-accent) !important;
 	}
 
 	.hand-dock {

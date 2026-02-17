@@ -27,6 +27,7 @@ Each golden case asserts required signals such as:
 - draw/play affordances
 - scoring hints (for example low-score-wins)
 - successful compile to `runtime-bundle/v1` + `ui-profile/v0`
+- explainability payload presence (`ruleset-explain/v0`) for layman guide UX
 - bundle confidence checks (runtime smoke + UI/play-surface compatibility)
 
 ## Runner

@@ -122,6 +122,40 @@ export function evaluateRulesetBundleConfidence(bundle: RuntimeRulesetBundle): R
 			: `issues=${uiIssues.map((issue) => issue.code).join(', ')}`
 	);
 
+	const explain = bundle.explain;
+	pushCheck(
+		checks,
+		'explainability-present',
+		Boolean(explain),
+		explain ? 'bundle.explain present' : 'bundle.explain missing'
+	);
+	if (explain) {
+		pushCheck(
+			checks,
+			'explainability-schema',
+			explain.schemaVersion === 'ruleset-explain/v0',
+			`schemaVersion=${explain.schemaVersion}`
+		);
+		pushCheck(
+			checks,
+			'explainability-objective',
+			explain.goal.trim().length > 0,
+			`goal=${explain.goal || 'empty'}`
+		);
+		pushCheck(
+			checks,
+			'explainability-turn-flow',
+			explain.turnFlow.drawFrom.length > 0 && explain.turnFlow.playTo.length > 0,
+			`drawFrom=${explain.turnFlow.drawFrom.join(', ') || 'none'} playTo=${explain.turnFlow.playTo.join(', ') || 'none'}`
+		);
+		pushCheck(
+			checks,
+			'explainability-zones',
+			explain.zones.length > 0,
+			`zones=${explain.zones.length}`
+		);
+	}
+
 	const playProfile = playSurfaceProfileFromUiProfile(bundle.uiProfile);
 	const visiblePlayZones = visibleZones(playProfile).map((zone) => zone.id);
 	pushCheck(

@@ -178,6 +178,7 @@ Current scaffold includes a deterministic generator API for this contract:
 - `POST /api/rulesets/generate` accepts URL or prose input
 - extraction builds `RuleFacts v0`
 - compiler emits `runtime-bundle/v1` draft and persists via `RulesetService`
+- generated bundles include optional `ruleset-explain/v0` payload for layman-facing guide + audit UI
 
 Confidence gate before paid LLM usage:
 - golden fixture eval suite validates extraction + compile behavior against known public rule links
@@ -204,6 +205,7 @@ Safety requirements:
 - Current scorekeeper screen now includes installability hooks in `+layout.svelte` with manifest and service worker registration for basic offline/return behavior (`static/manifest.webmanifest`, `static/sw.js`).
 - A mobile-first play surface prototype is available at `/play`, driven from `gameplay/v0` primitives (`GameEvent` -> `GameplayState` -> UI view model) with card movement animations and hand/board/seat rendering.
 - Ruleset-backed play rendering is available at `/play/[rulesetId]`, loading persisted `runtime-bundle/v1` (`runtimeRulePack` + `uiProfile`) via server-side route loader.
+- Play surface now includes a guide/audit tab sourced from bundle explainability data so non-expert users can learn objective/turn/scoring without reading raw primitives.
 - Play surface labels are configurable per zone (`board`, `discard`, etc.) at the view-model layer so future generated games can rename UI semantics without changing gameplay primitive IDs.
 - Play surface zone visibility and hints are profile-driven (visible-zone list + label/hint maps), allowing game-specific zone UX without game-specific rendering code branches.
 - UI visual design primitives are centralized (shared token layer + contrast tests) to keep Score/Play surfaces consistent as generated game UIs expand:

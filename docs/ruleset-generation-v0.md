@@ -31,6 +31,7 @@ Output is always a validated `runtime-bundle/v1` stored via `RulesetService`.
 - Convert `RuleFacts v0` to:
   - `runtimeRulePack`
   - `uiProfile` (`ui-profile/v0`)
+  - `explain` (`ruleset-explain/v0`)
 - Package as `runtime-bundle/v1`.
 
 4. Validate + Persist

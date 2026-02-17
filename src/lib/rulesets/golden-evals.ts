@@ -111,6 +111,7 @@ export async function evaluateRulesetGoldenCase(
 	const checks: RulesetGoldenCheckResult[] = [];
 	const facts = generated.facts;
 	const confidence = evaluateRulesetBundleConfidence(generated.draft.bundle);
+	const explain = generated.draft.bundle.explain;
 
 	pushCheck(
 		checks,
@@ -123,6 +124,24 @@ export async function evaluateRulesetGoldenCase(
 		'ui-profile-version',
 		generated.draft.bundle.uiProfile.schemaVersion === 'ui-profile/v0',
 		`uiProfile=${generated.draft.bundle.uiProfile.schemaVersion}`
+	);
+	pushCheck(
+		checks,
+		'explain-version',
+		explain?.schemaVersion === 'ruleset-explain/v0',
+		`explain=${explain?.schemaVersion ?? 'missing'}`
+	);
+	pushCheck(
+		checks,
+		'explain-goal-non-empty',
+		(explain?.goal.trim().length ?? 0) > 0,
+		`goal=${explain?.goal ?? 'missing'}`
+	);
+	pushCheck(
+		checks,
+		'explain-source-type',
+		explain?.source.type === facts.source.type,
+		`explainSource=${explain?.source.type ?? 'missing'} factsSource=${facts.source.type}`
 	);
 
 	const expectedNameTokens = definition.expected.gameNameIncludes ?? [];

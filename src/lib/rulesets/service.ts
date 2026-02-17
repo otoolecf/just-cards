@@ -62,6 +62,13 @@ function validateBundleShape(bundle: unknown): string[] {
 	if (bundle.bundleVersion === 'runtime-bundle/v1' && bundle.uiProfile !== undefined && !isObject(bundle.uiProfile)) {
 		issues.push('uiProfile must be an object when provided');
 	}
+	if (bundle.bundleVersion === 'runtime-bundle/v1' && bundle.explain !== undefined) {
+		if (!isObject(bundle.explain)) {
+			issues.push('explain must be an object when provided');
+		} else if (bundle.explain.schemaVersion !== 'ruleset-explain/v0') {
+			issues.push('explain.schemaVersion must be "ruleset-explain/v0" when explain is provided');
+		}
+	}
 
 	return issues;
 }

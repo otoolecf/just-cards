@@ -29,6 +29,7 @@ describe('ruleset bundle confidence', () => {
 		expect(confidence.pass).toBe(true);
 		expect(confidence.checks.length).toBeGreaterThan(0);
 		expect(confidence.checks.every((check) => check.pass)).toBe(true);
+		expect(confidence.checks.find((check) => check.id === 'explainability-present')?.pass).toBe(true);
 	});
 
 	it('bundle_confidence_flags_invalid_ui_profile', async () => {

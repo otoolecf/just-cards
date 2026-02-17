@@ -40,7 +40,14 @@ const GOLDEN_CASES: RulesetGoldenCaseDefinition[] = [
 			drawSourcesInclude: ['stock', 'discard'],
 			playTargetsInclude: ['discard'],
 			scoring: {
-				lowScoreWins: true
+				lowScoreWins: true,
+				rankOverrides: {
+					A: 1,
+					'2': -2,
+					J: 10,
+					Q: 10,
+					K: 0
+				}
 			}
 		}
 	},
@@ -96,6 +103,7 @@ describe('ruleset golden evals', () => {
 		const result = await evaluateRulesetGoldenCase(GOLDEN_CASES[0]);
 		expect(result.generated.draft.bundle.bundleVersion).toBe('runtime-bundle/v1');
 		expect(result.generated.draft.bundle.uiProfile.schemaVersion).toBe('ui-profile/v0');
+		expect(result.generated.draft.bundle.explain?.schemaVersion).toBe('ruleset-explain/v0');
 	});
 
 	it('golden_suite_passes_required_checks_for_all_cases', async () => {

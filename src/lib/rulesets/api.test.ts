@@ -79,4 +79,27 @@ describe('rulesets api', () => {
 		const payload = (await response.json()) as { error: string };
 		expect(payload.error).toContain('not found');
 	});
+
+	it('rulesets_api_create_rejects_invalid_explain_schema', async () => {
+		const response = await createRuleset(
+			eventForPost({
+				name: 'Invalid explain',
+				origin: 'manual',
+				bundle: {
+					bundleVersion: 'runtime-bundle/v1',
+					gameId: 'invalid-explain',
+					displayName: 'Invalid Explain',
+					runtimeRulePack: {
+						scoringTriggers: []
+					},
+					explain: {
+						schemaVersion: 'wrong-schema'
+					}
+				}
+			})
+		);
+		expect(response.status).toBe(400);
+		const payload = (await response.json()) as { error: string };
+		expect(payload.error).toContain('explain.schemaVersion');
+	});
 });

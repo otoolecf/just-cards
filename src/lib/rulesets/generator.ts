@@ -3,7 +3,7 @@ import type { RuntimeRulePack } from '$lib/runtime/game-runtime';
 import { createRulePack } from '$lib/scorekeeper/engine';
 import { createUiProfile, generateUiProfileFromRuntime, type UiProfileV0 } from '$lib/ui/ui-profile';
 import type { CreateRulesetDraftInput } from './service';
-import type { RuntimeRulesetBundle } from './types';
+import type { RuntimeRulesetBundle, RuntimeRulesetExplainV0 } from './types';
 
 type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
 type NonAceRank = Exclude<Rank, 'A'>;
@@ -47,6 +47,61 @@ const RANK_WORD_TO_SYMBOL: Record<string, Rank> = {
 	jack: 'J',
 	queen: 'Q',
 	king: 'K'
+};
+
+const RANK_ALIAS_TO_SYMBOL: Record<string, Rank> = {
+	ace: 'A',
+	aces: 'A',
+	two: '2',
+	twos: '2',
+	'2': '2',
+	three: '3',
+	threes: '3',
+	'3': '3',
+	four: '4',
+	fours: '4',
+	'4': '4',
+	five: '5',
+	fives: '5',
+	'5': '5',
+	six: '6',
+	sixes: '6',
+	'6': '6',
+	seven: '7',
+	sevens: '7',
+	'7': '7',
+	eight: '8',
+	eights: '8',
+	'8': '8',
+	nine: '9',
+	nines: '9',
+	'9': '9',
+	ten: '10',
+	tens: '10',
+	'10': '10',
+	jack: 'J',
+	jacks: 'J',
+	queen: 'Q',
+	queens: 'Q',
+	king: 'K',
+	kings: 'K'
+};
+
+const NUMBER_WORD_TO_VALUE: Record<string, number> = {
+	zero: 0,
+	one: 1,
+	two: 2,
+	three: 3,
+	four: 4,
+	five: 5,
+	six: 6,
+	seven: 7,
+	eight: 8,
+	nine: 9,
+	ten: 10,
+	eleven: 11,
+	twelve: 12,
+	thirteen: 13
 };
 
 export interface RuleFactsV0 {
@@ -405,6 +460,112 @@ function parseRankNameGroup(names: string): Rank[] {
 	return ranks;
 }
 
+function parseNumericPhrase(value: string): number | undefined {
+	const normalized = value
+		.toLowerCase()
+		.replace(/[.,;:()]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	if (!normalized) {
+		return undefined;
+	}
+
+	if (/^-?\d+$/.test(normalized)) {
+		const parsed = Number.parseInt(normalized, 10);
+		return Number.isFinite(parsed) ? parsed : undefined;
+	}
+
+	const negativeMatch = normalized.match(/^(?:minus|negative)\s+([a-z0-9-]+)$/);
+	if (negativeMatch) {
+		const inner = parseNumericPhrase(negativeMatch[1]);
+		return inner === undefined ? undefined : -Math.abs(inner);
+	}
+
+	const singular = normalized.replace(/s$/, '');
+	if (singular in NUMBER_WORD_TO_VALUE) {
+		return NUMBER_WORD_TO_VALUE[singular];
+	}
+
+	return undefined;
+}
+
+function extractScoreValue(valuePhrase: string): number | undefined {
+	const normalized = valuePhrase.toLowerCase();
+	if (/\bface value\b|\bpip value\b/.test(normalized)) {
+		return undefined;
+	}
+
+	const valueTokenMatch = normalized.match(
+		/(?:minus|negative)\s+(?:\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)|-?\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen/i
+	);
+	if (!valueTokenMatch) {
+		return undefined;
+	}
+
+	return parseNumericPhrase(valueTokenMatch[0]);
+}
+
+function ranksFromPhrase(phrase: string): Rank[] {
+	const lower = phrase.toLowerCase();
+	const ranks: Rank[] = [];
+
+	if (/\bface cards?\b/.test(lower)) {
+		ranks.push('J', 'Q', 'K');
+	}
+
+	const tokens = lower
+		.replace(/[()]/g, ' ')
+		.replace(/[^a-z0-9\s]/g, ' ')
+		.split(/\s+/)
+		.filter((token) => token.length > 0);
+
+	for (const token of tokens) {
+		const rank = RANK_ALIAS_TO_SYMBOL[token];
+		if (!rank || ranks.includes(rank)) {
+			continue;
+		}
+		ranks.push(rank);
+	}
+
+	return ranks;
+}
+
+function applyNaturalLanguageScoringOverrides(
+	text: string,
+	overrides: Partial<Record<Rank, number>>
+): void {
+	const scoringLines = text
+		.split(/\n|[.;]/)
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0);
+
+	for (const line of scoringLines) {
+		const lower = line.toLowerCase();
+		const separatorMatch = lower.match(/\b(count(?:s)?(?:\s+as)?|score(?:s)?|is|are|worth)\b/);
+		if (!separatorMatch || separatorMatch.index === undefined) {
+			continue;
+		}
+
+		const rankPhrase = lower
+			.slice(0, separatorMatch.index)
+			.replace(/^each\s+/, '')
+			.trim();
+		const valuePhrase = lower.slice(separatorMatch.index + separatorMatch[0].length).trim();
+		if (!rankPhrase || !valuePhrase) {
+			continue;
+		}
+
+		const value = extractScoreValue(valuePhrase);
+		if (value === undefined) {
+			continue;
+		}
+
+		for (const rank of ranksFromPhrase(rankPhrase)) {
+			overrides[rank] = value;
+		}
+	}
+}
+
 function detectScoringOverrides(text: string): { aceValue: number; rankOverrides: Partial<Record<Rank, number>> } {
 	const overrides: Partial<Record<Rank, number>> = {};
 	const assignmentPattern =
@@ -421,6 +582,8 @@ function detectScoringOverrides(text: string): { aceValue: number; rankOverrides
 			overrides[rank] = value;
 		}
 	}
+
+	applyNaturalLanguageScoringOverrides(text, overrides);
 
 	const faceCardsMatch = text.match(/face cards?\s*=\s*(-?\d+)/i);
 	if (faceCardsMatch) {
@@ -581,6 +744,56 @@ function patchedUiProfile(profile: UiProfileV0): UiProfileV0 {
 	});
 }
 
+function zoneLabel(zoneId: string): string {
+	return COMMON_ZONE_LABELS[zoneId] ?? titleCaseWords(zoneId);
+}
+
+function objectiveFromFacts(facts: RuleFactsV0): string {
+	if (facts.scoring.lowScoreWins) {
+		return 'End with the lowest score.';
+	}
+	return 'Score points based on card values and round events.';
+}
+
+function explainFromFacts(facts: RuleFactsV0, uiProfile: UiProfileV0): RuntimeRulesetExplainV0 {
+	const rankOrder: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+	const rankOverrides = rankOrder
+		.filter((rank) => facts.scoring.rankOverrides[rank] !== undefined)
+		.map((rank) => ({ rank, value: facts.scoring.rankOverrides[rank] as number }));
+
+	return {
+		schemaVersion: 'ruleset-explain/v0',
+		goal: objectiveFromFacts(facts),
+		playerRange: {
+			min: facts.players.min,
+			max: facts.players.max
+		},
+		...(facts.rounds ? { rounds: facts.rounds } : {}),
+		turnFlow: {
+			drawFrom: facts.turn.drawSources.map(zoneLabel),
+			playTo: facts.turn.playTargets.map(zoneLabel)
+		},
+		scoring: {
+			lowScoreWins: facts.scoring.lowScoreWins,
+			aceValue: facts.scoring.aceValue,
+			rankOverrides
+		},
+		zones: uiProfile.table.zones
+			.filter((zone) => zone.visible !== false)
+			.map((zone) => ({
+				id: zone.id,
+				label: zone.label,
+				hint: zone.hint
+			})),
+		diagnostics: [...facts.diagnostics],
+		source: {
+			type: facts.source.type,
+			...(facts.source.url ? { url: facts.source.url } : {})
+		},
+		generatedAt: new Date().toISOString()
+	};
+}
+
 export function compileRuleFactsToBundle(facts: RuleFactsV0): RuntimeRulesetBundle {
 	const gameplayRulePack = gameplayRulePackFromFacts(facts);
 	const scoreRulePack = scoreRulePackFromFacts(facts);
@@ -595,13 +808,15 @@ export function compileRuleFactsToBundle(facts: RuleFactsV0): RuntimeRulesetBund
 			handHint: 'Select a card to reveal quick play targets.'
 		})
 	);
+	const explain = explainFromFacts(facts, uiProfile);
 
 	return {
 		bundleVersion: 'runtime-bundle/v1',
 		gameId: facts.gameSlug,
 		displayName: facts.gameName,
 		runtimeRulePack,
-		uiProfile
+		uiProfile,
+		explain
 	};
 }
 

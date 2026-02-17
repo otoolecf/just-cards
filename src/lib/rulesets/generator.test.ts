@@ -25,6 +25,15 @@ on your turn you put one card down to a meld area and then next player goes.
 we score at end of round by card values and lower is better.
 `;
 
+const NATURAL_LANGUAGE_SCORING = `
+Scoring
+Each ace counts 1 point.
+Each 2 counts minus 2 points.
+Each numeral card from 3 to 10 scores face value.
+Each jack or queen scores 10 points.
+Each king scores zero points.
+`;
+
 describe('ruleset generator', () => {
 	it('extract_rule_facts_detects_six_card_golf_signals', () => {
 		const facts = extractRuleFacts({
@@ -56,6 +65,19 @@ describe('ruleset generator', () => {
 		expect(facts.diagnostics.length).toBeGreaterThanOrEqual(0);
 	});
 
+	it('extract_rule_facts_detects_natural_language_rank_scoring_overrides', () => {
+		const facts = extractRuleFacts({
+			sourceText: NATURAL_LANGUAGE_SCORING
+		});
+
+		expect(facts.scoring.aceValue).toBe(1);
+		expect(facts.scoring.rankOverrides['A']).toBe(1);
+		expect(facts.scoring.rankOverrides['2']).toBe(-2);
+		expect(facts.scoring.rankOverrides['J']).toBe(10);
+		expect(facts.scoring.rankOverrides['Q']).toBe(10);
+		expect(facts.scoring.rankOverrides['K']).toBe(0);
+	});
+
 	it('compile_rule_facts_to_bundle_returns_runtime_bundle_v1', () => {
 		const facts: RuleFactsV0 = extractRuleFacts({
 			sourceText: FREEFORM_PROSE
@@ -67,6 +89,8 @@ describe('ruleset generator', () => {
 		expect(bundle.uiProfile.schemaVersion).toBe('ui-profile/v0');
 		expect(bundle.uiProfile.table.zones.length).toBeGreaterThan(0);
 		expect(bundle.uiProfile.hand.quickPlayTargets.length).toBeGreaterThan(0);
+		expect(bundle.explain?.schemaVersion).toBe('ruleset-explain/v0');
+		expect(bundle.explain?.goal.length ?? 0).toBeGreaterThan(0);
 	});
 
 	it('generate_ruleset_draft_from_url_ingests_html_and_compiles', async () => {
