@@ -6,7 +6,10 @@ This document defines how runtime rulesets are stored today and how that will mi
 
 - Storage is accessed through a backend abstraction: `RulesetStore`.
 - Local development/testing default uses SQLite via Node `node:sqlite`.
-- Rulesets are stored as validated `runtime-bundle/v0` payloads.
+- Rulesets are stored as validated `runtime-bundle/v1` payloads.
+- `runtime-bundle/v1` includes both:
+  - `runtimeRulePack`
+  - `uiProfile` (`ui-profile/v0`)
 - API endpoints:
   - `POST /api/rulesets`
   - `GET /api/rulesets`
@@ -52,7 +55,7 @@ When Cloudflare persistence is wired:
 
 1. Add a D1-backed `RulesetStore` adapter.
 2. Keep the same `RulesetService` contract.
-3. Keep the same API payload shape.
+3. Keep the same API payload shape and bundle semantics (`runtime-bundle/v1`).
 4. Switch default driver in deployed environments from local SQLite/memory to D1.
 
 No gameplay/score engine rule-generation code should depend directly on SQLite, D1, or Durable Objects.

@@ -117,4 +117,20 @@ describe('play-surface-model', () => {
 		expect(view.tableZones.find((zone) => zone.zoneId === 'board')?.label).toBe('Community Lane');
 		expect(view.tableZones.find((zone) => zone.zoneId === 'discard')?.label).toBe('Burn Pile');
 	});
+
+	test('build_demo_play_events_supports_dynamic_zone_ids_and_phase', () => {
+		const events = buildDemoPlayEvents(['You', 'Riv', 'Mina'], {
+			handZoneName: 'cards',
+			initialPhase: 'main',
+			tableZones: ['community', 'burn']
+		});
+		const dealEvents = events.filter((event): event is Extract<GameEvent, { type: 'deal_cards' }> => event.type === 'deal_cards');
+		const moveEvents = events.filter((event): event is Extract<GameEvent, { type: 'zone_move' }> => event.type === 'zone_move');
+		const phaseEvent = events.find((event): event is Extract<GameEvent, { type: 'set_phase' }> => event.type === 'set_phase');
+
+		expect(phaseEvent?.phase).toBe('main');
+		expect(dealEvents.every((event) => event.zone === 'cards')).toBe(true);
+		expect(moveEvents.map((event) => event.to.zone)).toEqual(['community', 'burn']);
+		expect(moveEvents.every((event) => event.from.zone === 'cards')).toBe(true);
+	});
 });

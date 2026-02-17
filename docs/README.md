@@ -8,6 +8,7 @@ This folder holds project planning and architecture docs.
 - [`architecture.md`](./architecture.md): Technical architecture plan, stack decisions, and phased roadmap.
 - [`rulepack-v0.md`](./rulepack-v0.md): Canonical Rule IR schema, pipeline stages, capabilities, and boundaries.
 - [`primitives-kb-v0.md`](./primitives-kb-v0.md): Canonical LLM/SLM primitive catalog for runtime bundle generation.
+- [`ui-profile-v0.md`](./ui-profile-v0.md): Canonical ruleset-driven UI profile primitive contract.
 - [`ui-primitives-v0.md`](./ui-primitives-v0.md): Canonical UI token and accessibility primitive catalog.
 - [`ruleset-storage-v0.md`](./ruleset-storage-v0.md): Local-first ruleset storage abstraction and Cloudflare migration boundary.
 - [`rulepack-schema.json`](./../src/lib/scorekeeper/rulepack-schema.json): JSON Schema artifact used by runtime validation.
@@ -29,6 +30,9 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-17-play-mobile-layout-and-zone-profiles.md`](./specs/2026-02-17-play-mobile-layout-and-zone-profiles.md): TDD spec for mobile hand panel layout and profile-driven zone visibility/labels.
 - [`specs/2026-02-17-ui-primitives-wcag-pass.md`](./specs/2026-02-17-ui-primitives-wcag-pass.md): TDD spec for shared UI primitives and WCAG contrast enforcement.
 - [`specs/2026-02-17-ui-polish-pass-2.md`](./specs/2026-02-17-ui-polish-pass-2.md): TDD spec for typography/motion/spacing polish pass.
+- [`specs/2026-02-17-ruleset-driven-ui-profile-generation.md`](./specs/2026-02-17-ruleset-driven-ui-profile-generation.md): TDD spec for `ui-profile/v0` + `runtime-bundle/v1`.
+- [`specs/2026-02-17-play-ruleset-route-loader.md`](./specs/2026-02-17-play-ruleset-route-loader.md): TDD spec for `/play/[rulesetId]` server loading and ruleset-driven play rendering.
+- [`specs/2026-02-17-score-ruleset-picker-and-open-flow.md`](./specs/2026-02-17-score-ruleset-picker-and-open-flow.md): TDD spec for score-page ruleset picker and `Open in Play` flow.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 
@@ -36,5 +40,6 @@ This folder holds project planning and architecture docs.
 
 - Update `inspiration.md` when core user needs or constraints change.
 - Update `architecture.md` when technology choices, hosting strategy, or major system design changes.
+- Update `ui-profile-v0.md` whenever the generated play-surface profile contract changes.
 - Update `ui-primitives-v0.md` whenever UI token contracts, accessibility guarantees, or styling workflow rules change.
 - Keep docs lightweight and decision-focused; avoid implementation detail that belongs in code comments or ADRs.

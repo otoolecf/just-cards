@@ -39,13 +39,13 @@ describe('rulesets api', () => {
 		process.env.RULESET_STORE_DRIVER = 'memory';
 	});
 
-	it('rulesets_api_create_and_list_roundtrip', async () => {
+	it('rulesets_api_create_and_list_roundtrip_uses_v1_bundle', async () => {
 		const createResponse = await createRuleset(
 			eventForPost({
 				name: 'Test Ruleset',
 				origin: 'manual',
 				bundle: {
-					bundleVersion: 'runtime-bundle/v0',
+					bundleVersion: 'runtime-bundle/v1',
 					gameId: 'golf',
 					displayName: 'Golf',
 					runtimeRulePack: {
@@ -56,11 +56,21 @@ describe('rulesets api', () => {
 		);
 		expect(createResponse.status).toBe(200);
 
+		const createdPayload = (await createResponse.json()) as {
+			bundle: { bundleVersion: string; uiProfile: { schemaVersion: string } };
+		};
+		expect(createdPayload.bundle.bundleVersion).toBe('runtime-bundle/v1');
+		expect(createdPayload.bundle.uiProfile.schemaVersion).toBe('ui-profile/v0');
+
 		const listResponse = await listRulesets(eventForGet());
 		expect(listResponse.status).toBe(200);
-		const payload = (await listResponse.json()) as { rulesets: Array<{ name: string }> };
+		const payload = (await listResponse.json()) as {
+			rulesets: Array<{ name: string; bundle: { bundleVersion: string; uiProfile: { schemaVersion: string } } }>;
+		};
 		expect(payload.rulesets).toHaveLength(1);
 		expect(payload.rulesets[0].name).toBe('Test Ruleset');
+		expect(payload.rulesets[0].bundle.bundleVersion).toBe('runtime-bundle/v1');
+		expect(payload.rulesets[0].bundle.uiProfile.schemaVersion).toBe('ui-profile/v0');
 	});
 
 	it('rulesets_api_get_returns_404_for_unknown_id', async () => {

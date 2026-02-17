@@ -1,5 +1,7 @@
 import { createGameplayRulePack, deriveGameState } from '$lib/gameplay/engine';
 import { createRulePack, deriveState } from '$lib/scorekeeper/engine';
+import type { RuntimeRulePack } from '$lib/runtime/game-runtime';
+import { resolveUiProfile } from '$lib/ui/ui-profile';
 import type { CreateRulesetInput, RulesetRecord, RuntimeRulesetBundle } from './types';
 import type { RulesetStore } from './store';
 
@@ -19,6 +21,14 @@ export interface RulesetService {
 	getById(id: string): Promise<RulesetRecord | undefined>;
 }
 
+interface RuntimeBundleDraft {
+	bundleVersion: 'runtime-bundle/v0' | 'runtime-bundle/v1';
+	gameId: string;
+	displayName: string;
+	runtimeRulePack: RuntimeRulePack;
+	uiProfile?: unknown;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -29,8 +39,8 @@ function validateBundleShape(bundle: unknown): string[] {
 		issues.push('bundle must be an object');
 		return issues;
 	}
-	if (bundle.bundleVersion !== 'runtime-bundle/v0') {
-		issues.push('bundleVersion must be "runtime-bundle/v0"');
+	if (bundle.bundleVersion !== 'runtime-bundle/v0' && bundle.bundleVersion !== 'runtime-bundle/v1') {
+		issues.push('bundleVersion must be "runtime-bundle/v0" or "runtime-bundle/v1"');
 	}
 	if (typeof bundle.gameId !== 'string' || bundle.gameId.trim().length === 0) {
 		issues.push('gameId must be a non-empty string');
@@ -49,24 +59,22 @@ function validateBundleShape(bundle: unknown): string[] {
 		}
 	}
 
+	if (bundle.bundleVersion === 'runtime-bundle/v1' && bundle.uiProfile !== undefined && !isObject(bundle.uiProfile)) {
+		issues.push('uiProfile must be an object when provided');
+	}
+
 	return issues;
 }
 
-function validateBundleRuntime(bundle: RuntimeRulesetBundle): string[] {
+function validateBundleRuntime(runtimeRulePack: RuntimeRulePack): string[] {
 	const issues: string[] = [];
 
-	const gameplayState = deriveGameState(
-		[],
-		bundle.runtimeRulePack.gameplayRulePack ?? createGameplayRulePack()
-	);
+	const gameplayState = deriveGameState([], runtimeRulePack.gameplayRulePack ?? createGameplayRulePack());
 	for (const issue of gameplayState.validationIssues ?? []) {
 		issues.push(`gameplay:${issue.code}`);
 	}
 
-	const scoreState = deriveState(
-		[],
-		bundle.runtimeRulePack.scoreRulePack ?? createRulePack()
-	);
+	const scoreState = deriveState([], runtimeRulePack.scoreRulePack ?? createRulePack());
 	for (const issue of scoreState.validationIssues ?? []) {
 		issues.push(`score:${issue.code}`);
 	}
@@ -80,12 +88,28 @@ function assertValidBundle(bundle: unknown): RuntimeRulesetBundle {
 		throw new Error(`Invalid runtime bundle: ${shapeIssues.join('; ')}`);
 	}
 
-	const typedBundle = bundle as RuntimeRulesetBundle;
-	const runtimeIssues = validateBundleRuntime(typedBundle);
+	const typedBundle = bundle as RuntimeBundleDraft;
+	const runtimeIssues = validateBundleRuntime(typedBundle.runtimeRulePack);
 	if (runtimeIssues.length > 0) {
 		throw new Error(`Invalid runtime bundle: ${runtimeIssues.join('; ')}`);
 	}
-	return typedBundle;
+
+	const uiProfileInput = typedBundle.bundleVersion === 'runtime-bundle/v1' ? typedBundle.uiProfile : undefined;
+	let uiProfile;
+	try {
+		uiProfile = resolveUiProfile(uiProfileInput, typedBundle.runtimeRulePack);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : 'ui profile validation failed';
+		throw new Error(`Invalid runtime bundle: ${message}`);
+	}
+
+	return {
+		bundleVersion: 'runtime-bundle/v1',
+		gameId: typedBundle.gameId.trim(),
+		displayName: typedBundle.displayName.trim(),
+		runtimeRulePack: typedBundle.runtimeRulePack,
+		uiProfile
+	};
 }
 
 class DefaultRulesetService implements RulesetService {

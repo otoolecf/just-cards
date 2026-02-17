@@ -1,3 +1,5 @@
+import type { UiPrimaryActionKind, UiProfileV0 } from '$lib/ui/ui-profile';
+
 export interface PlaySurfaceZoneProfile {
 	id: string;
 	label: string;
@@ -11,6 +13,8 @@ export interface PlaySurfaceProfile {
 	handLabel: string;
 	zones: PlaySurfaceZoneProfile[];
 }
+
+export type PlaySurfaceActionLabelMap = Partial<Record<UiPrimaryActionKind, string>>;
 
 export const DEFAULT_PLAY_SURFACE_PROFILE: PlaySurfaceProfile = {
 	id: 'default-open-table',
@@ -45,4 +49,58 @@ export function zoneHintMap(profile: PlaySurfaceProfile): Record<string, string>
 		hints[zone.id] = zone.hint;
 	}
 	return hints;
+}
+
+export function playSurfaceProfileFromUiProfile(uiProfile: UiProfileV0): PlaySurfaceProfile {
+	return {
+		id: 'ruleset-ui-profile',
+		displayName: 'Ruleset Surface',
+		handLabel: uiProfile.hand.label,
+		zones: uiProfile.table.zones
+			.filter((zone) => zone.visible !== false)
+			.map((zone) => ({
+				id: zone.id,
+				label: zone.label,
+				hint: zone.hint,
+				visible: true
+			}))
+	};
+}
+
+export function quickPlayZoneIdsFromUiProfile(uiProfile: UiProfileV0): string[] {
+	const visibleZoneIds = new Set(
+		uiProfile.table.zones.filter((zone) => zone.visible !== false).map((zone) => zone.id)
+	);
+	const zoneIds: string[] = [];
+	for (const target of uiProfile.hand.quickPlayTargets) {
+		if (target.visible === false || !visibleZoneIds.has(target.zoneId) || zoneIds.includes(target.zoneId)) {
+			continue;
+		}
+		zoneIds.push(target.zoneId);
+	}
+	if (zoneIds.length > 0) {
+		return zoneIds;
+	}
+	return uiProfile.table.zones.filter((zone) => zone.visible !== false).map((zone) => zone.id);
+}
+
+export function playSurfaceActionLabelsFromUiProfile(uiProfile: UiProfileV0): PlaySurfaceActionLabelMap {
+	const labels: PlaySurfaceActionLabelMap = {};
+	for (const action of uiProfile.actions.primary) {
+		if (!labels[action.kind]) {
+			labels[action.kind] = action.label;
+		}
+	}
+	return labels;
+}
+
+export function drawTopAllowedZoneIdsFromUiProfile(uiProfile: UiProfileV0): Set<string> {
+	const allowed = new Set<string>();
+	for (const zone of uiProfile.table.zones) {
+		if (zone.allowDrawFromTop === false) {
+			continue;
+		}
+		allowed.add(zone.id);
+	}
+	return allowed;
 }

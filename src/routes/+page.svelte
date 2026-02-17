@@ -1,5 +1,6 @@
 <script lang="ts">
-import { onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
+	import type { PageData } from './$types';
 	import { Select, Tabs } from 'bits-ui';
 	import {
 		PATTERN_PRESETS,
@@ -17,12 +18,16 @@ import { onDestroy } from 'svelte';
 	import ScoreButton from '$lib/components/score-button.svelte';
 	import CardTapInput from '$lib/components/card-tap-input.svelte';
 	import { type CardInput } from '$lib/scorekeeper/engine';
+	import { createStarterRulesetDraft } from '$lib/rulesets/picker';
+	import type { RulesetRecord } from '$lib/rulesets/types';
 	import {
 		createSession,
 		getSessionState,
 		postSessionEvent,
 		type SessionStateView
 	} from '$lib/session/score-session-api';
+
+	export let data: PageData;
 
 	type FeedbackKind = 'idle' | 'error' | 'loading' | 'success';
 	type AddRoundMode = 'rows' | 'text';
@@ -65,11 +70,21 @@ import { onDestroy } from 'svelte';
 	let patternTargetId = '';
 	let patternScoringText = PATTERN_PRESETS[0]?.defaultPatternScoring ?? '';
 	let patternTargetItems: SelectOption[] = [];
+	let rulesets: RulesetRecord[] = data.rulesets ?? [];
+	let isRulesetBusy = false;
+	let rulesetFeedback: Feedback =
+		data.rulesetLoadError && data.rulesetLoadError.length > 0
+			? { kind: 'error', message: data.rulesetLoadError }
+			: { kind: 'idle', message: '' };
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 	function setFeedback(kind: FeedbackKind, message: string): void {
 		feedback = { kind, message };
+	}
+
+	function setRulesetFeedback(kind: FeedbackKind, message: string): void {
+		rulesetFeedback = { kind, message };
 	}
 
 	function dedupePlayers(values: string[]): string[] {
@@ -135,6 +150,9 @@ import { onDestroy } from 'svelte';
 	}
 
 	$: activePlayers = getActivePlayers();
+	$: if (data.rulesets) {
+		rulesets = data.rulesets;
+	}
 	$: {
 		modePatternPack = getPatternPreset(selectedPatternPackId) ?? PATTERN_PRESETS[0];
 	}
@@ -503,6 +521,61 @@ import { onDestroy } from 'svelte';
 		return scoreEvent.type;
 	}
 
+	function rulesetPlayHref(rulesetId: string): string {
+		return `/play/${encodeURIComponent(rulesetId)}`;
+	}
+
+	async function refreshRulesets(): Promise<void> {
+		if (isRulesetBusy) {
+			return;
+		}
+		isRulesetBusy = true;
+		setRulesetFeedback('loading', 'Refreshing rulesets...');
+		try {
+			const response = await fetch('/api/rulesets', { method: 'GET' });
+			const payload = (await response.json()) as { rulesets?: RulesetRecord[]; error?: string };
+			if (!response.ok) {
+				throw new Error(payload.error ?? 'Unable to load rulesets');
+			}
+			rulesets = payload.rulesets ?? [];
+			setRulesetFeedback('success', `Loaded ${rulesets.length} ruleset${rulesets.length === 1 ? '' : 's'}.`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unable to load rulesets.';
+			setRulesetFeedback('error', message);
+		} finally {
+			isRulesetBusy = false;
+		}
+	}
+
+	async function createStarterRuleset(): Promise<void> {
+		if (isRulesetBusy) {
+			return;
+		}
+		isRulesetBusy = true;
+		setRulesetFeedback('loading', 'Creating starter ruleset...');
+		try {
+			const draft = createStarterRulesetDraft();
+			const response = await fetch('/api/rulesets', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(draft)
+			});
+			const payload = (await response.json()) as RulesetRecord | { error?: string };
+			if (!response.ok) {
+				const message = 'error' in payload ? payload.error ?? 'Unable to create starter ruleset' : 'Unable to create starter ruleset';
+				throw new Error(message);
+			}
+			const created = payload as RulesetRecord;
+			rulesets = [created, ...rulesets.filter((ruleset) => ruleset.id !== created.id)];
+			setRulesetFeedback('success', `Created ruleset ${created.name}.`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unable to create starter ruleset.';
+			setRulesetFeedback('error', message);
+		} finally {
+			isRulesetBusy = false;
+		}
+	}
+
 	onDestroy(() => {
 		clearIntervalIfNeeded();
 	});
@@ -542,6 +615,44 @@ import { onDestroy } from 'svelte';
 			{/if}
 			<p><strong>Last synced:</strong> {lastSynced || 'never'}</p>
 		</div>
+	</section>
+
+	<section class="panel">
+		<h2>Rulesets</h2>
+		<p class="hint">Create or pick a ruleset, then open it in Play mode.</p>
+		<div class="status">
+			{#if rulesetFeedback.kind === 'loading'}
+				<p class="status-loading">{rulesetFeedback.message}</p>
+			{:else if rulesetFeedback.kind === 'error'}
+				<p class="status-error">{rulesetFeedback.message}</p>
+			{:else if rulesetFeedback.kind === 'success'}
+				<p class="status-success">{rulesetFeedback.message}</p>
+			{/if}
+		</div>
+		<div class="button-row">
+			<ScoreButton variant="primary" type="button" onPress={() => void createStarterRuleset()} disabled={isRulesetBusy}>
+				Create starter ruleset
+			</ScoreButton>
+			<ScoreButton type="button" onPress={() => void refreshRulesets()} disabled={isRulesetBusy}>
+				Refresh rulesets
+			</ScoreButton>
+		</div>
+		{#if rulesets.length > 0}
+			<ul class="ruleset-list">
+				{#each rulesets as ruleset (ruleset.id)}
+					<li class="ruleset-item">
+						<div>
+							<p class="ruleset-title">{ruleset.name}</p>
+							<p class="small">id: {ruleset.id}</p>
+							<p class="small">game: {ruleset.bundle.displayName}</p>
+						</div>
+						<a class="ruleset-open-link" href={rulesetPlayHref(ruleset.id)}>Open in Play</a>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="empty">No rulesets yet.</p>
+		{/if}
 	</section>
 
 		{#if !activeSessionId}
@@ -955,6 +1066,50 @@ run: 5"
 		gap: 10px;
 	}
 
+	.ruleset-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		gap: 8px;
+	}
+
+	.ruleset-item {
+		display: grid;
+		gap: 8px;
+		padding: 10px 12px;
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		background: var(--surface);
+	}
+
+	.ruleset-title {
+		margin: 0;
+		font-size: var(--jc-type-md);
+		font-weight: 700;
+	}
+
+	.ruleset-open-link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 40px;
+		padding: 8px 12px;
+		border-radius: 10px;
+		border: 1px solid var(--line);
+		background: var(--surface-2);
+		color: var(--foreground);
+		text-decoration: none;
+		font-weight: 600;
+		transition: background-color var(--jc-motion-fast) var(--jc-ease-standard), border-color var(--jc-motion-fast) var(--jc-ease-standard);
+	}
+
+	.ruleset-open-link:hover,
+	.ruleset-open-link:focus-visible {
+		background: var(--brand-soft);
+		border-color: var(--brand);
+	}
+
 	@media (min-width: 700px) {
 		.top {
 			grid-template-columns: 1fr auto;
@@ -965,6 +1120,11 @@ run: 5"
 		.button-row,
 		:global(.segmented) {
 			grid-template-columns: auto auto;
+		}
+
+		.ruleset-item {
+			grid-template-columns: 1fr auto;
+			align-items: center;
 		}
 	}
 

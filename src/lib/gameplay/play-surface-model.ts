@@ -56,6 +56,13 @@ export interface HandMoveInput {
 	card: CardInput;
 }
 
+export interface DemoPlayEventOptions {
+	handZoneName?: string;
+	initialPhase?: string;
+	tableZones?: string[];
+	cardsPerPlayer?: number;
+}
+
 function toLabel(zoneId: string): string {
 	return zoneId
 		.split(/[_-]/)
@@ -173,50 +180,61 @@ function makeDemoDeck(size: number): CardInput[] {
 	return deck;
 }
 
-export function buildDemoPlayEvents(players: string[]): GameEvent[] {
+export function buildDemoPlayEvents(players: string[], options: DemoPlayEventOptions = {}): GameEvent[] {
 	if (players.length < 2) {
 		throw new Error('Demo play requires at least two players');
 	}
 
-	const deck = makeDemoDeck(players.length * 6);
+	const handZoneName = options.handZoneName ?? 'hand';
+	const initialPhase = options.initialPhase ?? 'play';
+	const cardsPerPlayer = Math.max(2, options.cardsPerPlayer ?? 5);
+	const tableZones = options.tableZones && options.tableZones.length > 0 ? options.tableZones : ['board', 'discard'];
+
+	const deck = makeDemoDeck(players.length * (cardsPerPlayer + 1));
 	const events: GameEvent[] = [
 		{ type: 'init_game', players, dealerIndex: 0 },
 		{ type: 'start_round' },
-		{ type: 'set_phase', phase: 'play' }
+		{ type: 'set_phase', phase: initialPhase }
 	];
 
 	const dealtByPlayer: Record<string, CardInput[]> = {};
 	let cursor = 0;
 	for (const playerId of players) {
-		const cards = deck.slice(cursor, cursor + 5);
-		cursor += 5;
+		const cards = deck.slice(cursor, cursor + cardsPerPlayer);
+		cursor += cardsPerPlayer;
 		dealtByPlayer[playerId] = cards;
-		events.push({ type: 'deal_cards', playerId, cards, zone: 'hand' });
+		events.push({ type: 'deal_cards', playerId, cards, zone: handZoneName });
 	}
 
-	const boardSourcePlayer = players[0];
-	const discardSourcePlayer = players[1];
-	const boardCard = dealtByPlayer[boardSourcePlayer]?.[0];
-	const discardCard = dealtByPlayer[discardSourcePlayer]?.[0];
+	const firstZone = tableZones[0];
+	const secondZone = tableZones[1];
 
-	if (boardCard) {
-		events.push({
-			type: 'zone_move',
-			actorId: boardSourcePlayer,
-			from: { kind: 'player', playerId: boardSourcePlayer, zone: 'hand' },
-			to: { kind: 'table', zone: 'board' },
-			cards: [boardCard]
-		});
+	if (firstZone) {
+		const boardSourcePlayer = players[0];
+		const boardCard = dealtByPlayer[boardSourcePlayer]?.[0];
+		if (boardCard) {
+			events.push({
+				type: 'zone_move',
+				actorId: boardSourcePlayer,
+				from: { kind: 'player', playerId: boardSourcePlayer, zone: handZoneName },
+				to: { kind: 'table', zone: firstZone },
+				cards: [boardCard]
+			});
+		}
 	}
 
-	if (discardCard) {
-		events.push({
-			type: 'zone_move',
-			actorId: discardSourcePlayer,
-			from: { kind: 'player', playerId: discardSourcePlayer, zone: 'hand' },
-			to: { kind: 'table', zone: 'discard' },
-			cards: [discardCard]
-		});
+	if (secondZone) {
+		const discardSourcePlayer = players[1];
+		const discardCard = dealtByPlayer[discardSourcePlayer]?.[0];
+		if (discardCard) {
+			events.push({
+				type: 'zone_move',
+				actorId: discardSourcePlayer,
+				from: { kind: 'player', playerId: discardSourcePlayer, zone: handZoneName },
+				to: { kind: 'table', zone: secondZone },
+				cards: [discardCard]
+			});
+		}
 	}
 
 	return events;

@@ -99,6 +99,8 @@ Define a versioned `RulePack` JSON schema with:
 - Turn/action constraints.
 - UI zones and labels needed for rendering.
 
+Complement the runtime rules with a versioned `ui-profile/v0` payload so play UI can be generated from ruleset data (zones, quick targets, action labels, help text) without per-game component branches.
+
 This enables:
 
 - Reuse of core engine logic across multiple games.
@@ -160,15 +162,17 @@ High-level flow:
 1. Input rules URL.
 2. Fetch and extract readable content.
 3. LLM transforms text into `RulePack`.
-4. Validate against strict JSON schema from `src/lib/scorekeeper/rulepack-schema.json`.
-5. Run simulation checks/tests for obvious contradictions.
-6. Save as draft rule pack for user review/publish.
+4. LLM transforms text into `ui-profile/v0` (or backend generates defaults from runtime primitives).
+5. Validate runtime bundle (`runtime-bundle/v1`) and schema/runtime semantics.
+6. Run simulation checks/tests for obvious contradictions.
+7. Save as draft rule pack for user review/publish.
 
 Current implementation path for step 6:
 
 - persist via `RulesetStore` abstraction
 - local dev/test default: SQLite (`node:sqlite`)
 - deployment target migration: D1 adapter behind same interface
+- persisted bundle shape: `runtime-bundle/v1` with `runtimeRulePack + uiProfile`
 
 Safety requirements:
 
@@ -188,6 +192,7 @@ Safety requirements:
 
 - Current scorekeeper screen now includes installability hooks in `+layout.svelte` with manifest and service worker registration for basic offline/return behavior (`static/manifest.webmanifest`, `static/sw.js`).
 - A mobile-first play surface prototype is available at `/play`, driven from `gameplay/v0` primitives (`GameEvent` -> `GameplayState` -> UI view model) with card movement animations and hand/board/seat rendering.
+- Ruleset-backed play rendering is available at `/play/[rulesetId]`, loading persisted `runtime-bundle/v1` (`runtimeRulePack` + `uiProfile`) via server-side route loader.
 - Play surface labels are configurable per zone (`board`, `discard`, etc.) at the view-model layer so future generated games can rename UI semantics without changing gameplay primitive IDs.
 - Play surface zone visibility and hints are profile-driven (visible-zone list + label/hint maps), allowing game-specific zone UX without game-specific rendering code branches.
 - UI visual design primitives are centralized (shared token layer + contrast tests) to keep Score/Play surfaces consistent as generated game UIs expand:

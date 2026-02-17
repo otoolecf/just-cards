@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import {
 	DEFAULT_PLAY_SURFACE_PROFILE,
+	playSurfaceActionLabelsFromUiProfile,
+	playSurfaceProfileFromUiProfile,
+	quickPlayZoneIdsFromUiProfile,
 	visibleZones,
 	zoneHintMap,
 	zoneLabelMap
 } from '$lib/gameplay/play-surface-profiles';
+import { createUiProfile } from '$lib/ui/ui-profile';
 
 describe('play-surface-profiles', () => {
 	test('visible_zones_exclude_hidden_entries', () => {
@@ -37,6 +41,40 @@ describe('play-surface-profiles', () => {
 		expect(zoneHintMap(profile)).toEqual({
 			community: 'Face-up shared cards',
 			discard: 'Top card is drawable'
+		});
+	});
+
+	test('play_surface_profile_from_ui_profile_maps_labels_hints_and_targets', () => {
+		const uiProfile = createUiProfile({
+			hand: {
+				label: 'My Cards',
+				hint: 'Choose one to play',
+				quickPlayTargets: [{ zoneId: 'community' }, { zoneId: 'pot' }]
+			},
+			table: {
+				zones: [
+					{ id: 'community', label: 'Community', hint: 'Shared cards', visible: true },
+					{ id: 'pot', label: 'Pot', hint: 'Shared pool', visible: true },
+					{ id: 'house', label: 'House', hint: 'Hidden', visible: false }
+				]
+			},
+			actions: {
+				primary: [
+					{ id: 'advance', kind: 'advance_turn', label: 'Next turn' },
+					{ id: 'undo', kind: 'undo', label: 'Back' },
+					{ id: 'redo', kind: 'redo', label: 'Forward' }
+				]
+			}
+		});
+
+		const playProfile = playSurfaceProfileFromUiProfile(uiProfile);
+		expect(playProfile.handLabel).toBe('My Cards');
+		expect(playProfile.zones.map((zone) => zone.id)).toEqual(['community', 'pot']);
+		expect(quickPlayZoneIdsFromUiProfile(uiProfile)).toEqual(['community', 'pot']);
+		expect(playSurfaceActionLabelsFromUiProfile(uiProfile)).toEqual({
+			advance_turn: 'Next turn',
+			undo: 'Back',
+			redo: 'Forward'
 		});
 	});
 });

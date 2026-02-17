@@ -262,13 +262,57 @@ interface RuntimeScoringTrigger {
 - `scorer.kind = fixed`:
   - emits generated `add_delta`
 
+## UIProfile Primitives
+
+Generated play UI metadata is modeled with `ui-profile/v0`.
+
+```ts
+type UiPrimaryActionKind = 'advance_turn' | 'undo' | 'redo' | 'set_phase';
+
+interface UiProfileV0 {
+  schemaVersion: 'ui-profile/v0';
+  hand: {
+    zoneId: string;
+    label: string;
+    hint: string;
+    quickPlayTargets: { zoneId: string; visible?: boolean }[];
+  };
+  table: {
+    zones: {
+      id: string;
+      label: string;
+      hint: string;
+      visible?: boolean;
+      allowDrawFromTop?: boolean;
+    }[];
+  };
+  actions: {
+    primary: (
+      | { id: string; kind: 'advance_turn' | 'undo' | 'redo'; label: string }
+      | { id: string; kind: 'set_phase'; phase: string; label: string }
+    )[];
+  };
+  log: {
+    label: string;
+    emptyText: string;
+  };
+}
+```
+
+### UIProfile Validation Semantics
+
+- Every quick target zone (`hand.quickPlayTargets[*].zoneId`) must exist in `table.zones`.
+- `hand.zoneId` should match gameplay `handZoneName`.
+- Quick target zones must be legal gameplay targets (`zoneMovePolicy.targetZoneAllowlist`, excluding hand).
+- `set_phase` actions must reference declared gameplay phases.
+
 ## Rule Generation Output Contract
 
 LLM/SLM should generate one runtime bundle with this top-level shape:
 
 ```json
 {
-  "bundleVersion": "runtime-bundle/v0",
+  "bundleVersion": "runtime-bundle/v1",
   "gameId": "string",
   "displayName": "string",
   "runtimeRulePack": {
@@ -277,6 +321,9 @@ LLM/SLM should generate one runtime bundle with this top-level shape:
     "validatorZoneMoveActionType": "string",
     "scoreRulePack": {},
     "scoringTriggers": []
+  },
+  "uiProfile": {
+    "schemaVersion": "ui-profile/v0"
   }
 }
 ```

@@ -49,6 +49,7 @@ Then open:
 ```text
 http://localhost:5173
 http://localhost:5173/play
+http://localhost:5173/play/<rulesetId>
 ```
 
 Manual smoke test:
@@ -59,7 +60,9 @@ Manual smoke test:
 4. Use `Undo`/`Redo` and confirm totals change.
 5. Submit one pattern round (target + cards) to confirm pattern scoring reflects.
 6. Create a ruleset draft via `POST /api/rulesets` and verify it appears in `GET /api/rulesets`.
-7. Open `/play`, select a hand card, and move it to `Board` to verify animated zone transitions.
+   Use `runtime-bundle/v1` payloads (`runtimeRulePack` + `uiProfile`), or omit `uiProfile` to use backend generation defaults.
+7. Open `/play` for demo mode, then open `/play/{rulesetId}` (using a created ID) to verify ruleset-driven labels/zones/actions.
+8. Select a hand card and play/draw cards to confirm movement + action controls remain functional.
 
 End-to-end test:
 

@@ -9,8 +9,9 @@ Before making code changes, read in this order:
 1. `/Users/ConnorO/git_repos/just-cards/docs/README.md`
 2. `/Users/ConnorO/git_repos/just-cards/docs/inspiration.md`
 3. `/Users/ConnorO/git_repos/just-cards/docs/architecture.md`
-4. `/Users/ConnorO/git_repos/just-cards/docs/ui-primitives-v0.md` (required for UI/style work)
-5. `/Users/ConnorO/git_repos/just-cards/AGENTS.md`
+4. `/Users/ConnorO/git_repos/just-cards/docs/ui-profile-v0.md` (required for ruleset-driven play UI work)
+5. `/Users/ConnorO/git_repos/just-cards/docs/ui-primitives-v0.md` (required for UI/style work)
+6. `/Users/ConnorO/git_repos/just-cards/AGENTS.md`
 
 ## Project Mission and Scope
 
@@ -67,6 +68,7 @@ Default assumption: Cloudflare-first and JavaScript/TypeScript-first unless arch
 2. Local development/testing should use the SQLite adapter by default (`node:sqlite`) unless explicitly overridden.
 3. Treat local SQLite as the temporary persistence layer until Cloudflare storage adapters are wired.
 4. Cloudflare migration work should swap adapters behind the same interface, not rewrite service/API contracts.
+5. Treat `runtime-bundle/v1` (`runtimeRulePack` + `uiProfile`) as the canonical stored payload.
 
 ## Security and Secrets Policy
 
