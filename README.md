@@ -61,8 +61,9 @@ Manual smoke test:
 5. Submit one pattern round (target + cards) to confirm pattern scoring reflects.
 6. Create a ruleset draft via `POST /api/rulesets` and verify it appears in `GET /api/rulesets`.
    Use `runtime-bundle/v1` payloads (`runtimeRulePack` + `uiProfile`), or omit `uiProfile` to use backend generation defaults.
-7. Open `/play` for demo mode, then open `/play/{rulesetId}` (using a created ID) to verify ruleset-driven labels/zones/actions.
-8. Select a hand card and play/draw cards to confirm movement + action controls remain functional.
+7. In `Rulesets` panel on `/`, generate one ruleset from URL or prose input and verify it appears in the list.
+8. Open `/play` for demo mode, then open `/play/{rulesetId}` (using generated or created ID) to verify ruleset-driven labels/zones/actions.
+9. Select a hand card and play/draw cards to confirm movement + action controls remain functional.
 
 End-to-end test:
 
@@ -126,6 +127,18 @@ Run tests with coverage:
 
 ```sh
 npm run test:coverage
+```
+
+Run golden ruleset evals (offline fixtures from target rule links):
+
+```sh
+npm run test:golden
+```
+
+Run full confidence gate (bundle runtime/UI checks + golden evals):
+
+```sh
+npm run test:confidence
 ```
 
 ## Open Source and Secrets

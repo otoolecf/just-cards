@@ -8,6 +8,8 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"test": "vitest run",
+		"test:golden": "vitest run src/lib/rulesets/golden-evals.test.ts",
+		"test:confidence": "vitest run src/lib/rulesets/confidence.test.ts src/lib/rulesets/golden-evals.test.ts",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test",

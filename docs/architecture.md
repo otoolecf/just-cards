@@ -174,6 +174,17 @@ Current implementation path for step 6:
 - deployment target migration: D1 adapter behind same interface
 - persisted bundle shape: `runtime-bundle/v1` with `runtimeRulePack + uiProfile`
 
+Current scaffold includes a deterministic generator API for this contract:
+- `POST /api/rulesets/generate` accepts URL or prose input
+- extraction builds `RuleFacts v0`
+- compiler emits `runtime-bundle/v1` draft and persists via `RulesetService`
+
+Confidence gate before paid LLM usage:
+- golden fixture eval suite validates extraction + compile behavior against known public rule links
+- suite command: `npm run test:golden`
+- bundle confidence suite validates runtime/UI primitive compatibility on generated bundles
+- suite command: `npm run test:confidence`
+
 Safety requirements:
 
 - Never auto-publish unvalidated rule output.

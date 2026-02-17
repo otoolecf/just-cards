@@ -10,6 +10,9 @@ This folder holds project planning and architecture docs.
 - [`primitives-kb-v0.md`](./primitives-kb-v0.md): Canonical LLM/SLM primitive catalog for runtime bundle generation.
 - [`ui-profile-v0.md`](./ui-profile-v0.md): Canonical ruleset-driven UI profile primitive contract.
 - [`ui-primitives-v0.md`](./ui-primitives-v0.md): Canonical UI token and accessibility primitive catalog.
+- [`ruleset-generation-v0.md`](./ruleset-generation-v0.md): End-to-end generation scaffold (`url|text` -> `RuleFacts` -> `runtime-bundle/v1`).
+- [`ruleset-golden-evals-v0.md`](./ruleset-golden-evals-v0.md): Offline confidence suite for source-link extraction and compile quality gates.
+- [`ruleset-confidence-v0.md`](./ruleset-confidence-v0.md): Bundle-level runtime/UI confidence checks and smoke simulation gate.
 - [`ruleset-storage-v0.md`](./ruleset-storage-v0.md): Local-first ruleset storage abstraction and Cloudflare migration boundary.
 - [`rulepack-schema.json`](./../src/lib/scorekeeper/rulepack-schema.json): JSON Schema artifact used by runtime validation.
 - [`scorekeeper-rules.md`](./scorekeeper-rules.md): Score engine abstraction, modifier model, and customization examples.
@@ -33,6 +36,9 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-17-ruleset-driven-ui-profile-generation.md`](./specs/2026-02-17-ruleset-driven-ui-profile-generation.md): TDD spec for `ui-profile/v0` + `runtime-bundle/v1`.
 - [`specs/2026-02-17-play-ruleset-route-loader.md`](./specs/2026-02-17-play-ruleset-route-loader.md): TDD spec for `/play/[rulesetId]` server loading and ruleset-driven play rendering.
 - [`specs/2026-02-17-score-ruleset-picker-and-open-flow.md`](./specs/2026-02-17-score-ruleset-picker-and-open-flow.md): TDD spec for score-page ruleset picker and `Open in Play` flow.
+- [`specs/2026-02-17-ruleset-generation-v0.md`](./specs/2026-02-17-ruleset-generation-v0.md): TDD spec for URL/prose input generation pipeline.
+- [`specs/2026-02-17-ruleset-golden-evals-v0.md`](./specs/2026-02-17-ruleset-golden-evals-v0.md): TDD spec for golden fixture eval gating before LLM spend.
+- [`specs/2026-02-17-ruleset-confidence-suite-v0.md`](./specs/2026-02-17-ruleset-confidence-suite-v0.md): TDD spec for runtime/UI bundle confidence checks.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 

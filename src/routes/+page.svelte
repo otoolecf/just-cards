@@ -76,6 +76,11 @@
 		data.rulesetLoadError && data.rulesetLoadError.length > 0
 			? { kind: 'error', message: data.rulesetLoadError }
 			: { kind: 'idle', message: '' };
+	let rulesetGenerateMode: 'url' | 'text' = 'url';
+	let rulesetSourceUrl = '';
+	let rulesetSourceText = '';
+	let rulesetGenerateName = '';
+	let rulesetGenerateNotes = '';
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -576,6 +581,66 @@
 		}
 	}
 
+	async function generateRulesetFromInput(): Promise<void> {
+		if (isRulesetBusy) {
+			return;
+		}
+
+		const source =
+			rulesetGenerateMode === 'url'
+				? {
+						type: 'url' as const,
+						url: rulesetSourceUrl.trim()
+					}
+				: {
+						type: 'text' as const,
+						text: rulesetSourceText.trim()
+					};
+
+		if (source.type === 'url' && source.url.length === 0) {
+			setRulesetFeedback('error', 'Rules URL is required.');
+			return;
+		}
+		if (source.type === 'text' && source.text.length === 0) {
+			setRulesetFeedback('error', 'Rules text is required.');
+			return;
+		}
+
+		isRulesetBusy = true;
+		setRulesetFeedback('loading', 'Generating ruleset from source...');
+		try {
+			const response = await fetch('/api/rulesets/generate', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					source,
+					...(rulesetGenerateName.trim() ? { name: rulesetGenerateName.trim() } : {}),
+					...(rulesetGenerateNotes.trim() ? { notes: rulesetGenerateNotes.trim() } : {})
+				})
+			});
+			const payload = (await response.json()) as {
+				ruleset?: RulesetRecord;
+				diagnostics?: string[];
+				error?: string;
+			};
+			if (!response.ok || !payload.ruleset) {
+				throw new Error(payload.error ?? 'Unable to generate ruleset.');
+			}
+
+			rulesets = [payload.ruleset, ...rulesets.filter((ruleset) => ruleset.id !== payload.ruleset?.id)];
+			const diagnosticPreview = (payload.diagnostics ?? []).slice(0, 2).join(' ');
+			setRulesetFeedback(
+				'success',
+				`Generated ruleset ${payload.ruleset.name}.${diagnosticPreview ? ` ${diagnosticPreview}` : ''}`
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unable to generate ruleset.';
+			setRulesetFeedback('error', message);
+		} finally {
+			isRulesetBusy = false;
+		}
+	}
+
 	onDestroy(() => {
 		clearIntervalIfNeeded();
 	});
@@ -619,7 +684,7 @@
 
 	<section class="panel">
 		<h2>Rulesets</h2>
-		<p class="hint">Create or pick a ruleset, then open it in Play mode.</p>
+		<p class="hint">Generate from URL/prose, create starter drafts, and open in Play mode.</p>
 		<div class="status">
 			{#if rulesetFeedback.kind === 'loading'}
 				<p class="status-loading">{rulesetFeedback.message}</p>
@@ -628,6 +693,74 @@
 			{:else if rulesetFeedback.kind === 'success'}
 				<p class="status-success">{rulesetFeedback.message}</p>
 			{/if}
+		</div>
+		<div class="ruleset-generator">
+			<div class="ruleset-source-toggle" role="tablist" aria-label="Rules source type">
+				<button
+					type="button"
+					class={`ruleset-source-button ${rulesetGenerateMode === 'url' ? 'active' : ''}`.trim()}
+					aria-pressed={rulesetGenerateMode === 'url'}
+					onclick={() => (rulesetGenerateMode = 'url')}
+				>
+					URL
+				</button>
+				<button
+					type="button"
+					class={`ruleset-source-button ${rulesetGenerateMode === 'text' ? 'active' : ''}`.trim()}
+					aria-pressed={rulesetGenerateMode === 'text'}
+					onclick={() => (rulesetGenerateMode = 'text')}
+				>
+					Prose
+				</button>
+			</div>
+			<div class="field-group">
+				<label for="ruleset-name">Ruleset name (optional)</label>
+				<ScoreInput
+					id="ruleset-name"
+					type="text"
+					placeholder="Generated ruleset name"
+					value={rulesetGenerateName}
+					onValueChange={(value) => (rulesetGenerateName = value)}
+				/>
+			</div>
+			{#if rulesetGenerateMode === 'url'}
+				<div class="field-group">
+					<label for="ruleset-source-url">Rules URL</label>
+					<ScoreInput
+						id="ruleset-source-url"
+						type="text"
+						placeholder="https://example.com/how-to-play/..."
+						value={rulesetSourceUrl}
+						onValueChange={(value) => (rulesetSourceUrl = value)}
+					/>
+				</div>
+			{:else}
+				<div class="field-group">
+					<label for="ruleset-source-text">Rules text</label>
+					<ScoreInput
+						as="textarea"
+						id="ruleset-source-text"
+						rows={5}
+						placeholder="We play with 3 players. Everyone draws from stock or discard..."
+						value={rulesetSourceText}
+						onValueChange={(value) => (rulesetSourceText = value)}
+					/>
+				</div>
+			{/if}
+			<div class="field-group">
+				<label for="ruleset-source-notes">Notes (optional)</label>
+				<ScoreInput
+					as="textarea"
+					id="ruleset-source-notes"
+					rows={2}
+					placeholder="Any constraints or intended variant details"
+					value={rulesetGenerateNotes}
+					onValueChange={(value) => (rulesetGenerateNotes = value)}
+				/>
+			</div>
+			<ScoreButton variant="primary" type="button" onPress={() => void generateRulesetFromInput()} disabled={isRulesetBusy}>
+				Generate ruleset from input
+			</ScoreButton>
 		</div>
 		<div class="button-row">
 			<ScoreButton variant="primary" type="button" onPress={() => void createStarterRuleset()} disabled={isRulesetBusy}>
@@ -1072,6 +1205,36 @@ run: 5"
 		margin: 0;
 		display: grid;
 		gap: 8px;
+	}
+
+	.ruleset-generator {
+		display: grid;
+		gap: 10px;
+		padding: 10px;
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		background: var(--surface-2);
+	}
+
+	.ruleset-source-toggle {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+	}
+
+	.ruleset-source-button {
+		min-height: 40px;
+		padding: 8px 12px;
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		background: var(--surface);
+		color: var(--foreground);
+		font-weight: 600;
+	}
+
+	.ruleset-source-button.active {
+		background: var(--brand-soft);
+		border-color: var(--brand);
 	}
 
 	.ruleset-item {
