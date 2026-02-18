@@ -8,6 +8,60 @@ import {
 } from '$lib/ui/ui-profile';
 
 describe('ui-profile', () => {
+	test('ui_profile_validation_accepts_layout_and_draw_visibility', () => {
+		const runtimeRulePack: RuntimeRulePack = {
+			gameplayRulePack: createGameplayRulePack({
+				handZoneName: 'hand',
+				zoneMovePolicy: {
+					sourceZoneAllowlist: ['hand', 'stock', 'discard'],
+					targetZoneAllowlist: ['hand', 'discard']
+				}
+			})
+		};
+
+		const profile = createUiProfile({
+			hand: {
+				zoneId: 'hand',
+				label: 'Your Layout',
+				hint: 'Play hidden info carefully.',
+				quickPlayTargets: [{ zoneId: 'discard' }],
+				layout: { kind: 'grid', rows: 2, columns: 3 }
+			},
+			table: {
+				zones: [
+					{
+						id: 'stock',
+						label: 'Stock',
+						hint: 'Face-down draw pile',
+						allowDrawFromTop: true,
+						drawVisibility: 'preserve'
+					},
+					{
+						id: 'discard',
+						label: 'Discard',
+						hint: 'Face-up discard',
+						allowDrawFromTop: true,
+						drawVisibility: 'reveal'
+					}
+				]
+			},
+			seats: {
+				cards: {
+					zoneId: 'hand',
+					label: 'Layouts',
+					includeSelf: true,
+					layout: { kind: 'grid', rows: 2, columns: 3 }
+				}
+			}
+		});
+
+		const issues = validateUiProfile(profile, runtimeRulePack);
+		expect(issues).toEqual([]);
+		expect(profile.hand.layout?.kind).toBe('grid');
+		expect(profile.table.zones.find((zone) => zone.id === 'stock')?.drawVisibility).toBe('preserve');
+		expect(profile.seats?.cards?.zoneId).toBe('hand');
+	});
+
 	test('ui_profile_validation_rejects_unknown_quick_target_zone', () => {
 		const runtimeRulePack: RuntimeRulePack = {
 			gameplayRulePack: createGameplayRulePack()

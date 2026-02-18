@@ -124,6 +124,16 @@ export interface RuleFactsV0 {
 		aceValue: number;
 		rankOverrides: Partial<Record<Rank, number>>;
 	};
+	setup?: {
+		cardsPerPlayer?: number;
+		initialFaceUpCards?: number;
+		playerLayout?: {
+			kind: 'grid';
+			rows: number;
+			columns: number;
+		};
+		drawVisibility?: Partial<Record<string, 'reveal' | 'preserve'>>;
+	};
 	diagnostics: string[];
 	source: {
 		type: 'url' | 'text';
@@ -163,7 +173,7 @@ interface ExtractRuleFactsInput {
 	sourceType?: 'url' | 'text';
 }
 
-interface IngestedSource {
+export interface IngestedSource {
 	text: string;
 	type: 'url' | 'text';
 	url?: string;
@@ -206,6 +216,18 @@ function uniqueStrings(values: string[]): string[] {
 		unique.push(normalized);
 	}
 	return unique;
+}
+
+function parseNumericToken(raw: string): number | undefined {
+	const normalized = raw.trim().toLowerCase();
+	if (!normalized) {
+		return undefined;
+	}
+	if (/^-?\d+$/.test(normalized)) {
+		const parsed = Number.parseInt(normalized, 10);
+		return Number.isFinite(parsed) ? parsed : undefined;
+	}
+	return NUMBER_WORD_TO_VALUE[normalized];
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -359,6 +381,101 @@ function detectRounds(text: string): number | undefined {
 	return wordToNumber[wordRoundMatch[1].toLowerCase()];
 }
 
+function detectCardsPerPlayer(text: string): number | undefined {
+	const patterns = [
+		/(?:deal(?:s|t)?|dealt|hand size(?: is|:)?)\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)\s*cards?(?:\s+[a-z-]+){0,4}\s*(?:to|for)\s*each/i,
+		/each player(?: is)?\s*(?:dealt|gets?|has)\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)\s*cards?/i,
+		/(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)\s*cards?(?:\s+[a-z-]+){0,4}\s*(?:to|for)\s*each/i
+	];
+	for (const pattern of patterns) {
+		const match = text.match(pattern);
+		if (!match) {
+			continue;
+		}
+		const parsed = parseNumericToken(match[1]);
+		if (parsed !== undefined && parsed >= 2 && parsed <= 20) {
+			return parsed;
+		}
+	}
+	return undefined;
+}
+
+function detectInitialFaceUpCards(text: string, cardsPerPlayer?: number): number | undefined {
+	const patterns = [
+		/turn(?:ed)?\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)\s*(?:of\s+(?:these|their)\s*)?cards?\s*face up/i,
+		/reveal(?:ed)?\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)\s*cards?\s*face up/i,
+		/(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen)\s*cards?\s*(?:are|is|start|remain)\s*face up/i
+	];
+	for (const pattern of patterns) {
+		const match = text.match(pattern);
+		if (!match) {
+			continue;
+		}
+		const parsed = parseNumericToken(match[1]);
+		if (parsed === undefined || parsed < 0) {
+			continue;
+		}
+		if (cardsPerPlayer !== undefined) {
+			return Math.max(0, Math.min(parsed, cardsPerPlayer));
+		}
+		return parsed;
+	}
+	return undefined;
+}
+
+function detectPlayerGridLayout(
+	text: string,
+	cardsPerPlayer?: number
+): { kind: 'grid'; rows: number; columns: number } | undefined {
+	const compactPattern =
+		/(\d{1,2})\s*[x×]\s*(\d{1,2})\s*(?:layout|grid|tableau|arrangement|cards?)/i;
+	const compactMatch = text.match(compactPattern);
+	if (compactMatch) {
+		const rows = Number.parseInt(compactMatch[1], 10);
+		const columns = Number.parseInt(compactMatch[2], 10);
+		if (Number.isFinite(rows) && Number.isFinite(columns) && rows > 0 && columns > 0) {
+			if (!cardsPerPlayer || rows * columns === cardsPerPlayer) {
+				return { kind: 'grid', rows, columns };
+			}
+		}
+	}
+
+	const rowsPattern =
+		/(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s*rows?\s*of\s*(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:cards?|in front|layout|tableau)/i;
+	const rowsMatch = text.match(rowsPattern);
+	if (rowsMatch) {
+		const rows = parseNumericToken(rowsMatch[1]);
+		const columns = parseNumericToken(rowsMatch[2]);
+		if (rows !== undefined && columns !== undefined && rows > 0 && columns > 0) {
+			if (!cardsPerPlayer || rows * columns === cardsPerPlayer) {
+				return { kind: 'grid', rows, columns };
+			}
+		}
+	}
+
+	return undefined;
+}
+
+function detectDrawVisibility(
+	text: string,
+	zones: string[]
+): Partial<Record<string, 'reveal' | 'preserve'>> | undefined {
+	if (!zones.includes('stock')) {
+		return undefined;
+	}
+	const lower = text.toLowerCase();
+	if (
+		/\bcannot be looked at\b/.test(lower) ||
+		/\bwithout looking\b/.test(lower) ||
+		/\bblind draw\b/.test(lower) ||
+		/\bstay face down until revealed\b/.test(lower) ||
+		/\bremain face down until revealed\b/.test(lower)
+	) {
+		return { stock: 'preserve' };
+	}
+	return undefined;
+}
+
 function detectZones(text: string): string[] {
 	const lower = text.toLowerCase();
 	const zones: string[] = [];
@@ -371,7 +488,7 @@ function detectZones(text: string): string[] {
 	if (/\bmeld\b|\blay down\b|\blaid down\b/.test(lower)) {
 		zones.push('meld');
 	}
-	if (/\bcommunity\b|\bboard\b|\btable\b|\blayout\b/.test(lower)) {
+	if (/\bcommunity\b|\bboard\b|\bpeg board\b|\bshared cards?\b|\bcenter piles?\b/.test(lower)) {
 		zones.push('board');
 	}
 	if (/\bpot\b/.test(lower)) {
@@ -601,9 +718,50 @@ function detectScoringOverrides(text: string): { aceValue: number; rankOverrides
 	};
 }
 
-function detectDiagnostics(text: string, zones: string[]): string[] {
+function detectDiagnostics(
+	text: string,
+	zones: string[],
+	setup?: RuleFactsV0['setup']
+): string[] {
 	const diagnostics: string[] = [];
 	const lower = text.toLowerCase();
+
+	const faceUpPatterns = [
+		/turn(?:ed)?\s+([a-z0-9-]+)\s+cards?\s+face up/i,
+		/turn(?:ed)?\s+([a-z0-9-]+)(?:\s+of\s+(?:these|their))?\s+cards?\s+face up/i,
+		/([a-z0-9-]+)\s+cards?\s+(?:are|is|remain|stay|start)\s+face up/i
+	];
+	let faceUpCount: number | undefined;
+	for (const pattern of faceUpPatterns) {
+		const match = text.match(pattern);
+		if (!match) {
+			continue;
+		}
+		const parsed = parseNumericPhrase(match[1]);
+		if (parsed !== undefined && parsed >= 0) {
+			faceUpCount = parsed;
+			break;
+		}
+	}
+
+	if (faceUpCount !== undefined) {
+		diagnostics.push(`Setup hint: ${faceUpCount} cards start face up.`);
+	}
+	if (/\bface down\b/i.test(text)) {
+		diagnostics.push('Setup hint: some cards start face down and should remain hidden until revealed by play.');
+	}
+	if (setup?.cardsPerPlayer) {
+		diagnostics.push(`Setup hint: each player starts with ${setup.cardsPerPlayer} cards.`);
+	}
+	if (setup?.playerLayout?.kind === 'grid') {
+		diagnostics.push(
+			`Setup hint: player cards are arranged in ${setup.playerLayout.rows} rows of ${setup.playerLayout.columns}.`
+		);
+	}
+	if (setup?.drawVisibility?.stock === 'preserve') {
+		diagnostics.push('Visibility hint: stock draws should stay hidden until explicitly revealed.');
+	}
+
 	if (/\bside pot\b|\bbetting round\b|\ball-in\b/.test(lower)) {
 		diagnostics.push('Detected betting/side-pot language that may require future settlement primitives.');
 	}
@@ -629,7 +787,20 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 	const drawSources = detectDrawSources(normalizedText, zones);
 	const playTargets = detectPlayTargets(normalizedText, zones);
 	const scoringOverrides = detectScoringOverrides(normalizedText);
-	const diagnostics = detectDiagnostics(normalizedText, zones);
+	const cardsPerPlayer = detectCardsPerPlayer(normalizedText);
+	const initialFaceUpCards = detectInitialFaceUpCards(normalizedText, cardsPerPlayer);
+	const playerLayout = detectPlayerGridLayout(normalizedText, cardsPerPlayer);
+	const drawVisibility = detectDrawVisibility(normalizedText, zones);
+	const setup: RuleFactsV0['setup'] =
+		cardsPerPlayer || initialFaceUpCards !== undefined || playerLayout || drawVisibility
+			? {
+					...(cardsPerPlayer ? { cardsPerPlayer } : {}),
+					...(initialFaceUpCards !== undefined ? { initialFaceUpCards } : {}),
+					...(playerLayout ? { playerLayout } : {}),
+					...(drawVisibility ? { drawVisibility } : {})
+				}
+			: undefined;
+	const diagnostics = detectDiagnostics(normalizedText, zones, setup);
 
 	return {
 		schemaVersion: 'rule-facts/v0',
@@ -648,6 +819,7 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 			aceValue: scoringOverrides.aceValue,
 			rankOverrides: scoringOverrides.rankOverrides
 		},
+		...(setup ? { setup } : {}),
 		diagnostics,
 		source: {
 			type: input.sourceType ?? (input.sourceUrl ? 'url' : 'text'),
@@ -680,7 +852,11 @@ function ensureTableZones(facts: RuleFactsV0): string[] {
 function gameplayRulePackFromFacts(facts: RuleFactsV0): GameplayRulePack {
 	const tableZones = ensureTableZones(facts);
 	const sourceZoneAllowlist = uniqueStrings([facts.handZoneName, ...facts.turn.drawSources, ...facts.turn.playTargets]);
-	const targetZoneAllowlist = uniqueStrings([facts.handZoneName, ...facts.turn.playTargets]);
+	const targetZoneAllowlist = uniqueStrings([
+		facts.handZoneName,
+		...facts.turn.playTargets,
+		...facts.turn.drawSources
+	]);
 
 	return createGameplayRulePack({
 		handZoneName: facts.handZoneName,
@@ -722,25 +898,50 @@ function scoringTriggersFromFacts(facts: RuleFactsV0) {
 	];
 }
 
-function patchedUiProfile(profile: UiProfileV0): UiProfileV0 {
+function patchedUiProfile(
+	profile: UiProfileV0,
+	quickTargetZoneIds: string[],
+	setup?: RuleFactsV0['setup']
+): UiProfileV0 {
+	const allowedQuickTargets = new Set(quickTargetZoneIds);
+	const filteredQuickTargets = profile.hand.quickPlayTargets.filter((target) =>
+		allowedQuickTargets.has(target.zoneId)
+	);
+
 	return createUiProfile({
 		hand: {
 			zoneId: profile.hand.zoneId,
 			label: profile.hand.label,
 			hint: profile.hand.hint,
-			quickPlayTargets: profile.hand.quickPlayTargets
+			quickPlayTargets: filteredQuickTargets.length > 0 ? filteredQuickTargets : profile.hand.quickPlayTargets,
+			...(setup?.playerLayout ? { layout: setup.playerLayout } : {})
 		},
 		table: {
 			zones: profile.table.zones.map((zone) => ({
 				...zone,
 				label: COMMON_ZONE_LABELS[zone.id] ?? zone.label,
-				hint: COMMON_ZONE_HINTS[zone.id] ?? zone.hint
+				hint: COMMON_ZONE_HINTS[zone.id] ?? zone.hint,
+				...(setup?.drawVisibility?.[zone.id]
+					? { drawVisibility: setup.drawVisibility[zone.id] }
+					: {})
 			}))
 		},
 		actions: {
 			primary: profile.actions.primary
 		},
-		log: profile.log
+		log: profile.log,
+		...(setup?.playerLayout
+			? {
+					seats: {
+						cards: {
+							zoneId: profile.hand.zoneId,
+							label: 'Player Layouts',
+							includeSelf: false,
+							layout: setup.playerLayout
+						}
+					}
+				}
+			: {})
 	});
 }
 
@@ -778,6 +979,7 @@ function explainFromFacts(facts: RuleFactsV0, uiProfile: UiProfileV0): RuntimeRu
 			aceValue: facts.scoring.aceValue,
 			rankOverrides
 		},
+		...(facts.setup ? { setup: facts.setup } : {}),
 		zones: uiProfile.table.zones
 			.filter((zone) => zone.visible !== false)
 			.map((zone) => ({
@@ -806,7 +1008,9 @@ export function compileRuleFactsToBundle(facts: RuleFactsV0): RuntimeRulesetBund
 		generateUiProfileFromRuntime(runtimeRulePack, {
 			handLabel: 'Your Hand',
 			handHint: 'Select a card to reveal quick play targets.'
-		})
+		}),
+		facts.turn.playTargets,
+		facts.setup
 	);
 	const explain = explainFromFacts(facts, uiProfile);
 
@@ -820,7 +1024,10 @@ export function compileRuleFactsToBundle(facts: RuleFactsV0): RuntimeRulesetBund
 	};
 }
 
-async function ingestSource(input: GeneratorSourceInput, options: GenerateRulesetOptions = {}): Promise<IngestedSource> {
+export async function ingestSource(
+	input: GeneratorSourceInput,
+	options: GenerateRulesetOptions = {}
+): Promise<IngestedSource> {
 	if (input.type === 'text') {
 		const text = normalizeWhitespace(input.text ?? '');
 		if (!text) {

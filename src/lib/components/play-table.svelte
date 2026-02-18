@@ -10,23 +10,29 @@
 	} from '$lib/gameplay/engine';
 	import {
 		buildDemoPlayEvents,
+		buildRulesetPlayEvents,
 		buildPlaySurfaceView,
+		cardIsFaceDown,
+		setCardFaceDown,
 		createHandMoveEvent,
 		type PlayCardView
 	} from '$lib/gameplay/play-surface-model';
-import {
-	drawTopAllowedZoneIdsFromUiProfile,
-	playSurfaceActionLabelsFromUiProfile,
+	import {
+		drawVisibilityModeByZoneFromUiProfile,
+		drawTopAllowedZoneIdsFromUiProfile,
+		playSurfaceActionLabelsFromUiProfile,
 		playSurfaceProfileFromUiProfile,
 		quickPlayZoneIdsFromUiProfile,
+		seatCardsProfileFromUiProfile,
 		visibleZones,
-	zoneHintMap,
-	zoneLabelMap
-} from '$lib/gameplay/play-surface-profiles';
-import type { RuntimeRulesetBundle } from '$lib/rulesets/types';
-import { buildRulesetGuideModel } from '$lib/rulesets/guide-model';
-import { generateUiProfileFromRuntime, type UiPrimaryAction } from '$lib/ui/ui-profile';
-import ScoreButton from '$lib/components/score-button.svelte';
+		zoneHintMap,
+		zoneLabelMap
+	} from '$lib/gameplay/play-surface-profiles';
+	import type { RuntimeRulesetBundle } from '$lib/rulesets/types';
+	import { buildRulesetGuideModel } from '$lib/rulesets/guide-model';
+	import { generateUiProfileFromRuntime, type UiPrimaryAction } from '$lib/ui/ui-profile';
+	import ScoreButton from '$lib/components/score-button.svelte';
+	import { cardLabelForAction } from '$lib/components/play-table-copy';
 
 	export let rulesetBundle: RuntimeRulesetBundle | undefined = undefined;
 	export let rulesetName: string | undefined = undefined;
@@ -52,19 +58,21 @@ import ScoreButton from '$lib/components/score-button.svelte';
 
 	const FALLBACK_GAMEPLAY_RULE_PACK = defaultGameplayRulePack();
 	const ACTIVE_GAMEPLAY_RULE_PACK = rulesetBundle?.runtimeRulePack.gameplayRulePack ?? FALLBACK_GAMEPLAY_RULE_PACK;
-const ACTIVE_UI_PROFILE = rulesetBundle?.uiProfile ?? generateUiProfileFromRuntime({ gameplayRulePack: ACTIVE_GAMEPLAY_RULE_PACK });
-const ACTIVE_RUNTIME_BUNDLE: RuntimeRulesetBundle = rulesetBundle ?? {
-	bundleVersion: 'runtime-bundle/v1',
-	gameId: 'demo-open-table',
-	displayName: 'Demo Open Table',
-	runtimeRulePack: {
-		gameplayRulePack: ACTIVE_GAMEPLAY_RULE_PACK
-	},
-	uiProfile: ACTIVE_UI_PROFILE
-};
-const ACTIVE_SURFACE_PROFILE = playSurfaceProfileFromUiProfile(ACTIVE_UI_PROFILE);
-const GUIDE_MODEL = buildRulesetGuideModel(ACTIVE_RUNTIME_BUNDLE);
-const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
+	const ACTIVE_UI_PROFILE =
+		rulesetBundle?.uiProfile ??
+		generateUiProfileFromRuntime({ gameplayRulePack: ACTIVE_GAMEPLAY_RULE_PACK });
+	const ACTIVE_RUNTIME_BUNDLE: RuntimeRulesetBundle = rulesetBundle ?? {
+		bundleVersion: 'runtime-bundle/v1',
+		gameId: 'demo-open-table',
+		displayName: 'Demo Open Table',
+		runtimeRulePack: {
+			gameplayRulePack: ACTIVE_GAMEPLAY_RULE_PACK
+		},
+		uiProfile: ACTIVE_UI_PROFILE
+	};
+	const ACTIVE_SURFACE_PROFILE = playSurfaceProfileFromUiProfile(ACTIVE_UI_PROFILE);
+	const GUIDE_MODEL = buildRulesetGuideModel(ACTIVE_RUNTIME_BUNDLE);
+	const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 	const TABLE_ZONE_IDS = TABLE_ZONES.map((zone) => zone.id);
 	const TABLE_ZONE_LABELS = zoneLabelMap(ACTIVE_SURFACE_PROFILE);
 	const TABLE_ZONE_HINTS = zoneHintMap(ACTIVE_SURFACE_PROFILE);
@@ -73,7 +81,9 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 		.map((zoneId) => TABLE_ZONES.find((zone) => zone.id === zoneId))
 		.filter((zone): zone is (typeof TABLE_ZONES)[number] => zone !== undefined);
 	const DRAW_TOP_ALLOWED_ZONE_IDS = drawTopAllowedZoneIdsFromUiProfile(ACTIVE_UI_PROFILE);
+	const DRAW_VISIBILITY_MODES = drawVisibilityModeByZoneFromUiProfile(ACTIVE_UI_PROFILE);
 	const ACTION_LABELS = playSurfaceActionLabelsFromUiProfile(ACTIVE_UI_PROFILE);
+	const SEAT_CARDS_PROFILE = seatCardsProfileFromUiProfile(ACTIVE_UI_PROFILE);
 	const HAND_ZONE = ACTIVE_GAMEPLAY_RULE_PACK.handZoneName;
 
 	function preferredPlayPhase(rulePack: GameplayRulePack): string {
@@ -95,11 +105,13 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 	});
 
 	let surfaceTab = 'table';
-	let playEvents: GameEvent[] = buildDemoPlayEvents(PLAYERS, {
-		handZoneName: HAND_ZONE,
-		initialPhase: preferredPlayPhase(ACTIVE_GAMEPLAY_RULE_PACK),
-		tableZones: TABLE_ZONE_IDS
-	});
+	let playEvents: GameEvent[] = rulesetBundle
+		? buildRulesetPlayEvents(PLAYERS, ACTIVE_RUNTIME_BUNDLE)
+		: buildDemoPlayEvents(PLAYERS, {
+				handZoneName: HAND_ZONE,
+				initialPhase: preferredPlayPhase(ACTIVE_GAMEPLAY_RULE_PACK),
+				tableZones: TABLE_ZONE_IDS
+			});
 	let selectedCardKey = '';
 	let feedback = '';
 	let handDockHeight = 0;
@@ -127,13 +139,25 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 		handZoneName: HAND_ZONE,
 		tableZoneOrder: TABLE_ZONE_IDS,
 		includeDiscoveredTableZones: false,
-		zoneLabels: TABLE_ZONE_LABELS
+		zoneLabels: TABLE_ZONE_LABELS,
+		handLayout: ACTIVE_UI_PROFILE.hand.layout,
+		...(SEAT_CARDS_PROFILE
+			? {
+					seatPublicCards: {
+						zoneId: SEAT_CARDS_PROFILE.zoneId,
+						label: SEAT_CARDS_PROFILE.label,
+						includeSelf: SEAT_CARDS_PROFILE.includeSelf,
+						...(SEAT_CARDS_PROFILE.layout ? { layout: SEAT_CARDS_PROFILE.layout } : {})
+					}
+				}
+			: {})
 	});
 	$: selectedCard = surface.hand.cards.find((card) => card.key === selectedCardKey) ?? null;
 	$: if (selectedCardKey && !surface.hand.cards.some((card) => card.key === selectedCardKey)) {
 		selectedCardKey = '';
 	}
 	$: activeSeat = surface.seats.find((seat) => seat.isCurrentTurn);
+	$: quickStartPreview = GUIDE_MODEL.quickStart.slice(0, 2);
 
 	function addEvent(event: GameEvent): void {
 		playEvents = [...playEvents, event];
@@ -151,8 +175,9 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 
 		const from: CardLocation = { kind: 'player', playerId: SELF_PLAYER_ID, zone: HAND_ZONE };
 		const to: CardLocation = { kind: 'table', zone };
-		addEvent(createHandMoveEvent({ actorId: SELF_PLAYER_ID, from, to, card: selectedCard }));
-		feedback = `Moved ${selectedCard.label} to ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
+		const card = zone === 'stock' ? setCardFaceDown(selectedCard, true) : setCardFaceDown(selectedCard, false);
+		addEvent(createHandMoveEvent({ actorId: SELF_PLAYER_ID, from, to, card }));
+		feedback = `Moved ${cardLabelForAction(selectedCard)} to ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
 		selectedCardKey = '';
 	}
 
@@ -163,25 +188,32 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 			feedback = `No cards in ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
 			return;
 		}
+		const drawVisibility = DRAW_VISIBILITY_MODES.get(zone) ?? 'reveal';
+		const drawnCard = drawVisibility === 'preserve' ? topCard : setCardFaceDown(topCard, false);
+		const drawnLabel = cardIsFaceDown(drawnCard)
+			? 'hidden card'
+			: `${drawnCard.rank}${drawnCard.suit ? drawnCard.suit.slice(0, 1).toUpperCase() : ''}`;
 
 		addEvent({
 			type: 'zone_move',
 			actorId: SELF_PLAYER_ID,
 			from: { kind: 'table', zone },
 			to: { kind: 'player', playerId: SELF_PLAYER_ID, zone: HAND_ZONE },
-			cards: [topCard]
+			cards: [drawnCard]
 		});
-		feedback = `Drew ${topCard.rank}${topCard.suit ? topCard.suit.slice(0, 1).toUpperCase() : ''} from ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
+		feedback = `Drew ${drawnLabel} from ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
 	}
 
 	function resetDemo(): void {
-		playEvents = buildDemoPlayEvents(PLAYERS, {
-			handZoneName: HAND_ZONE,
-			initialPhase: preferredPlayPhase(ACTIVE_GAMEPLAY_RULE_PACK),
-			tableZones: TABLE_ZONE_IDS
-		});
+		playEvents = rulesetBundle
+			? buildRulesetPlayEvents(PLAYERS, ACTIVE_RUNTIME_BUNDLE)
+			: buildDemoPlayEvents(PLAYERS, {
+					handZoneName: HAND_ZONE,
+					initialPhase: preferredPlayPhase(ACTIVE_GAMEPLAY_RULE_PACK),
+					tableZones: TABLE_ZONE_IDS
+				});
 		selectedCardKey = '';
-		feedback = 'Started a fresh demo round.';
+		feedback = rulesetBundle ? 'Reset to ruleset starting setup.' : 'Started a fresh demo round.';
 	}
 
 	function zoneHint(zoneId: string): string {
@@ -235,8 +267,12 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 	<header class="topbar">
 		<div>
 			<p class="eyebrow">Just Cards</p>
-			<h1>Play Table</h1>
-			<p class="subtitle">Mobile-first hand + board surface from gameplay primitives.</p>
+			<h1>{rulesetBundle ? ACTIVE_RUNTIME_BUNDLE.displayName : 'Play Table'}</h1>
+			<p class="subtitle">
+				{rulesetBundle
+					? 'Ruleset-driven play surface with generated setup and actions.'
+					: 'Mobile-first hand + board surface from gameplay primitives.'}
+			</p>
 			{#if rulesetName}
 				<p class="ruleset-name">Ruleset: {rulesetName}</p>
 			{/if}
@@ -253,6 +289,13 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 		<p><strong>Turn:</strong> {activeSeat?.playerId ?? 'n/a'}</p>
 		<p><strong>Dealer:</strong> {surface.seats.find((seat) => seat.isDealer)?.playerId ?? 'n/a'}</p>
 	</section>
+	{#if rulesetBundle && quickStartPreview.length > 0}
+		<section class="meta-strip setup-strip" aria-label="Ruleset setup hints">
+			{#each quickStartPreview as line}
+				<p>{line}</p>
+			{/each}
+		</section>
+	{/if}
 
 	<section class="seat-strip" aria-label="Players">
 		{#each surface.seats as seat}
@@ -270,6 +313,37 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 			</article>
 		{/each}
 	</section>
+	{#if SEAT_CARDS_PROFILE}
+		<section class="seat-layout-strip" aria-label={SEAT_CARDS_PROFILE.label}>
+			{#each surface.seats as seat (seat.playerId)}
+				{#if seat.publicZone}
+					<article class="seat-layout-panel">
+						<header>
+							<p class="seat-layout-title">{seat.playerId}</p>
+							<p>{seat.publicZone.cards.length} cards</p>
+						</header>
+						<div
+							class={`seat-layout-cards ${seat.publicZone.layout?.kind === 'grid' ? 'seat-layout-grid' : ''}`.trim()}
+							style={seat.publicZone.layout?.kind === 'grid' && seat.publicZone.layout.columns
+								? `--seat-layout-columns: ${seat.publicZone.layout.columns};`
+								: undefined}
+						>
+							{#each seat.publicZone.cards as card (card.key)}
+								<button
+									type="button"
+									class={`play-card play-card-sm ${card.suitTone === 'red' ? 'play-card-red' : ''} ${card.isFaceDown ? 'play-card-face-down' : ''}`.trim()}
+									disabled
+									aria-label={`${seat.playerId} ${card.label}`}
+								>
+									{card.label}
+								</button>
+							{/each}
+						</div>
+					</article>
+				{/if}
+			{/each}
+		</section>
+	{/if}
 
 	<div class="play-workspace">
 		<section class="surface-panel">
@@ -299,7 +373,7 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 										{#each zone.cards as card (card.key)}
 											<button
 												type="button"
-												class={`play-card play-card-sm ${card.suitTone === 'red' ? 'play-card-red' : ''}`.trim()}
+												class={`play-card play-card-sm ${card.suitTone === 'red' ? 'play-card-red' : ''} ${card.isFaceDown ? 'play-card-face-down' : ''}`.trim()}
 												in:receive={{ key: card.key }}
 												out:send={{ key: card.key }}
 											>
@@ -321,7 +395,7 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 						{#each ACTIVE_UI_PROFILE.actions.primary as action (action.id)}
 							<ScoreButton onPress={() => runPrimaryAction(action)}>{action.label}</ScoreButton>
 						{/each}
-						<ScoreButton onPress={resetDemo}>New demo round</ScoreButton>
+						<ScoreButton onPress={resetDemo}>{rulesetBundle ? 'Reset round' : 'New demo round'}</ScoreButton>
 					</div>
 				</Tabs.Content>
 
@@ -389,7 +463,7 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 			</header>
 			<div class="hand-quick-actions">
 				{#if selectedCard}
-					<p class="hand-action-label">Play {selectedCard.label} to:</p>
+					<p class="hand-action-label">Play {cardLabelForAction(selectedCard)} to:</p>
 					<div class="hand-targets">
 						{#each HAND_QUICK_TARGETS as zone (zone.id)}
 							<ScoreButton className="hand-target-button" onPress={() => moveSelectedCardTo(zone.id)}>
@@ -401,14 +475,19 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 					<p class="hand-action-label hand-action-hint">{ACTIVE_UI_PROFILE.hand.hint}</p>
 				{/if}
 			</div>
-			<div class="hand-scroll">
+			<div
+				class={`hand-scroll ${surface.hand.layout?.kind === 'grid' ? 'hand-grid' : ''}`.trim()}
+				style={surface.hand.layout?.kind === 'grid' && surface.hand.layout.columns
+					? `--hand-columns: ${surface.hand.layout.columns};`
+					: undefined}
+			>
 				{#if surface.hand.cards.length === 0}
 					<p class="zone-empty">No cards in hand.</p>
 				{:else}
 					{#each surface.hand.cards as card (card.key)}
 						<button
 							type="button"
-							class={`play-card ${card.suitTone === 'red' ? 'play-card-red' : ''} ${selectedCardKey === card.key ? 'play-card-selected' : ''}`.trim()}
+							class={`play-card ${card.suitTone === 'red' ? 'play-card-red' : ''} ${card.isFaceDown ? 'play-card-face-down' : ''} ${selectedCardKey === card.key ? 'play-card-selected' : ''}`.trim()}
 							aria-pressed={selectedCardKey === card.key}
 							onclick={() => toggleCard(card)}
 							in:receive={{ key: card.key }}
@@ -507,6 +586,11 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 		font-size: var(--jc-type-md);
 	}
 
+	.setup-strip {
+		grid-template-columns: 1fr;
+		background: color-mix(in srgb, var(--jc-surface-elevated) 86%, var(--play-brand-soft));
+	}
+
 	.seat-strip {
 		display: flex;
 		gap: 8px;
@@ -516,6 +600,59 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 
 	.seat-strip::-webkit-scrollbar {
 		display: none;
+	}
+
+	.seat-layout-strip {
+		display: flex;
+		gap: 8px;
+		overflow-x: auto;
+		scrollbar-width: none;
+		padding-bottom: 2px;
+	}
+
+	.seat-layout-strip::-webkit-scrollbar {
+		display: none;
+	}
+
+	.seat-layout-panel {
+		min-width: 132px;
+		border: 1px solid var(--play-line);
+		border-radius: 12px;
+		background: var(--jc-surface-elevated);
+		padding: 8px;
+		display: grid;
+		gap: 6px;
+	}
+
+	.seat-layout-panel header {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 8px;
+	}
+
+	.seat-layout-title {
+		margin: 0;
+		font-size: var(--jc-type-sm);
+		font-weight: 700;
+	}
+
+	.seat-layout-panel header p {
+		margin: 0;
+		font-size: var(--jc-type-xs);
+		color: var(--play-muted);
+	}
+
+	.seat-layout-cards {
+		display: flex;
+		gap: 6px;
+		flex-wrap: wrap;
+	}
+
+	.seat-layout-grid {
+		display: grid;
+		grid-template-columns: repeat(var(--seat-layout-columns, 3), minmax(0, max-content));
+		align-content: start;
 	}
 
 	.seat-chip {
@@ -579,14 +716,14 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 		padding: 8px;
 	}
 
-	.surface-tab-list {
+	:global(.surface-tab-list) {
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 6px;
 		margin-bottom: 8px;
 	}
 
-	.surface-tab {
+	:global(.surface-tab) {
 		min-height: 42px;
 		border-radius: 10px;
 		font-weight: 600;
@@ -595,15 +732,19 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 		border: 1px solid var(--play-line);
 	}
 
-	.surface-tab-active {
+	:global(.surface-tab-active) {
 		background: color-mix(in srgb, var(--play-brand-soft) 72%, #fff);
 		border-color: color-mix(in srgb, var(--play-brand) 60%, #96adcb);
 		color: color-mix(in srgb, var(--play-fg) 82%, #16304a);
 	}
 
-	.surface-content {
+	:global(.surface-content) {
 		display: grid;
 		gap: 8px;
+	}
+
+	:global(.surface-content[hidden]) {
+		display: none;
 	}
 
 	.zone-grid {
@@ -684,7 +825,7 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 		font-size: 0.9rem;
 	}
 
-	.guide-panel {
+	:global(.guide-panel) {
 		gap: 10px;
 	}
 
@@ -793,6 +934,12 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 		scrollbar-width: none;
 	}
 
+	.hand-grid {
+		display: grid;
+		grid-template-columns: repeat(var(--hand-columns, 3), minmax(0, max-content));
+		overflow-x: visible;
+	}
+
 	.hand-scroll::-webkit-scrollbar {
 		display: none;
 	}
@@ -826,6 +973,19 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 
 	.play-card-red {
 		color: #c62828;
+	}
+
+	.play-card-face-down {
+		background:
+			repeating-linear-gradient(
+				135deg,
+				color-mix(in srgb, var(--play-brand-soft) 42%, #fff) 0px,
+				color-mix(in srgb, var(--play-brand-soft) 42%, #fff) 6px,
+				color-mix(in srgb, var(--jc-surface-muted) 72%, #fff) 6px,
+				color-mix(in srgb, var(--jc-surface-muted) 72%, #fff) 12px
+			);
+		color: color-mix(in srgb, var(--play-fg) 64%, #314d6a);
+		font-size: 1rem;
 	}
 
 	.play-card-selected {
@@ -872,6 +1032,11 @@ const TABLE_ZONES = visibleZones(ACTIVE_SURFACE_PROFILE);
 			padding: 12px;
 			box-shadow: var(--play-shadow);
 		}
+	}
+
+	:global(.action-panel) {
+		display: grid;
+		gap: 8px;
 	}
 
 	@media (max-width: 680px) {

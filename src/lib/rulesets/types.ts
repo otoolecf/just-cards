@@ -20,6 +20,16 @@ export interface RuntimeRulesetExplainV0 {
 		aceValue: number;
 		rankOverrides: Array<{ rank: string; value: number }>;
 	};
+	setup?: {
+		cardsPerPlayer?: number;
+		initialFaceUpCards?: number;
+		playerLayout?: {
+			kind: 'grid';
+			rows: number;
+			columns: number;
+		};
+		drawVisibility?: Partial<Record<string, 'reveal' | 'preserve'>>;
+	};
 	zones: Array<{ id: string; label: string; hint: string }>;
 	diagnostics: string[];
 	source: {

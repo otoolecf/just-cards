@@ -18,6 +18,11 @@ interface UiProfileV0 {
     label: string;
     hint: string;
     quickPlayTargets: { zoneId: string; visible?: boolean }[];
+    layout?: {
+      kind: 'row' | 'grid';
+      rows?: number;
+      columns?: number;
+    };
   };
   table: {
     zones: {
@@ -26,6 +31,7 @@ interface UiProfileV0 {
       hint: string;
       visible?: boolean;
       allowDrawFromTop?: boolean;
+      drawVisibility?: 'reveal' | 'preserve';
     }[];
   };
   actions: {
@@ -38,6 +44,19 @@ interface UiProfileV0 {
     label: string;
     emptyText: string;
   };
+  seats?: {
+    cards?: {
+      zoneId: string;
+      label: string;
+      visible?: boolean;
+      includeSelf?: boolean;
+      layout?: {
+        kind: 'row' | 'grid';
+        rows?: number;
+        columns?: number;
+      };
+    };
+  };
 }
 ```
 
@@ -49,6 +68,9 @@ interface UiProfileV0 {
    - `hand.zoneId` must match `gameplayRulePack.handZoneName`.
    - each quick target must be legal in `zoneMovePolicy.targetZoneAllowlist` (excluding hand).
    - each `set_phase` action phase must exist in gameplay `phases`.
+4. `layout.kind` must be one of `row|grid`; `grid` requires `columns >= 1`.
+5. `table.zones[*].drawVisibility` (when provided) must be `reveal|preserve`.
+6. `seats.cards.zoneId` must match either `hand.zoneId` or a declared table zone.
 
 ## Generation Defaults
 
@@ -58,6 +80,7 @@ interface UiProfileV0 {
 2. Quick play targets from legal target zones.
 3. Human-friendly labels/hints from known zone IDs plus fallback title-casing.
 4. Primary actions: `advance_turn`, `undo`, `redo`.
+5. `drawVisibility` defaults to `reveal` unless overridden in generated/edited profile data.
 
 ## Bundle Contract
 

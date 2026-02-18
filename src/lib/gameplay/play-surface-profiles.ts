@@ -1,4 +1,9 @@
-import type { UiPrimaryActionKind, UiProfileV0 } from '$lib/ui/ui-profile';
+import type {
+	UiCardLayout,
+	UiDrawVisibilityMode,
+	UiPrimaryActionKind,
+	UiProfileV0
+} from '$lib/ui/ui-profile';
 
 export interface PlaySurfaceZoneProfile {
 	id: string;
@@ -12,6 +17,13 @@ export interface PlaySurfaceProfile {
 	displayName: string;
 	handLabel: string;
 	zones: PlaySurfaceZoneProfile[];
+}
+
+export interface PlaySurfaceSeatCardsProfile {
+	zoneId: string;
+	label: string;
+	includeSelf: boolean;
+	layout?: UiCardLayout;
 }
 
 export type PlaySurfaceActionLabelMap = Partial<Record<UiPrimaryActionKind, string>>;
@@ -103,4 +115,27 @@ export function drawTopAllowedZoneIdsFromUiProfile(uiProfile: UiProfileV0): Set<
 		allowed.add(zone.id);
 	}
 	return allowed;
+}
+
+export function drawVisibilityModeByZoneFromUiProfile(uiProfile: UiProfileV0): Map<string, UiDrawVisibilityMode> {
+	const modes = new Map<string, UiDrawVisibilityMode>();
+	for (const zone of uiProfile.table.zones) {
+		modes.set(zone.id, zone.drawVisibility ?? 'reveal');
+	}
+	return modes;
+}
+
+export function seatCardsProfileFromUiProfile(
+	uiProfile: UiProfileV0
+): PlaySurfaceSeatCardsProfile | undefined {
+	const seatCards = uiProfile.seats?.cards;
+	if (!seatCards || seatCards.visible === false) {
+		return undefined;
+	}
+	return {
+		zoneId: seatCards.zoneId,
+		label: seatCards.label,
+		includeSelf: seatCards.includeSelf === true,
+		...(seatCards.layout ? { layout: { ...seatCards.layout } } : {})
+	};
 }

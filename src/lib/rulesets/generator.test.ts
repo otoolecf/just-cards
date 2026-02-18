@@ -12,6 +12,7 @@ Six Card Golf
 Players: 2 to 4
 Object: Lowest score wins after nine rounds.
 Deal six cards to each player in a 2x3 layout. Two cards are face up.
+The remaining cards stay face down until revealed.
 On your turn, draw the top card from stock or discard pile.
 You may replace one card in your layout and discard the replaced card.
 Round ends when one player has all cards face up.
@@ -51,6 +52,26 @@ describe('ruleset generator', () => {
 		expect(facts.scoring.rankOverrides['J']).toBe(10);
 		expect(facts.scoring.rankOverrides['Q']).toBe(10);
 		expect(facts.rounds).toBe(9);
+		expect(facts.diagnostics.some((line) => line.toLowerCase().includes('face up'))).toBe(true);
+		expect(facts.diagnostics.some((line) => line.toLowerCase().includes('face down'))).toBe(true);
+		expect(facts.setup?.cardsPerPlayer).toBe(6);
+		expect(facts.setup?.initialFaceUpCards).toBe(2);
+		expect(facts.setup?.playerLayout).toEqual({ kind: 'grid', rows: 2, columns: 3 });
+		expect(facts.setup?.drawVisibility?.stock).toBe('preserve');
+	});
+
+	it('extract_rule_facts_layout_only_language_does_not_force_board_zone', () => {
+		const facts = extractRuleFacts({
+			sourceText: `
+			Players: 2 to 4
+			Deal six cards to each player in a 2x3 layout.
+			Draw from stock or discard.
+			Replace a layout card and discard the replaced card.
+		`
+		});
+
+		expect(facts.zones).toEqual(expect.arrayContaining(['stock', 'discard']));
+		expect(facts.zones.includes('board')).toBe(false);
 	});
 
 	it('extract_rule_facts_handles_stream_of_consciousness_input', () => {
@@ -91,6 +112,23 @@ describe('ruleset generator', () => {
 		expect(bundle.uiProfile.hand.quickPlayTargets.length).toBeGreaterThan(0);
 		expect(bundle.explain?.schemaVersion).toBe('ruleset-explain/v0');
 		expect(bundle.explain?.goal.length ?? 0).toBeGreaterThan(0);
+	});
+
+	it('compile_rule_facts_to_bundle_maps_setup_to_ui_profile', () => {
+		const facts = extractRuleFacts({
+			sourceText: SIX_CARD_GOLF_LIKE_TEXT,
+			sourceUrl: 'https://bicyclecards.com/how-to-play/six-card-golf'
+		});
+		const bundle = compileRuleFactsToBundle(facts);
+
+		expect(bundle.uiProfile.hand.layout).toEqual({ kind: 'grid', rows: 2, columns: 3 });
+		expect(bundle.uiProfile.seats?.cards).toEqual({
+			zoneId: 'hand',
+			label: 'Player Layouts',
+			includeSelf: false,
+			layout: { kind: 'grid', rows: 2, columns: 3 }
+		});
+		expect(bundle.uiProfile.table.zones.find((zone) => zone.id === 'stock')?.drawVisibility).toBe('preserve');
 	});
 
 	it('generate_ruleset_draft_from_url_ingests_html_and_compiles', async () => {

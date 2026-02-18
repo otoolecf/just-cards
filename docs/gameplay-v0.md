@@ -44,6 +44,17 @@ When needed, `deriveGameState` can enforce validator rules for `zone_move` via
    - Invalid events are reported via `validationIssues` and skipped from mutation.
 6. **Undo/redo**
    - `undo` and `redo` replay the event log cursor for deterministic state rehydration.
+7. **Face visibility via card tags**
+   - Cards can carry visibility tags for hidden-information games:
+     - `face:down`
+     - `face:up`
+   - `zone_move` preserves tags unless caller intentionally flips state by sending updated card tags.
+   - This allows games like Six Card Golf to start with mixed hidden/revealed cards.
+8. **Layout slot tagging (optional)**
+   - Cards can carry slot tags for stable grid ordering:
+     - `slot:r<row>c<col>` (example: `slot:r2c3`)
+   - Slot tags are UI-facing metadata; they do not alter legality/score derivation.
+   - Useful for games where arrangement affects interpretation (example: Golf column pairs).
 
 ## Rule-Driven Options
 

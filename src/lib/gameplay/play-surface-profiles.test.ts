@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
 	DEFAULT_PLAY_SURFACE_PROFILE,
+	drawVisibilityModeByZoneFromUiProfile,
 	playSurfaceActionLabelsFromUiProfile,
 	playSurfaceProfileFromUiProfile,
 	quickPlayZoneIdsFromUiProfile,
@@ -76,5 +77,32 @@ describe('play-surface-profiles', () => {
 			undo: 'Back',
 			redo: 'Forward'
 		});
+	});
+
+	test('draw_visibility_mode_by_zone_uses_profile_overrides', () => {
+		const uiProfile = createUiProfile({
+			table: {
+				zones: [
+					{
+						id: 'stock',
+						label: 'Stock',
+						hint: 'Face-down draw pile',
+						allowDrawFromTop: true,
+						drawVisibility: 'preserve'
+					},
+					{
+						id: 'discard',
+						label: 'Discard',
+						hint: 'Face-up discard',
+						allowDrawFromTop: true,
+						drawVisibility: 'reveal'
+					}
+				]
+			}
+		});
+
+		const modes = drawVisibilityModeByZoneFromUiProfile(uiProfile);
+		expect(modes.get('stock')).toBe('preserve');
+		expect(modes.get('discard')).toBe('reveal');
 	});
 });

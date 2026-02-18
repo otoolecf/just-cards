@@ -174,13 +174,15 @@ Current implementation path for step 6:
 - deployment target migration: D1 adapter behind same interface
 - persisted bundle shape: `runtime-bundle/v1` with `runtimeRulePack + uiProfile`
 
-Current scaffold includes a deterministic generator API for this contract:
+Current scaffold includes an LLM-aware generator API for this contract:
 - `POST /api/rulesets/generate` accepts URL or prose input
-- extraction builds `RuleFacts v0`
+- extraction builds deterministic baseline `RuleFacts v0`
+- optional LLM agent path (`gpt-5-nano` default, `gpt-5-mini` fallback) improves extraction with repair/escalation loop
+- deterministic fallback remains available when key/model output is unavailable
 - compiler emits `runtime-bundle/v1` draft and persists via `RulesetService`
 - generated bundles include optional `ruleset-explain/v0` payload for layman-facing guide + audit UI
 
-Confidence gate before paid LLM usage:
+Confidence gates:
 - golden fixture eval suite validates extraction + compile behavior against known public rule links
 - suite command: `npm run test:golden`
 - bundle confidence suite validates runtime/UI primitive compatibility on generated bundles

@@ -2,6 +2,14 @@ import { createGameplayRulePack, type GameplayRulePack } from '$lib/gameplay/eng
 import type { RuntimeRulePack } from '$lib/runtime/game-runtime';
 
 export type UiPrimaryActionKind = 'advance_turn' | 'undo' | 'redo' | 'set_phase';
+export type UiCardLayoutKind = 'row' | 'grid';
+export type UiDrawVisibilityMode = 'reveal' | 'preserve';
+
+export interface UiCardLayout {
+	kind: UiCardLayoutKind;
+	rows?: number;
+	columns?: number;
+}
 
 export interface UiQuickPlayTarget {
 	zoneId: string;
@@ -13,6 +21,7 @@ export interface UiHandProfile {
 	label: string;
 	hint: string;
 	quickPlayTargets: UiQuickPlayTarget[];
+	layout?: UiCardLayout;
 }
 
 export interface UiTableZoneProfile {
@@ -21,6 +30,15 @@ export interface UiTableZoneProfile {
 	hint: string;
 	visible?: boolean;
 	allowDrawFromTop?: boolean;
+	drawVisibility?: UiDrawVisibilityMode;
+}
+
+export interface UiSeatCardsProfile {
+	zoneId: string;
+	label: string;
+	visible?: boolean;
+	includeSelf?: boolean;
+	layout?: UiCardLayout;
 }
 
 export type UiPrimaryAction =
@@ -49,6 +67,9 @@ export interface UiProfileV0 {
 		label: string;
 		emptyText: string;
 	};
+	seats?: {
+		cards?: UiSeatCardsProfile;
+	};
 }
 
 export interface UiProfileValidationIssue {
@@ -67,6 +88,9 @@ export interface CreateUiProfileInput {
 	log?: {
 		label?: string;
 		emptyText?: string;
+	};
+	seats?: {
+		cards?: UiSeatCardsProfile;
 	};
 }
 
@@ -188,6 +212,13 @@ function uniqueZoneTargets(targets: UiQuickPlayTarget[]): UiQuickPlayTarget[] {
 export function createUiProfile(input: CreateUiProfileInput = {}): UiProfileV0 {
 	const zones = input.table?.zones ? input.table.zones.map((zone) => ({ ...zone })) : [];
 	const quickPlayTargets = uniqueZoneTargets(input.hand?.quickPlayTargets ? input.hand.quickPlayTargets.map((target) => ({ ...target })) : []);
+	const handLayout = input.hand?.layout ? { ...input.hand.layout } : undefined;
+	const seatCards = input.seats?.cards
+		? {
+				...input.seats.cards,
+				...(input.seats.cards.layout ? { layout: { ...input.seats.cards.layout } } : {})
+			}
+		: undefined;
 	const primaryActions: UiPrimaryAction[] = input.actions?.primary
 		? [...input.actions.primary]
 		: [
@@ -202,7 +233,8 @@ export function createUiProfile(input: CreateUiProfileInput = {}): UiProfileV0 {
 			zoneId: input.hand?.zoneId ?? 'hand',
 			label: input.hand?.label ?? 'Your Hand',
 			hint: input.hand?.hint ?? 'Select a card to reveal quick play targets.',
-			quickPlayTargets
+			quickPlayTargets,
+			...(handLayout ? { layout: handLayout } : {})
 		},
 		table: {
 			zones
@@ -213,7 +245,8 @@ export function createUiProfile(input: CreateUiProfileInput = {}): UiProfileV0 {
 		log: {
 			label: input.log?.label ?? 'Log',
 			emptyText: input.log?.emptyText ?? 'No events yet.'
-		}
+		},
+		...(seatCards ? { seats: { cards: seatCards } } : {})
 	};
 }
 
@@ -252,6 +285,47 @@ function validatePrimaryAction(action: unknown, actionIndex: number): UiProfileV
 		});
 	}
 
+	return issues;
+}
+
+function validateLayout(
+	layout: unknown,
+	path: string
+): UiProfileValidationIssue[] {
+	const issues: UiProfileValidationIssue[] = [];
+	if (!isObject(layout)) {
+		issues.push({ code: 'invalid_layout', message: `${path} must be an object` });
+		return issues;
+	}
+	if (layout.kind !== 'row' && layout.kind !== 'grid') {
+		issues.push({
+			code: 'invalid_layout_kind',
+			message: `${path}.kind must be one of row|grid`
+		});
+	}
+	const rows = layout.rows;
+	const columns = layout.columns;
+	if (rows !== undefined && (typeof rows !== 'number' || !Number.isInteger(rows) || rows < 1 || rows > 20)) {
+		issues.push({
+			code: 'invalid_layout_rows',
+			message: `${path}.rows must be a positive integer <= 20`
+		});
+	}
+	if (
+		columns !== undefined &&
+		(typeof columns !== 'number' || !Number.isInteger(columns) || columns < 1 || columns > 20)
+	) {
+		issues.push({
+			code: 'invalid_layout_columns',
+			message: `${path}.columns must be a positive integer <= 20`
+		});
+	}
+	if (layout.kind === 'grid' && (typeof columns !== 'number' || columns < 1)) {
+		issues.push({
+			code: 'grid_layout_missing_columns',
+			message: `${path}.columns is required when layout.kind is grid`
+		});
+	}
 	return issues;
 }
 
@@ -313,6 +387,16 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 		if (typeof zone.hint !== 'string' || zone.hint.trim().length === 0) {
 			issues.push({ code: 'invalid_zone_hint', message: `uiProfile.table.zones[${zoneIndex}].hint must be a non-empty string` });
 		}
+		if (
+			zone.drawVisibility !== undefined &&
+			zone.drawVisibility !== 'reveal' &&
+			zone.drawVisibility !== 'preserve'
+		) {
+			issues.push({
+				code: 'invalid_zone_draw_visibility',
+				message: `uiProfile.table.zones[${zoneIndex}].drawVisibility must be one of reveal|preserve`
+			});
+		}
 	}
 
 	if (isObject(profile.hand)) {
@@ -345,6 +429,11 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 				}
 			}
 		}
+		if (profile.hand.layout !== undefined) {
+			for (const issue of validateLayout(profile.hand.layout, 'uiProfile.hand.layout')) {
+				issues.push(issue);
+			}
+		}
 	}
 
 	if (isObject(profile.actions)) {
@@ -362,6 +451,42 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 						issues.push({ code: 'duplicate_action_id', message: `Duplicate action id "${action.id}"` });
 					}
 					actionIds.add(action.id);
+				}
+			}
+		}
+	}
+
+	if (profile.seats !== undefined) {
+		if (!isObject(profile.seats)) {
+			issues.push({ code: 'invalid_seats', message: 'uiProfile.seats must be an object' });
+		} else if (profile.seats.cards !== undefined) {
+			if (!isObject(profile.seats.cards)) {
+				issues.push({ code: 'invalid_seat_cards', message: 'uiProfile.seats.cards must be an object' });
+			} else {
+				if (typeof profile.seats.cards.zoneId !== 'string' || profile.seats.cards.zoneId.trim().length === 0) {
+					issues.push({
+						code: 'invalid_seat_cards_zone_id',
+						message: 'uiProfile.seats.cards.zoneId must be a non-empty string'
+					});
+				}
+				const seatZoneId = String(profile.seats.cards.zoneId ?? '');
+				const handZoneId = isObject(profile.hand) ? String(profile.hand.zoneId ?? '') : '';
+				if (!zoneIds.has(seatZoneId) && seatZoneId !== handZoneId) {
+					issues.push({
+						code: 'unknown_seat_cards_zone',
+						message: `uiProfile.seats.cards.zoneId "${seatZoneId}" not found in table zones or hand zone`
+					});
+				}
+				if (typeof profile.seats.cards.label !== 'string' || profile.seats.cards.label.trim().length === 0) {
+					issues.push({
+						code: 'invalid_seat_cards_label',
+						message: 'uiProfile.seats.cards.label must be a non-empty string'
+					});
+				}
+				if (profile.seats.cards.layout !== undefined) {
+					for (const issue of validateLayout(profile.seats.cards.layout, 'uiProfile.seats.cards.layout')) {
+						issues.push(issue);
+					}
 				}
 			}
 		}
@@ -409,6 +534,20 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 						message: `uiProfile.actions.primary[${index}].phase must be one of gameplay phases`
 					});
 				}
+			}
+		}
+
+		if (isObject(profile.seats) && isObject(profile.seats.cards) && typeof profile.seats.cards.zoneId === 'string') {
+			const legalSeatZones = new Set([
+				gameplay.handZoneName,
+				...gameplay.zoneMovePolicy.sourceZoneAllowlist,
+				...gameplay.zoneMovePolicy.targetZoneAllowlist
+			]);
+			if (!legalSeatZones.has(profile.seats.cards.zoneId)) {
+				issues.push({
+					code: 'seat_cards_zone_not_playable',
+					message: `uiProfile.seats.cards.zoneId "${profile.seats.cards.zoneId}" is not recognized by gameplay zones`
+				});
 			}
 		}
 	}

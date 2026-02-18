@@ -42,6 +42,9 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-17-ruleset-confidence-suite-v0.md`](./specs/2026-02-17-ruleset-confidence-suite-v0.md): TDD spec for runtime/UI bundle confidence checks.
 - [`specs/2026-02-17-ruleset-serviceability-hardening.md`](./specs/2026-02-17-ruleset-serviceability-hardening.md): TDD spec for natural-language scoring extraction hardening in golden cases.
 - [`specs/2026-02-17-layman-guide-and-audit-v0.md`](./specs/2026-02-17-layman-guide-and-audit-v0.md): TDD spec for play-surface guide tab and explainable/auditable rules.
+- [`specs/2026-02-18-llm-ruleset-agent-v0.md`](./specs/2026-02-18-llm-ruleset-agent-v0.md): TDD spec for multi-step LLM extraction/repair with nano-to-mini escalation and deterministic fallback.
+- [`specs/2026-02-18-ruleset-play-serviceability-and-logging.md`](./specs/2026-02-18-ruleset-play-serviceability-and-logging.md): TDD spec for ruleset-aware play initialization, reduced generic-zone drift, and backend structured logs.
+- [`specs/2026-02-18-hidden-info-and-layout-primitives.md`](./specs/2026-02-18-hidden-info-and-layout-primitives.md): TDD spec for hidden-information visibility controls and layout primitives (seat/public card arrangement).
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 

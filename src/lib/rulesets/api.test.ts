@@ -102,4 +102,44 @@ describe('rulesets api', () => {
 		const payload = (await response.json()) as { error: string };
 		expect(payload.error).toContain('explain.schemaVersion');
 	});
+
+	it('rulesets_api_create_preserves_explainability_payload', async () => {
+		const createResponse = await createRuleset(
+			eventForPost({
+				name: 'Explainable Ruleset',
+				origin: 'llm',
+				bundle: {
+					bundleVersion: 'runtime-bundle/v1',
+					gameId: 'explainable',
+					displayName: 'Explainable',
+					runtimeRulePack: {
+						scoringTriggers: []
+					},
+					explain: {
+						schemaVersion: 'ruleset-explain/v0',
+						goal: 'Get the lowest score.',
+						playerRange: { min: 2, max: 4 },
+						turnFlow: { drawFrom: ['Stock'], playTo: ['Discard'] },
+						scoring: { lowScoreWins: true, aceValue: 1, rankOverrides: [] },
+						zones: [{ id: 'stock', label: 'Stock', hint: 'Draw pile' }],
+						diagnostics: ['deal 6 cards to each player'],
+						source: { type: 'url', url: 'https://example.com' },
+						generatedAt: '2026-02-18T00:00:00.000Z'
+					}
+				}
+			})
+		);
+		expect(createResponse.status).toBe(200);
+		const created = (await createResponse.json()) as { id: string };
+
+		const getResponse = await getRulesetById(eventForGetById(created.id));
+		expect(getResponse.status).toBe(200);
+		const payload = (await getResponse.json()) as {
+			bundle: { explain?: { schemaVersion: string; diagnostics: string[] } };
+		};
+		expect(payload.bundle.explain?.schemaVersion).toBe('ruleset-explain/v0');
+		expect(payload.bundle.explain?.diagnostics).toEqual(
+			expect.arrayContaining(['deal 6 cards to each player'])
+		);
+	});
 });

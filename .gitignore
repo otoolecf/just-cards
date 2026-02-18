@@ -29,3 +29,6 @@ vite.config.ts.timestamp-*
 
 # Playwright artifacts
 test-results/
+
+# Local storage artifacts
+.local/

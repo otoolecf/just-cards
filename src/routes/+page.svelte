@@ -621,6 +621,7 @@
 			const payload = (await response.json()) as {
 				ruleset?: RulesetRecord;
 				diagnostics?: string[];
+				pipeline?: { strategy?: string; model?: string };
 				error?: string;
 			};
 			if (!response.ok || !payload.ruleset) {
@@ -629,9 +630,12 @@
 
 			rulesets = [payload.ruleset, ...rulesets.filter((ruleset) => ruleset.id !== payload.ruleset?.id)];
 			const diagnosticPreview = (payload.diagnostics ?? []).slice(0, 2).join(' ');
+			const pipelineLabel = payload.pipeline?.strategy
+				? ` Path: ${payload.pipeline.strategy}${payload.pipeline.model ? ` (${payload.pipeline.model})` : ''}.`
+				: '';
 			setRulesetFeedback(
 				'success',
-				`Generated ruleset ${payload.ruleset.name}.${diagnosticPreview ? ` ${diagnosticPreview}` : ''}`
+				`Generated ruleset ${payload.ruleset.name}.${pipelineLabel}${diagnosticPreview ? ` ${diagnosticPreview}` : ''}`
 			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unable to generate ruleset.';

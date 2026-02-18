@@ -3,16 +3,54 @@ import { deriveGameState, createGameplayRulePack, type CardLocation, type GameEv
 import type { CardInput } from '$lib/scorekeeper/engine';
 import {
 	buildDemoPlayEvents,
+	buildRulesetPlayEvents,
 	buildPlaySurfaceView,
+	cardIsFaceDown,
 	cardViewKey,
 	createHandMoveEvent
 } from '$lib/gameplay/play-surface-model';
+import { createUiProfile } from '$lib/ui/ui-profile';
+import type { RuntimeRulesetBundle } from '$lib/rulesets/types';
 
 function makeCard(rank: CardInput['rank'], suit: NonNullable<CardInput['suit']>, id: string): CardInput {
 	return { rank, suit, tags: [`cid:${id}`] };
 }
 
 describe('play-surface-model', () => {
+	function makeBundle(overrides?: Partial<RuntimeRulesetBundle>): RuntimeRulesetBundle {
+		const gameplayRulePack = createGameplayRulePack({
+			handZoneName: 'hand',
+			zoneMovePolicy: {
+				allowedPhases: ['play', 'deal', 'pregame'],
+				actorMustBeCurrentPlayer: false,
+				sourceMustBelongToActor: false,
+				sourceZoneAllowlist: ['hand', 'stock', 'discard'],
+				targetZoneAllowlist: ['hand', 'stock', 'discard']
+			}
+		});
+		return {
+			bundleVersion: 'runtime-bundle/v1',
+			gameId: 'test-game',
+			displayName: 'Test Game',
+			runtimeRulePack: {
+				gameplayRulePack
+			},
+			uiProfile: createUiProfile({
+				hand: {
+					zoneId: 'hand',
+					quickPlayTargets: [{ zoneId: 'discard' }]
+				},
+				table: {
+					zones: [
+						{ id: 'stock', label: 'Stock', hint: 'Draw pile', allowDrawFromTop: true },
+						{ id: 'discard', label: 'Discard', hint: 'Top discard', allowDrawFromTop: true }
+					]
+				}
+			}),
+			...(overrides ?? {})
+		};
+	}
+
 	test('build_play_surface_view_marks_seats_and_zones', () => {
 		const events: GameEvent[] = [
 			{ type: 'init_game', players: ['Ada', 'Bea', 'Cam'], dealerIndex: 0 },
@@ -118,6 +156,28 @@ describe('play-surface-model', () => {
 		expect(view.tableZones.find((zone) => zone.zoneId === 'discard')?.label).toBe('Burn Pile');
 	});
 
+	test('build_play_surface_view_masks_face_down_cards', () => {
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['You', 'Riv'], dealerIndex: 0 },
+			{
+				type: 'deal_cards',
+				playerId: 'You',
+				zone: 'hand',
+				cards: [{ rank: 'K', suit: 'spades', tags: ['cid:hidden-k', 'face:down'] }]
+			}
+		];
+
+		const state = deriveGameState(events, createGameplayRulePack({ handZoneName: 'hand' }));
+		const view = buildPlaySurfaceView(state, {
+			selfPlayerId: 'You',
+			handZoneName: 'hand',
+			tableZoneOrder: ['discard']
+		});
+		const card = view.hand.cards[0];
+		expect(card.label).toBe('??');
+		expect(card.isFaceDown).toBe(true);
+	});
+
 	test('build_demo_play_events_supports_dynamic_zone_ids_and_phase', () => {
 		const events = buildDemoPlayEvents(['You', 'Riv', 'Mina'], {
 			handZoneName: 'cards',
@@ -132,5 +192,156 @@ describe('play-surface-model', () => {
 		expect(dealEvents.every((event) => event.zone === 'cards')).toBe(true);
 		expect(moveEvents.map((event) => event.to.zone)).toEqual(['community', 'burn']);
 		expect(moveEvents.every((event) => event.from.zone === 'cards')).toBe(true);
+	});
+
+	test('build_ruleset_play_events_uses_explain_hand_size_and_seeds_stock_discard', () => {
+		const bundle = makeBundle({
+			explain: {
+				schemaVersion: 'ruleset-explain/v0',
+				goal: 'Lowest score wins.',
+				playerRange: { min: 2, max: 4 },
+				turnFlow: { drawFrom: ['Stock'], playTo: ['Discard'] },
+				scoring: { lowScoreWins: true, aceValue: 1, rankOverrides: [] },
+				zones: [
+					{ id: 'stock', label: 'Stock', hint: 'Draw pile' },
+					{ id: 'discard', label: 'Discard', hint: 'Throw-away pile' }
+				],
+				diagnostics: [
+					'setup: each player has 6 cards in front.',
+					'setup: turn 2 cards face up; keep the rest face down.'
+				],
+				source: { type: 'url', url: 'https://example.com/six-card-golf' },
+				generatedAt: '2026-02-18T00:00:00.000Z'
+			}
+		});
+		const events = buildRulesetPlayEvents(['You', 'Riv', 'Mina'], bundle);
+		const state = deriveGameState(events, bundle.runtimeRulePack.gameplayRulePack);
+
+		const handCounts = state.turnOrder.map((playerId) => state.playerZones[playerId]?.hand?.length ?? 0);
+		expect(handCounts).toEqual([6, 6, 6]);
+		const youCards = state.playerZones['You']?.hand ?? [];
+		expect(youCards.filter((card) => cardIsFaceDown(card)).length).toBe(4);
+		expect((state.tableZones.stock ?? []).length).toBeGreaterThan(10);
+		expect((state.tableZones.discard ?? []).length).toBe(1);
+	});
+
+	test('build_ruleset_play_events_falls_back_to_demo_defaults_without_explain', () => {
+		const bundle = makeBundle();
+		const events = buildRulesetPlayEvents(['You', 'Riv', 'Mina'], bundle);
+		const state = deriveGameState(events, bundle.runtimeRulePack.gameplayRulePack);
+
+		const handCounts = state.turnOrder.map((playerId) => state.playerZones[playerId]?.hand?.length ?? 0);
+		expect(handCounts).toEqual([5, 5, 5]);
+		const youCards = state.playerZones['You']?.hand ?? [];
+		expect(youCards.some((card) => cardIsFaceDown(card))).toBe(false);
+		expect((state.tableZones.discard ?? []).length).toBe(1);
+	});
+
+	test('build_play_surface_view_exposes_seat_public_cards_with_layout', () => {
+		const bundle = makeBundle({
+			explain: {
+				schemaVersion: 'ruleset-explain/v0',
+				goal: 'Lowest score wins.',
+				playerRange: { min: 2, max: 4 },
+				turnFlow: { drawFrom: ['Stock'], playTo: ['Discard'] },
+				scoring: { lowScoreWins: true, aceValue: 1, rankOverrides: [] },
+				zones: [
+					{ id: 'stock', label: 'Stock', hint: 'Draw pile' },
+					{ id: 'discard', label: 'Discard', hint: 'Throw-away pile' }
+				],
+				diagnostics: [
+					'setup: each player has 6 cards in front.',
+					'setup: turn 2 cards face up; keep the rest face down.'
+				],
+				source: { type: 'url', url: 'https://example.com/six-card-golf' },
+				generatedAt: '2026-02-18T00:00:00.000Z'
+			},
+			uiProfile: createUiProfile({
+				hand: {
+					zoneId: 'hand',
+					label: 'Your Layout',
+					hint: 'Pick a card',
+					quickPlayTargets: [{ zoneId: 'discard' }],
+					layout: { kind: 'grid', rows: 2, columns: 3 }
+				},
+				table: {
+					zones: [
+						{ id: 'stock', label: 'Stock', hint: 'Draw pile', allowDrawFromTop: true },
+						{ id: 'discard', label: 'Discard', hint: 'Top discard', allowDrawFromTop: true }
+					]
+				},
+				seats: {
+					cards: {
+						zoneId: 'hand',
+						label: 'Layouts',
+						includeSelf: false,
+						layout: { kind: 'grid', rows: 2, columns: 3 }
+					}
+				}
+			})
+		});
+		const events = buildRulesetPlayEvents(['You', 'Riv', 'Mina'], bundle);
+		const state = deriveGameState(events, bundle.runtimeRulePack.gameplayRulePack);
+		const view = buildPlaySurfaceView(state, {
+			selfPlayerId: 'You',
+			handZoneName: 'hand',
+			tableZoneOrder: ['stock', 'discard'],
+			seatPublicCards: {
+				zoneId: 'hand',
+				label: 'Layouts',
+				includeSelf: false,
+				layout: { kind: 'grid', rows: 2, columns: 3 }
+			}
+		});
+
+		expect(view.seats.find((seat) => seat.playerId === 'You')?.publicZone).toBeUndefined();
+		const rivPublic = view.seats.find((seat) => seat.playerId === 'Riv')?.publicZone;
+		expect(rivPublic?.layout).toEqual({ kind: 'grid', rows: 2, columns: 3 });
+		expect(rivPublic?.cards.length).toBe(6);
+		expect(rivPublic?.cards.some((card) => card.isFaceDown)).toBe(true);
+	});
+
+	test('build_ruleset_play_events_assigns_layout_slots_for_grid_hands', () => {
+		const bundle = makeBundle({
+			explain: {
+				schemaVersion: 'ruleset-explain/v0',
+				goal: 'Lowest score wins.',
+				playerRange: { min: 2, max: 4 },
+				turnFlow: { drawFrom: ['Stock'], playTo: ['Discard'] },
+				scoring: { lowScoreWins: true, aceValue: 1, rankOverrides: [] },
+				zones: [
+					{ id: 'stock', label: 'Stock', hint: 'Draw pile' },
+					{ id: 'discard', label: 'Discard', hint: 'Throw-away pile' }
+				],
+				diagnostics: [
+					'setup: each player has 6 cards in front arranged in 2 rows of 3.',
+					'setup: turn 2 cards face up; keep the rest face down.'
+				],
+				source: { type: 'url', url: 'https://example.com/six-card-golf' },
+				generatedAt: '2026-02-18T00:00:00.000Z'
+			},
+			uiProfile: createUiProfile({
+				hand: {
+					zoneId: 'hand',
+					quickPlayTargets: [{ zoneId: 'discard' }],
+					layout: { kind: 'grid', rows: 2, columns: 3 }
+				},
+				table: {
+					zones: [
+						{ id: 'stock', label: 'Stock', hint: 'Draw pile', allowDrawFromTop: true },
+						{ id: 'discard', label: 'Discard', hint: 'Top discard', allowDrawFromTop: true }
+					]
+				}
+			})
+		});
+		const events = buildRulesetPlayEvents(['You', 'Riv', 'Mina'], bundle);
+		const state = deriveGameState(events, bundle.runtimeRulePack.gameplayRulePack);
+		const handCards = state.playerZones['You']?.hand ?? [];
+		const slotTags = handCards.map((card) => (card.tags ?? []).find((tag) => tag.startsWith('slot:r')) ?? '');
+
+		expect(slotTags).toContain('slot:r1c1');
+		expect(slotTags).toContain('slot:r1c3');
+		expect(slotTags).toContain('slot:r2c1');
+		expect(slotTags).toContain('slot:r2c3');
 	});
 });

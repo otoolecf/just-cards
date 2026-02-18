@@ -27,6 +27,7 @@ interface RuntimeBundleDraft {
 	displayName: string;
 	runtimeRulePack: RuntimeRulePack;
 	uiProfile?: unknown;
+	explain?: unknown;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -115,7 +116,8 @@ function assertValidBundle(bundle: unknown): RuntimeRulesetBundle {
 		gameId: typedBundle.gameId.trim(),
 		displayName: typedBundle.displayName.trim(),
 		runtimeRulePack: typedBundle.runtimeRulePack,
-		uiProfile
+		uiProfile,
+		...(typedBundle.explain ? { explain: typedBundle.explain as RuntimeRulesetBundle['explain'] } : {})
 	};
 }
 

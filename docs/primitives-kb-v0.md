@@ -40,6 +40,13 @@ interface ScoringTarget {
 }
 ```
 
+Tag convention for hidden-information card games:
+
+- `face:down`: card should render hidden to the player view.
+- `face:up`: explicit revealed override.
+- If both tags exist, `face:up` wins.
+- `slot:r<row>c<col>`: optional layout slot for stable card placement in grid-based games.
+
 ## ScoreEvent Primitives
 
 `ScoreEvent` is the scorekeeper event log input.
@@ -276,6 +283,11 @@ interface UiProfileV0 {
     label: string;
     hint: string;
     quickPlayTargets: { zoneId: string; visible?: boolean }[];
+    layout?: {
+      kind: 'row' | 'grid';
+      rows?: number;
+      columns?: number;
+    };
   };
   table: {
     zones: {
@@ -284,6 +296,7 @@ interface UiProfileV0 {
       hint: string;
       visible?: boolean;
       allowDrawFromTop?: boolean;
+      drawVisibility?: 'reveal' | 'preserve';
     }[];
   };
   actions: {
@@ -296,6 +309,19 @@ interface UiProfileV0 {
     label: string;
     emptyText: string;
   };
+  seats?: {
+    cards?: {
+      zoneId: string;
+      label: string;
+      visible?: boolean;
+      includeSelf?: boolean;
+      layout?: {
+        kind: 'row' | 'grid';
+        rows?: number;
+        columns?: number;
+      };
+    };
+  };
 }
 ```
 
@@ -305,6 +331,8 @@ interface UiProfileV0 {
 - `hand.zoneId` should match gameplay `handZoneName`.
 - Quick target zones must be legal gameplay targets (`zoneMovePolicy.targetZoneAllowlist`, excluding hand).
 - `set_phase` actions must reference declared gameplay phases.
+- `table.zones[*].drawVisibility = preserve` means draws from that zone should not auto-reveal card identity in client feedback/UI.
+- `seats.cards` describes optional opponent/public card rendering from a zone (often `hand` in hidden-information table games).
 
 ## Rule Generation Output Contract
 

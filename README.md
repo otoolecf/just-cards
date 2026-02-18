@@ -44,6 +44,18 @@ export RULESET_STORE_DRIVER=sqlite
 export RULESET_SQLITE_PATH=.local/rulesets.sqlite
 ```
 
+Ruleset LLM generation (optional):
+
+```sh
+# in .env.local for npm run dev, or .dev.vars for wrangler dev
+OPENAI_API_KEY=your-key-here
+# optional model overrides
+RULESET_LLM_PRIMARY_MODEL=gpt-5-nano
+RULESET_LLM_FALLBACK_MODEL=gpt-5-mini
+```
+
+Generation and play-loader server logs are emitted as structured lines prefixed with `[just-cards]` for easier debugging.
+
 Then open:
 
 ```text
