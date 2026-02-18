@@ -5,19 +5,24 @@
 	import {
 		PATTERN_PRESETS,
 		SCORE_MODE_OPTIONS,
+		buildAddDeltaEvent,
 		buildAddRoundEvent,
+		buildRummy500NetDeltaEntries,
+		buildSixCardGolfHoleDeltaEntries,
 		buildPatternRoundEvent,
+		calculateSixCardGolfHoleScore,
 		getPatternPreset,
 		getModePreset,
 		parseCardsFromText,
 		parseNamedRoundText,
 		parsePatternScoringText,
+		sortStandingsByMode,
 		type PatternModePreset
 	} from '$lib/session/score-session-commands';
 	import ScoreInput from '$lib/components/score-input.svelte';
 	import ScoreButton from '$lib/components/score-button.svelte';
 	import CardTapInput from '$lib/components/card-tap-input.svelte';
-	import { type CardInput } from '$lib/scorekeeper/engine';
+	import { type CardInput, type ScoreEvent } from '$lib/scorekeeper/engine';
 	import { createStarterRulesetDraft } from '$lib/rulesets/picker';
 	import type { RulesetRecord } from '$lib/rulesets/types';
 	import {
@@ -30,7 +35,7 @@
 	export let data: PageData;
 
 	type FeedbackKind = 'idle' | 'error' | 'loading' | 'success';
-	type AddRoundMode = 'rows' | 'text';
+	type AddRoundMode = 'rows' | 'text' | 'delta' | 'rummy-net' | 'golf-hole';
 	type SelectOption = {
 		value: string;
 		label: string;
@@ -65,6 +70,10 @@
 	let addRoundMode: AddRoundMode = 'rows';
 	let quickRoundText = '';
 	let playerCardsById: Record<string, string> = {};
+	let manualDeltaById: Record<string, string> = {};
+	let rummyTableCardsById: Record<string, string> = {};
+	let rummyHandCardsById: Record<string, string> = {};
+	let golfCardsById: Record<string, string> = {};
 
 	let patternCardsText = '';
 	let patternTargetId = '';
@@ -131,11 +140,23 @@
 	}
 
 	function syncPlayerInputsForRoster(players: string[]): void {
-		const next: Record<string, string> = {};
-		for (const player of players) {
-			next[player] = playerCardsById[player] ?? '';
+		function syncMapByPlayers(existing: Record<string, string>): Record<string, string> {
+			const next: Record<string, string> = {};
+			for (const player of players) {
+				next[player] = existing[player] ?? '';
+			}
+			return next;
 		}
-		playerCardsById = next;
+
+		playerCardsById = syncMapByPlayers(playerCardsById);
+		manualDeltaById = syncMapByPlayers(manualDeltaById);
+		rummyTableCardsById = syncMapByPlayers(rummyTableCardsById);
+		rummyHandCardsById = syncMapByPlayers(rummyHandCardsById);
+		golfCardsById = syncMapByPlayers(golfCardsById);
+	}
+
+	function playerFieldId(prefix: string, player: string): string {
+		return `${prefix}-${player.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 	}
 
 	function getSelectLabel(options: SelectOption[], value: string): string {
@@ -186,12 +207,7 @@
 		if (!sessionState) {
 			return [];
 		}
-		return Object.entries(sessionState.state.totalsByPlayer).sort((left, right) => {
-			if (right[1] !== left[1]) {
-				return right[1] - left[1];
-			}
-			return left[0].localeCompare(right[0]);
-		});
+		return sortStandingsByMode(sessionState.state.totalsByPlayer, sessionState.config?.scoreModeId ?? selectedModeId);
 	};
 
 	function clearIntervalIfNeeded(): void {
@@ -323,72 +339,153 @@
 	}
 
 	function clearInputsAfterSubmit(): void {
-		if (addRoundMode === 'rows') {
-			const cleared: Record<string, string> = {};
-			for (const player of activePlayers) {
-				cleared[player] = '';
-			}
-			playerCardsById = cleared;
-		} else {
-			quickRoundText = '';
+		syncPlayerInputsForRoster(activePlayers);
+		const cleared: Record<string, string> = {};
+		for (const player of activePlayers) {
+			cleared[player] = '';
 		}
+		playerCardsById = cleared;
+		manualDeltaById = cleared;
+		rummyTableCardsById = cleared;
+		rummyHandCardsById = cleared;
+		golfCardsById = cleared;
+		quickRoundText = '';
 		patternCardsText = '';
 	}
 
-	function submitAddRound(): void {
+	async function submitAddRound(): Promise<void> {
 		if (!activeSessionId || isPosting) {
 			return;
 		}
 		isPosting = true;
 		setFeedback('loading', 'Submitting round...');
 
-		const errors: string[] = [];
-		let parsedEntries: { playerId: string; cards: CardInput[] }[] = [];
+		try {
+			const errors: string[] = [];
+			let event: ScoreEvent | null = null;
+			let successMessage = 'Round added.';
 
-		if (addRoundMode === 'rows') {
-			for (const player of activePlayers) {
-				const rawCards = playerCardsById[player] ?? '';
-				const parsed = parseCardsFromText(rawCards);
-				if (parsed.errors.length > 0) {
-					errors.push(`${player}: ${parsed.errors.join(' ')}`);
-					continue;
+			if (addRoundMode === 'rows' || addRoundMode === 'text') {
+				let parsedEntries: { playerId: string; cards: CardInput[] }[] = [];
+
+				if (addRoundMode === 'rows') {
+					for (const player of activePlayers) {
+						const rawCards = playerCardsById[player] ?? '';
+						const parsed = parseCardsFromText(rawCards);
+						if (parsed.errors.length > 0) {
+							errors.push(`${player}: ${parsed.errors.join(' ')}`);
+							continue;
+						}
+						if (parsed.cards.length > 0) {
+							parsedEntries.push({ playerId: player, cards: parsed.cards });
+						}
+					}
+				} else {
+					const named = parseNamedRoundText(quickRoundText);
+					if (named.errors.length > 0) {
+						errors.push(...named.errors);
+					}
+					parsedEntries = named.entries;
 				}
-				if (parsed.cards.length > 0) {
-					parsedEntries.push({ playerId: player, cards: parsed.cards });
+
+				if (parsedEntries.length === 0) {
+					errors.push('Add at least one player score entry.');
 				}
-			}
-		} else {
-			const named = parseNamedRoundText(quickRoundText);
-			if (named.errors.length > 0) {
-				errors.push(...named.errors);
-			}
-			parsedEntries = named.entries;
-		}
+				event = buildAddRoundEvent(parsedEntries);
+			} else if (addRoundMode === 'delta') {
+				const deltaEntries = activePlayers
+					.map((player) => ({ playerId: player, raw: (manualDeltaById[player] ?? '').trim() }))
+					.filter((entry) => entry.raw.length > 0)
+					.map((entry) => ({ playerId: entry.playerId, delta: Number(entry.raw) }));
 
-		if (errors.length > 0) {
-			setFeedback('error', errors.join(' '));
-			isPosting = false;
-			return;
-		}
-		if (parsedEntries.length === 0) {
-			setFeedback('error', 'Add at least one player score entry.');
-			isPosting = false;
-			return;
-		}
+				if (deltaEntries.some((entry) => Number.isNaN(entry.delta))) {
+					errors.push('Manual points must be valid numbers.');
+				}
+				if (deltaEntries.length === 0) {
+					errors.push('Enter at least one player delta.');
+				}
+				event = buildAddDeltaEvent(deltaEntries);
+				successMessage = 'Manual points added.';
+			} else if (addRoundMode === 'rummy-net') {
+				const rummyEntries: {
+					playerId: string;
+					tableCards: CardInput[];
+					handCards: CardInput[];
+				}[] = [];
 
-			postSessionEvent(activeSessionId, buildAddRoundEvent(parsedEntries))
-				.then((state) => {
-					sessionState = state;
-					clearInputsAfterSubmit();
-					lastSynced = new Date().toLocaleTimeString();
-					setFeedback('success', 'Round added.');
-			})
-			.catch((error) => {
-				setFeedback('error', error instanceof Error ? error.message : 'Unable to add round.');
-			})
-			.finally(() => {
-				isPosting = false;
-			});
+				for (const player of activePlayers) {
+					const tableParsed = parseCardsFromText(rummyTableCardsById[player] ?? '');
+					const handParsed = parseCardsFromText(rummyHandCardsById[player] ?? '');
+					if (tableParsed.errors.length > 0) {
+						errors.push(`${player} table: ${tableParsed.errors.join(' ')}`);
+					}
+					if (handParsed.errors.length > 0) {
+						errors.push(`${player} hand: ${handParsed.errors.join(' ')}`);
+					}
+					if (tableParsed.cards.length === 0 && handParsed.cards.length === 0) {
+						continue;
+					}
+					rummyEntries.push({
+						playerId: player,
+						tableCards: tableParsed.cards,
+						handCards: handParsed.cards
+					});
+				}
+
+				if (rummyEntries.length === 0) {
+					errors.push('Enter table cards or hand cards for at least one player.');
+				}
+				const deltas = buildRummy500NetDeltaEntries(rummyEntries);
+				event = buildAddDeltaEvent(deltas);
+				successMessage = '500 Rummy net round added.';
+			} else {
+				const golfEntries: { playerId: string; cardsInRowMajorOrder: CardInput[] }[] = [];
+				for (const player of activePlayers) {
+					const parsed = parseCardsFromText(golfCardsById[player] ?? '');
+					if (parsed.errors.length > 0) {
+						errors.push(`${player}: ${parsed.errors.join(' ')}`);
+						continue;
+					}
+					if (parsed.cards.length === 0) {
+						continue;
+					}
+					try {
+						calculateSixCardGolfHoleScore({ cardsInRowMajorOrder: parsed.cards });
+						golfEntries.push({
+							playerId: player,
+							cardsInRowMajorOrder: parsed.cards
+						});
+					} catch (error) {
+						errors.push(`${player}: ${error instanceof Error ? error.message : 'Invalid Six Card Golf hole cards.'}`);
+					}
+				}
+
+				if (golfEntries.length === 0) {
+					errors.push('Enter one 6-card hole layout for at least one player.');
+				}
+				const deltas = buildSixCardGolfHoleDeltaEntries(golfEntries);
+				event = buildAddDeltaEvent(deltas);
+				successMessage = 'Six Card Golf hole added.';
+			}
+
+			if (errors.length > 0) {
+				setFeedback('error', errors.join(' '));
+				return;
+			}
+			if (!event) {
+				setFeedback('error', 'Unable to build round event.');
+				return;
+			}
+
+			sessionState = await postSessionEvent(activeSessionId, event);
+			clearInputsAfterSubmit();
+			lastSynced = new Date().toLocaleTimeString();
+			setFeedback('success', successMessage);
+		} catch (error) {
+			setFeedback('error', error instanceof Error ? error.message : 'Unable to add round.');
+		} finally {
+			isPosting = false;
+		}
 	}
 
 	async function submitPatternRound(): Promise<void> {
@@ -497,6 +594,11 @@
 		sessionState = null;
 		sessionRoster = [];
 		quickRoundText = '';
+		manualDeltaById = {};
+		rummyTableCardsById = {};
+		rummyHandCardsById = {};
+		golfCardsById = {};
+		playerCardsById = {};
 		patternCardsText = '';
 		lastSynced = '';
 		clearIntervalIfNeeded();
@@ -516,6 +618,9 @@
 		}
 		if (scoreEvent.type === 'add_pattern_round') {
 			return `add_pattern_round (player targets: ${scoreEvent.entries.length})`;
+		}
+		if (scoreEvent.type === 'add_delta') {
+			return `add_delta (entries: ${scoreEvent.entries.length})`;
 		}
 		if (scoreEvent.type === 'undo') {
 			return 'undo';
@@ -686,111 +791,113 @@
 		</div>
 	</section>
 
-	<section class="panel">
-		<h2>Rulesets</h2>
-		<p class="hint">Generate from URL/prose, create starter drafts, and open in Play mode.</p>
-		<div class="status">
-			{#if rulesetFeedback.kind === 'loading'}
-				<p class="status-loading">{rulesetFeedback.message}</p>
-			{:else if rulesetFeedback.kind === 'error'}
-				<p class="status-error">{rulesetFeedback.message}</p>
-			{:else if rulesetFeedback.kind === 'success'}
-				<p class="status-success">{rulesetFeedback.message}</p>
-			{/if}
-		</div>
-		<div class="ruleset-generator">
-			<div class="ruleset-source-toggle" role="tablist" aria-label="Rules source type">
-				<button
-					type="button"
-					class={`ruleset-source-button ${rulesetGenerateMode === 'url' ? 'active' : ''}`.trim()}
-					aria-pressed={rulesetGenerateMode === 'url'}
-					onclick={() => (rulesetGenerateMode = 'url')}
-				>
-					URL
-				</button>
-				<button
-					type="button"
-					class={`ruleset-source-button ${rulesetGenerateMode === 'text' ? 'active' : ''}`.trim()}
-					aria-pressed={rulesetGenerateMode === 'text'}
-					onclick={() => (rulesetGenerateMode = 'text')}
-				>
-					Prose
-				</button>
-			</div>
-			<div class="field-group">
-				<label for="ruleset-name">Ruleset name (optional)</label>
-				<ScoreInput
-					id="ruleset-name"
-					type="text"
-					placeholder="Generated ruleset name"
-					value={rulesetGenerateName}
-					onValueChange={(value) => (rulesetGenerateName = value)}
-				/>
-			</div>
-			{#if rulesetGenerateMode === 'url'}
-				<div class="field-group">
-					<label for="ruleset-source-url">Rules URL</label>
-					<ScoreInput
-						id="ruleset-source-url"
-						type="text"
-						placeholder="https://example.com/how-to-play/..."
-						value={rulesetSourceUrl}
-						onValueChange={(value) => (rulesetSourceUrl = value)}
-					/>
+		<details class="panel panel-optional">
+			<summary>Ruleset tools (optional)</summary>
+			<div class="panel-optional-body">
+				<p class="hint">Generate from URL/prose, create starter drafts, and open in Play mode.</p>
+				<div class="status">
+					{#if rulesetFeedback.kind === 'loading'}
+						<p class="status-loading">{rulesetFeedback.message}</p>
+					{:else if rulesetFeedback.kind === 'error'}
+						<p class="status-error">{rulesetFeedback.message}</p>
+					{:else if rulesetFeedback.kind === 'success'}
+						<p class="status-success">{rulesetFeedback.message}</p>
+					{/if}
 				</div>
-			{:else}
-				<div class="field-group">
-					<label for="ruleset-source-text">Rules text</label>
-					<ScoreInput
-						as="textarea"
-						id="ruleset-source-text"
-						rows={5}
-						placeholder="We play with 3 players. Everyone draws from stock or discard..."
-						value={rulesetSourceText}
-						onValueChange={(value) => (rulesetSourceText = value)}
-					/>
-				</div>
-			{/if}
-			<div class="field-group">
-				<label for="ruleset-source-notes">Notes (optional)</label>
-				<ScoreInput
-					as="textarea"
-					id="ruleset-source-notes"
-					rows={2}
-					placeholder="Any constraints or intended variant details"
-					value={rulesetGenerateNotes}
-					onValueChange={(value) => (rulesetGenerateNotes = value)}
-				/>
-			</div>
-			<ScoreButton variant="primary" type="button" onPress={() => void generateRulesetFromInput()} disabled={isRulesetBusy}>
-				Generate ruleset from input
-			</ScoreButton>
-		</div>
-		<div class="button-row">
-			<ScoreButton variant="primary" type="button" onPress={() => void createStarterRuleset()} disabled={isRulesetBusy}>
-				Create starter ruleset
-			</ScoreButton>
-			<ScoreButton type="button" onPress={() => void refreshRulesets()} disabled={isRulesetBusy}>
-				Refresh rulesets
-			</ScoreButton>
-		</div>
-		{#if rulesets.length > 0}
-			<ul class="ruleset-list">
-				{#each rulesets as ruleset (ruleset.id)}
-					<li class="ruleset-item">
-						<div>
-							<p class="ruleset-title">{ruleset.name}</p>
-							<p class="small">id: {ruleset.id}</p>
-							<p class="small">game: {ruleset.bundle.displayName}</p>
+				<div class="ruleset-generator">
+					<div class="ruleset-source-toggle" role="tablist" aria-label="Rules source type">
+						<button
+							type="button"
+							class={`ruleset-source-button ${rulesetGenerateMode === 'url' ? 'active' : ''}`.trim()}
+							aria-pressed={rulesetGenerateMode === 'url'}
+							onclick={() => (rulesetGenerateMode = 'url')}
+						>
+							URL
+						</button>
+						<button
+							type="button"
+							class={`ruleset-source-button ${rulesetGenerateMode === 'text' ? 'active' : ''}`.trim()}
+							aria-pressed={rulesetGenerateMode === 'text'}
+							onclick={() => (rulesetGenerateMode = 'text')}
+						>
+							Prose
+						</button>
+					</div>
+					<div class="field-group">
+						<label for="ruleset-name">Ruleset name (optional)</label>
+						<ScoreInput
+							id="ruleset-name"
+							type="text"
+							placeholder="Generated ruleset name"
+							value={rulesetGenerateName}
+							onValueChange={(value) => (rulesetGenerateName = value)}
+						/>
+					</div>
+					{#if rulesetGenerateMode === 'url'}
+						<div class="field-group">
+							<label for="ruleset-source-url">Rules URL</label>
+							<ScoreInput
+								id="ruleset-source-url"
+								type="text"
+								placeholder="https://example.com/how-to-play/..."
+								value={rulesetSourceUrl}
+								onValueChange={(value) => (rulesetSourceUrl = value)}
+							/>
 						</div>
-						<a class="ruleset-open-link" href={rulesetPlayHref(ruleset.id)}>Open in Play</a>
-					</li>
-				{/each}
-			</ul>
-		{:else}
-			<p class="empty">No rulesets yet.</p>
-		{/if}
-	</section>
+					{:else}
+						<div class="field-group">
+							<label for="ruleset-source-text">Rules text</label>
+							<ScoreInput
+								as="textarea"
+								id="ruleset-source-text"
+								rows={5}
+								placeholder="We play with 3 players. Everyone draws from stock or discard..."
+								value={rulesetSourceText}
+								onValueChange={(value) => (rulesetSourceText = value)}
+							/>
+						</div>
+					{/if}
+					<div class="field-group">
+						<label for="ruleset-source-notes">Notes (optional)</label>
+						<ScoreInput
+							as="textarea"
+							id="ruleset-source-notes"
+							rows={2}
+							placeholder="Any constraints or intended variant details"
+							value={rulesetGenerateNotes}
+							onValueChange={(value) => (rulesetGenerateNotes = value)}
+						/>
+					</div>
+					<ScoreButton variant="primary" type="button" onPress={() => void generateRulesetFromInput()} disabled={isRulesetBusy}>
+						Generate ruleset from input
+					</ScoreButton>
+				</div>
+				<div class="button-row">
+					<ScoreButton variant="primary" type="button" onPress={() => void createStarterRuleset()} disabled={isRulesetBusy}>
+						Create starter ruleset
+					</ScoreButton>
+					<ScoreButton type="button" onPress={() => void refreshRulesets()} disabled={isRulesetBusy}>
+						Refresh rulesets
+					</ScoreButton>
+				</div>
+				{#if rulesets.length > 0}
+					<ul class="ruleset-list">
+						{#each rulesets as ruleset (ruleset.id)}
+							<li class="ruleset-item">
+								<div>
+									<p class="ruleset-title">{ruleset.name}</p>
+									<p class="small">id: {ruleset.id}</p>
+									<p class="small">game: {ruleset.bundle.displayName}</p>
+								</div>
+								<a class="ruleset-open-link" href={rulesetPlayHref(ruleset.id)}>Open in Play</a>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="empty">No rulesets yet.</p>
+				{/if}
+			</div>
+		</details>
 
 		{#if !activeSessionId}
 		<section class="panel">
@@ -906,11 +1013,11 @@
 			{/if}
 		</section>
 
-		<section class="panel">
-			<h2>Add round</h2>
-			<Tabs.Root bind:value={addRoundMode} class="segmented">
-				<Tabs.List>
-					<Tabs.Trigger
+			<section class="panel">
+				<h2>Add round</h2>
+				<Tabs.Root bind:value={addRoundMode} class="segmented">
+					<Tabs.List>
+						<Tabs.Trigger
 						value="rows"
 						class={`mode-trigger ${addRoundMode === 'rows' ? 'active' : ''}`.trim()}
 					>
@@ -919,10 +1026,28 @@
 					<Tabs.Trigger
 						value="text"
 						class={`mode-trigger ${addRoundMode === 'text' ? 'active' : ''}`.trim()}
-					>
-						Quick text
-					</Tabs.Trigger>
-				</Tabs.List>
+						>
+							Quick text
+						</Tabs.Trigger>
+						<Tabs.Trigger
+							value="delta"
+							class={`mode-trigger ${addRoundMode === 'delta' ? 'active' : ''}`.trim()}
+						>
+							Manual points
+						</Tabs.Trigger>
+						<Tabs.Trigger
+							value="rummy-net"
+							class={`mode-trigger ${addRoundMode === 'rummy-net' ? 'active' : ''}`.trim()}
+						>
+							500 Rummy net
+						</Tabs.Trigger>
+						<Tabs.Trigger
+							value="golf-hole"
+							class={`mode-trigger ${addRoundMode === 'golf-hole' ? 'active' : ''}`.trim()}
+						>
+							Six Card Golf hole
+						</Tabs.Trigger>
+					</Tabs.List>
 					<Tabs.Content value="rows">
 						{#each activePlayers as player}
 							<div class="field-group">
@@ -953,12 +1078,86 @@ Bob: 2D 3D 4D"
 							onValueChange={(value) => (quickRoundText = value)}
 						/>
 					</Tabs.Content>
+					<Tabs.Content value="delta">
+						<p class="hint">Enter signed point changes directly (positive or negative).</p>
+						{#each activePlayers as player}
+							<div class="field-group">
+								<label for={playerFieldId('delta', player)}>{player}</label>
+								<ScoreInput
+									id={playerFieldId('delta', player)}
+									type="number"
+									placeholder="0"
+									value={manualDeltaById[player] ?? ''}
+									onValueChange={(value) => {
+										manualDeltaById = {
+											...manualDeltaById,
+											[player]: value
+										};
+									}}
+								/>
+							</div>
+						{/each}
+					</Tabs.Content>
+					<Tabs.Content value="rummy-net">
+						<p class="hint">Enter each player's table cards and hand cards. Delta = table minus hand.</p>
+						{#each activePlayers as player}
+							<div class="field-group assist-group">
+								<p class="input-label">{player}</p>
+								<label for={playerFieldId('rummy-table', player)}>Table/meld cards</label>
+								<ScoreInput
+									id={playerFieldId('rummy-table', player)}
+									type="text"
+									placeholder="7C 7D 7S 3D 4D 5D"
+									value={rummyTableCardsById[player] ?? ''}
+									onValueChange={(value) => {
+										rummyTableCardsById = {
+											...rummyTableCardsById,
+											[player]: value
+										};
+									}}
+								/>
+								<label for={playerFieldId('rummy-hand', player)}>Hand cards</label>
+								<ScoreInput
+									id={playerFieldId('rummy-hand', player)}
+									type="text"
+									placeholder="KH 9C"
+									value={rummyHandCardsById[player] ?? ''}
+									onValueChange={(value) => {
+										rummyHandCardsById = {
+											...rummyHandCardsById,
+											[player]: value
+										};
+									}}
+								/>
+							</div>
+						{/each}
+					</Tabs.Content>
+					<Tabs.Content value="golf-hole">
+						<p class="hint">Enter 6 cards per player in row-major 2x3 order: r1c1 r1c2 r1c3 r2c1 r2c2 r2c3.</p>
+						{#each activePlayers as player}
+							<div class="field-group">
+								<label for={playerFieldId('golf-hole', player)}>{player}</label>
+								<ScoreInput
+									id={playerFieldId('golf-hole', player)}
+									type="text"
+									placeholder="2C 5S KD 2H 9C QC"
+									value={golfCardsById[player] ?? ''}
+									onValueChange={(value) => {
+										golfCardsById = {
+											...golfCardsById,
+											[player]: value
+										};
+									}}
+								/>
+							</div>
+						{/each}
+					</Tabs.Content>
 				</Tabs.Root>
 
 				<div class="button-row">
-				<ScoreButton variant="primary" type="button" onPress={() => void submitAddRound()} disabled={isPosting}>
-					Add round
-				</ScoreButton>
+					<ScoreButton variant="primary" type="button" onPress={() => void submitAddRound()} disabled={isPosting}>
+						Add round
+					</ScoreButton>
 				<ScoreButton type="button" onPress={() => void submitUndo()} disabled={isPosting}>Undo</ScoreButton>
 				<ScoreButton type="button" onPress={() => void submitRedo()} disabled={isPosting}>Redo</ScoreButton>
 			</div>
@@ -1095,6 +1294,36 @@ run: 5"
 		box-shadow: var(--shadow-sm);
 	}
 
+	.panel-optional {
+		padding: 0;
+		overflow: clip;
+	}
+
+	.panel-optional > summary {
+		min-height: 44px;
+		padding: 12px 15px;
+		display: flex;
+		align-items: center;
+		font-weight: 700;
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.panel-optional > summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.panel-optional[open] > summary {
+		background: var(--surface-2);
+		border-bottom: 1px solid var(--line);
+	}
+
+	.panel-optional-body {
+		padding: 12px 15px 15px;
+		display: grid;
+		gap: 12px;
+	}
+
 	h2 {
 		margin: 0;
 		font-size: 1.03rem;
@@ -1197,10 +1426,20 @@ run: 5"
 	}
 
 	.join-row,
-	.button-row,
+	.button-row {
+		display: grid;
+		gap: 10px;
+	}
+
 	:global(.segmented) {
 		display: grid;
 		gap: 10px;
+	}
+
+	:global(.segmented [role='tablist']) {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
 	}
 
 	.ruleset-list {
@@ -1227,7 +1466,7 @@ run: 5"
 	}
 
 	.ruleset-source-button {
-		min-height: 40px;
+		min-height: 44px;
 		padding: 8px 12px;
 		border: 1px solid var(--line);
 		border-radius: 10px;
@@ -1260,7 +1499,7 @@ run: 5"
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-height: 40px;
+		min-height: 44px;
 		padding: 8px 12px;
 		border-radius: 10px;
 		border: 1px solid var(--line);
@@ -1284,9 +1523,12 @@ run: 5"
 		}
 
 		.join-row,
-		.button-row,
-		:global(.segmented) {
+		.button-row {
 			grid-template-columns: auto auto;
+		}
+
+		:global(.segmented [role='tablist']) {
+			grid-template-columns: repeat(5, minmax(0, 1fr));
 		}
 
 		.ruleset-item {
@@ -1352,6 +1594,13 @@ run: 5"
 	.grid-two {
 		display: grid;
 		gap: 10px;
+	}
+
+	.assist-group {
+		padding: 10px;
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		background: var(--surface-2);
 	}
 
 	@media (min-width: 700px) {

@@ -149,7 +149,7 @@
 	}
 
 	.tap-btn {
-		min-height: 40px;
+		min-height: 44px;
 		border: 1px solid var(--jc-line, #c8d5e2);
 		border-radius: 10px;
 		background: var(--jc-surface-elevated, #f6faff);
@@ -210,7 +210,7 @@
 	}
 
 	.token-chip {
-		min-height: 34px;
+		min-height: 44px;
 		padding: 4px 10px;
 		border: 1px solid var(--jc-line, #c8d5e2);
 		border-radius: 999px;
@@ -253,7 +253,7 @@
 	}
 
 	.clear-btn {
-		min-height: 34px;
+		min-height: 44px;
 		border: 1px solid var(--jc-line, #c8d5e2);
 		border-radius: 8px;
 		background: var(--jc-surface, #ffffff);

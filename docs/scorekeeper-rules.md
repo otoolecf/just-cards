@@ -29,6 +29,27 @@ The engine computes each card value by:
 This document focuses on card-value and score-delta evaluation.
 Play legality and pattern detection are related but separate concerns.
 
+## Built-in Score Modes (UI)
+
+Score mode presets used by the score page are defined in:
+`/Users/ConnorO/git_repos/just-cards/src/lib/session/score-session-commands.ts`
+
+- `Standard`: A=1, 2-10 face value, J/Q/K=11/12/13
+- `500 Rummy`: A=15, 2-10 face value, J/Q/K=10
+- `Six Card Golf`: A=1, 2=-2, 3-10 face value, J/Q=10, K=0
+- `Cribbage`: face cards forced to 10
+
+Each mode also declares standings intent:
+
+- `high_wins`: larger totals rank first (Standard, 500 Rummy, Cribbage)
+- `low_wins`: smaller totals rank first (Six Card Golf)
+
+The score page also exposes deterministic assistant flows that post `add_delta` events:
+
+- `Manual points`: enter signed deltas directly
+- `500 Rummy net`: `delta = sum(table cards) - sum(hand cards)`
+- `Six Card Golf hole`: 2x3 row-major input with same-column pair-zero rule
+
 Current scoring implementation includes pattern-driven rounds:
 
 - Use `add_pattern_round` to pass a `patternPack` and `patternScoring` array

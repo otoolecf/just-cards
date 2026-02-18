@@ -45,6 +45,8 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-18-llm-ruleset-agent-v0.md`](./specs/2026-02-18-llm-ruleset-agent-v0.md): TDD spec for multi-step LLM extraction/repair with nano-to-mini escalation and deterministic fallback.
 - [`specs/2026-02-18-ruleset-play-serviceability-and-logging.md`](./specs/2026-02-18-ruleset-play-serviceability-and-logging.md): TDD spec for ruleset-aware play initialization, reduced generic-zone drift, and backend structured logs.
 - [`specs/2026-02-18-hidden-info-and-layout-primitives.md`](./specs/2026-02-18-hidden-info-and-layout-primitives.md): TDD spec for hidden-information visibility controls and layout primitives (seat/public card arrangement).
+- [`specs/2026-02-18-scorekeeper-real-game-usability-and-variant-scoring.md`](./specs/2026-02-18-scorekeeper-real-game-usability-and-variant-scoring.md): TDD spec for score-page flow simplification and deterministic 500 Rummy/Six Card Golf scoring assists.
+- [`specs/2026-02-18-scorekeeper-mode-driven-standings-order.md`](./specs/2026-02-18-scorekeeper-mode-driven-standings-order.md): TDD spec for score mode win-direction metadata and leaderboard ordering by mode.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 

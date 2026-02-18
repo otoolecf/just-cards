@@ -3,6 +3,7 @@ import {
 	type PatternRulePack
 } from '$lib/gameplay/pattern-detector';
 import {
+	cardValue,
 	type CardInput,
 	type PatternScoringRule,
 	type ScoringTarget,
@@ -18,6 +19,27 @@ const SUIT_BY_TOKEN: Record<string, NonNullable<CardInput['suit']>> = {
 	H: 'hearts',
 	S: 'spades'
 };
+
+const FIVE_HUNDRED_RUMMY_RULE_PACK = createRulePack({
+	baseAceValue: 15,
+	rankOverrides: {
+		J: 10,
+		Q: 10,
+		K: 10
+	},
+	modifiers: []
+});
+
+const SIX_CARD_GOLF_RULE_PACK = createRulePack({
+	baseAceValue: 1,
+	rankOverrides: {
+		2: -2,
+		J: 10,
+		Q: 10,
+		K: 0
+	},
+	modifiers: []
+});
 
 function normalizeCardText(value: string): string {
 	return value
@@ -67,6 +89,10 @@ function parseCardToken(raw: string): CardInput | null {
 	return { rank: rank as CardInput['rank'] };
 }
 
+function scoreCards(cards: CardInput[], rules = createRulePack()): number {
+	return cards.reduce((sum, card) => sum + cardValue(card, rules), 0);
+}
+
 export interface ParsedCardsResult {
 	cards: CardInput[];
 	errors: string[];
@@ -94,10 +120,52 @@ export interface PatternRoundInput {
 	patternScoring: PatternScoringRule[];
 }
 
+export interface PlayerDeltaInput {
+	playerId: string;
+	delta: number;
+}
+
+export interface Rummy500NetRoundInput {
+	tableCards: CardInput[];
+	handCards: CardInput[];
+}
+
+export interface NamedRummy500NetRoundInput extends Rummy500NetRoundInput {
+	playerId: string;
+}
+
+export interface Rummy500NetRoundScore {
+	tablePoints: number;
+	handPoints: number;
+	delta: number;
+}
+
+export interface SixCardGolfHoleInput {
+	cardsInRowMajorOrder: CardInput[];
+}
+
+export interface NamedSixCardGolfHoleInput extends SixCardGolfHoleInput {
+	playerId: string;
+}
+
+export interface SixCardGolfColumnScore {
+	columnIndex: number;
+	value: number;
+	zeroedByPair: boolean;
+}
+
+export interface SixCardGolfHoleScore {
+	columns: SixCardGolfColumnScore[];
+	total: number;
+}
+
+export type ScoreWinDirection = 'high_wins' | 'low_wins';
+
 export interface ScoreModeOption {
 	id: string;
 	name: string;
 	description: string;
+	winDirection: ScoreWinDirection;
 	createRulePack: () => ReturnType<typeof createRulePack>;
 }
 
@@ -106,6 +174,7 @@ export const SCORE_MODE_OPTIONS: ScoreModeOption[] = [
 		id: 'standard',
 		name: 'Standard',
 		description: 'A=1, 2-10 normal, J/Q/K face values',
+		winDirection: 'high_wins',
 		createRulePack: () =>
 			createRulePack({
 				modifiers: []
@@ -113,20 +182,23 @@ export const SCORE_MODE_OPTIONS: ScoreModeOption[] = [
 	},
 	{
 		id: 'rummy',
-		name: 'Rummy',
-		description: 'Non-face cards set to 5, then twos to -2',
-		createRulePack: () =>
-			createRulePack({
-				modifiers: [
-					{ id: 'non-face-five', when: { kind: 'is_face', value: false }, value: 5 },
-					{ id: 'twos-minus-2', when: { kind: 'rank_is', rank: '2' }, value: -2 }
-				]
-			})
+		name: '500 Rummy',
+		description: 'A=15, 2-10 face value, J/Q/K=10 (use with net table-minus-hand rounds)',
+		winDirection: 'high_wins',
+		createRulePack: () => createFiveHundredRummyRulePack()
+	},
+	{
+		id: 'six-card-golf',
+		name: 'Six Card Golf',
+		description: 'A=1, 2=-2, 3-10 face value, J/Q=10, K=0 (column pairs score 0)',
+		winDirection: 'low_wins',
+		createRulePack: () => createSixCardGolfRulePack()
 	},
 	{
 		id: 'cribbage',
 		name: 'Cribbage',
 		description: 'Face cards set to 10; good base point handling for quick scoring',
+		winDirection: 'high_wins',
 		createRulePack: () =>
 			createRulePack({
 				modifiers: [{ id: 'faces-are-10', when: { kind: 'is_face', value: true }, value: 10 }]
@@ -148,14 +220,14 @@ export const PATTERN_PRESETS: PatternModePreset[] = [
 		name: 'Pair pack',
 		description: 'Detect 2-of-a-kind matches',
 		patternPack: createPatternDetectorRulePack({
-		patterns: [
-			{
-				id: 'pair',
-				match: { kind: 'all_same_rank', minCards: 2, maxCards: 2 },
-				maxMatches: 1
-			}
-		]
-	}),
+			patterns: [
+				{
+					id: 'pair',
+					match: { kind: 'all_same_rank', minCards: 2, maxCards: 2 },
+					maxMatches: 1
+				}
+			]
+		}),
 		defaultPatternScoring: 'pair: 10'
 	},
 	{
@@ -175,12 +247,37 @@ export const PATTERN_PRESETS: PatternModePreset[] = [
 	}
 ];
 
+export function createFiveHundredRummyRulePack(): ReturnType<typeof createRulePack> {
+	return structuredClone(FIVE_HUNDRED_RUMMY_RULE_PACK);
+}
+
+export function createSixCardGolfRulePack(): ReturnType<typeof createRulePack> {
+	return structuredClone(SIX_CARD_GOLF_RULE_PACK);
+}
+
 export function getPatternPreset(id: string): PatternModePreset | undefined {
 	return PATTERN_PRESETS.find((preset) => preset.id === id);
 }
 
 export function getModePreset(id: string): ScoreModeOption | undefined {
 	return SCORE_MODE_OPTIONS.find((mode) => mode.id === id);
+}
+
+export function getModeWinDirection(modeId?: string): ScoreWinDirection {
+	return getModePreset(modeId ?? '')?.winDirection ?? 'high_wins';
+}
+
+export function sortStandingsByMode(
+	totalsByPlayer: Record<string, number>,
+	modeId?: string
+): Array<[string, number]> {
+	const winDirection = getModeWinDirection(modeId);
+	return Object.entries(totalsByPlayer).sort((left, right) => {
+		if (left[1] !== right[1]) {
+			return winDirection === 'low_wins' ? left[1] - right[1] : right[1] - left[1];
+		}
+		return left[0].localeCompare(right[0]);
+	});
 }
 
 export function parseCardsFromText(input: string): ParsedCardsResult {
@@ -217,7 +314,10 @@ export function parseNamedRoundText(input: string): ParsedNamedRoundResult {
 	const entries: ParsedNamedRoundEntry[] = [];
 	const errors: string[] = [];
 
-	const lines = input.split(/[\n;]/).map((line) => line.trim()).filter(Boolean);
+	const lines = input
+		.split(/[\n;]/)
+		.map((line) => line.trim())
+		.filter(Boolean);
 
 	for (const line of lines) {
 		const separatorIndex = line.indexOf(':');
@@ -290,6 +390,16 @@ export function buildAddRoundEvent(entries: ParsedNamedRoundEntry[]): ScoreEvent
 	return { type: 'add_round', playerCards };
 }
 
+export function buildAddDeltaEvent(entries: PlayerDeltaInput[]): ScoreEvent {
+	return {
+		type: 'add_delta',
+		entries: entries.map((entry) => ({
+			target: { kind: 'player', id: entry.playerId },
+			delta: entry.delta
+		}))
+	};
+}
+
 export function buildPatternRoundEvent(input: PatternRoundInput): ScoreEvent {
 	const target: ScoringTarget = { kind: 'player', id: input.targetId };
 	return {
@@ -298,4 +408,55 @@ export function buildPatternRoundEvent(input: PatternRoundInput): ScoreEvent {
 		patternScoring: input.patternScoring,
 		entries: [{ target, cards: input.cards }]
 	};
+}
+
+export function calculateRummy500NetRoundScore(input: Rummy500NetRoundInput): Rummy500NetRoundScore {
+	const tablePoints = scoreCards(input.tableCards, FIVE_HUNDRED_RUMMY_RULE_PACK);
+	const handPoints = scoreCards(input.handCards, FIVE_HUNDRED_RUMMY_RULE_PACK);
+	return {
+		tablePoints,
+		handPoints,
+		delta: tablePoints - handPoints
+	};
+}
+
+export function buildRummy500NetDeltaEntries(entries: NamedRummy500NetRoundInput[]): PlayerDeltaInput[] {
+	return entries.map((entry) => ({
+		playerId: entry.playerId,
+		delta: calculateRummy500NetRoundScore(entry).delta
+	}));
+}
+
+export function calculateSixCardGolfHoleScore(input: SixCardGolfHoleInput): SixCardGolfHoleScore {
+	if (input.cardsInRowMajorOrder.length !== 6) {
+		throw new Error('Six Card Golf hole scoring requires exactly 6 cards in row-major 2x3 order.');
+	}
+
+	const columns: SixCardGolfColumnScore[] = [];
+	for (let columnIndex = 0; columnIndex < 3; columnIndex += 1) {
+		const topCard = input.cardsInRowMajorOrder[columnIndex];
+		const bottomCard = input.cardsInRowMajorOrder[columnIndex + 3];
+		const zeroedByPair = topCard.rank === bottomCard.rank;
+		const value = zeroedByPair
+			? 0
+			: cardValue(topCard, SIX_CARD_GOLF_RULE_PACK) + cardValue(bottomCard, SIX_CARD_GOLF_RULE_PACK);
+
+		columns.push({
+			columnIndex,
+			value,
+			zeroedByPair
+		});
+	}
+
+	return {
+		columns,
+		total: columns.reduce((sum, column) => sum + column.value, 0)
+	};
+}
+
+export function buildSixCardGolfHoleDeltaEntries(entries: NamedSixCardGolfHoleInput[]): PlayerDeltaInput[] {
+	return entries.map((entry) => ({
+		playerId: entry.playerId,
+		delta: calculateSixCardGolfHoleScore(entry).total
+	}));
 }
