@@ -46,6 +46,17 @@ The remaining cards may be melded or added to hand.
 First player to 500 points wins.
 `;
 
+const RUMMY_500_BICYCLE_TEXT = `
+500 Rum
+Deal seven cards to each player.
+Place undealt cards face down in the center of the table, forming the stock.
+The top card is turned face up and is placed beside the stock as the up card to start the discard pile.
+Each player may draw either the top card of the stock or any card from the discard pile.
+When drawing from the discard pile, the player must take all cards above the selected card.
+The drawn card must immediately be used by laying it down in a set.
+First player to 500 points wins.
+`;
+
 describe('ruleset generator', () => {
 	it('extract_rule_facts_detects_six_card_golf_signals', () => {
 		const facts = extractRuleFacts({
@@ -130,6 +141,21 @@ describe('ruleset generator', () => {
 		);
 	});
 
+	it('extract_rule_facts_rummy_stock_face_down_does_not_imply_hidden_player_hand_setup', () => {
+		const facts = extractRuleFacts({
+			sourceText: RUMMY_500_BICYCLE_TEXT,
+			sourceUrl: 'https://bicyclecards.com/how-to-play/500-rum'
+		});
+
+		expect(facts.setup?.cardsPerPlayer).toBe(7);
+		expect(facts.setup?.initialFaceUpCards).toBeUndefined();
+		expect(
+			facts.diagnostics.some((line) =>
+				line.toLowerCase().includes('hand cards start face down')
+			)
+		).toBe(false);
+	});
+
 	it('compile_rule_facts_to_bundle_returns_runtime_bundle_v1', () => {
 		const facts: RuleFactsV0 = extractRuleFacts({
 			sourceText: FREEFORM_PROSE
@@ -166,9 +192,27 @@ describe('ruleset generator', () => {
 			zoneId: 'hand',
 			label: 'Player Layouts',
 			includeSelf: false,
+			cardVisibility: 'public',
 			layout: { kind: 'grid', rows: 2, columns: 3 }
 		});
 		expect(bundle.uiProfile.table.zones.find((zone) => zone.id === 'stock')?.drawVisibility).toBe('preserve');
+	});
+
+	it('compile_rule_facts_to_bundle_sets_card_visibility_modes_for_hand_and_seats', () => {
+		const golfFacts = extractRuleFacts({
+			sourceText: SIX_CARD_GOLF_LIKE_TEXT,
+			sourceUrl: 'https://bicyclecards.com/how-to-play/six-card-golf'
+		});
+		const rumFacts = extractRuleFacts({
+			sourceText: RUMMY_500_BICYCLE_TEXT,
+			sourceUrl: 'https://bicyclecards.com/how-to-play/500-rum'
+		});
+		const golfBundle = compileRuleFactsToBundle(golfFacts);
+		const rumBundle = compileRuleFactsToBundle(rumFacts);
+
+		expect(golfBundle.uiProfile.hand.cardVisibility).toBe('owner_only');
+		expect(golfBundle.uiProfile.seats?.cards?.cardVisibility).toBe('public');
+		expect(rumBundle.uiProfile.hand.cardVisibility).toBe('owner_only');
 	});
 
 	it('compile_rule_facts_to_bundle_maps_discard_pickup_rule_to_runtime_and_ui', () => {

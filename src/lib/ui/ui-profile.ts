@@ -5,6 +5,7 @@ export type UiPrimaryActionKind = 'advance_turn' | 'undo' | 'redo' | 'set_phase'
 export type UiCardLayoutKind = 'row' | 'grid';
 export type UiDrawVisibilityMode = 'reveal' | 'preserve';
 export type UiDrawPickMode = 'top' | 'any_visible';
+export type UiCardVisibilityMode = 'public' | 'owner_only' | 'hidden';
 
 export interface UiCardLayout {
 	kind: UiCardLayoutKind;
@@ -22,6 +23,7 @@ export interface UiHandProfile {
 	label: string;
 	hint: string;
 	quickPlayTargets: UiQuickPlayTarget[];
+	cardVisibility?: UiCardVisibilityMode;
 	layout?: UiCardLayout;
 }
 
@@ -33,6 +35,7 @@ export interface UiTableZoneProfile {
 	allowDrawFromTop?: boolean;
 	drawVisibility?: UiDrawVisibilityMode;
 	drawPickMode?: UiDrawPickMode;
+	cardVisibility?: UiCardVisibilityMode;
 }
 
 export interface UiSeatCardsProfile {
@@ -40,6 +43,7 @@ export interface UiSeatCardsProfile {
 	label: string;
 	visible?: boolean;
 	includeSelf?: boolean;
+	cardVisibility?: UiCardVisibilityMode;
 	layout?: UiCardLayout;
 }
 
@@ -212,12 +216,18 @@ function uniqueZoneTargets(targets: UiQuickPlayTarget[]): UiQuickPlayTarget[] {
 }
 
 export function createUiProfile(input: CreateUiProfileInput = {}): UiProfileV0 {
-	const zones = input.table?.zones ? input.table.zones.map((zone) => ({ ...zone })) : [];
+	const zones = input.table?.zones
+		? input.table.zones.map((zone) => ({
+				...zone,
+				cardVisibility: zone.cardVisibility ?? 'public'
+			}))
+		: [];
 	const quickPlayTargets = uniqueZoneTargets(input.hand?.quickPlayTargets ? input.hand.quickPlayTargets.map((target) => ({ ...target })) : []);
 	const handLayout = input.hand?.layout ? { ...input.hand.layout } : undefined;
 	const seatCards = input.seats?.cards
 		? {
 				...input.seats.cards,
+				cardVisibility: input.seats.cards.cardVisibility ?? 'public',
 				...(input.seats.cards.layout ? { layout: { ...input.seats.cards.layout } } : {})
 			}
 		: undefined;
@@ -236,6 +246,7 @@ export function createUiProfile(input: CreateUiProfileInput = {}): UiProfileV0 {
 			label: input.hand?.label ?? 'Your Hand',
 			hint: input.hand?.hint ?? 'Select a card to reveal quick play targets.',
 			quickPlayTargets,
+			cardVisibility: input.hand?.cardVisibility ?? 'owner_only',
 			...(handLayout ? { layout: handLayout } : {})
 		},
 		table: {
@@ -409,6 +420,17 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 				message: `uiProfile.table.zones[${zoneIndex}].drawPickMode must be one of top|any_visible`
 			});
 		}
+		if (
+			zone.cardVisibility !== undefined &&
+			zone.cardVisibility !== 'public' &&
+			zone.cardVisibility !== 'owner_only' &&
+			zone.cardVisibility !== 'hidden'
+		) {
+			issues.push({
+				code: 'invalid_zone_card_visibility',
+				message: `uiProfile.table.zones[${zoneIndex}].cardVisibility must be one of public|owner_only|hidden`
+			});
+		}
 	}
 
 	if (isObject(profile.hand)) {
@@ -420,6 +442,17 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 		}
 		if (typeof profile.hand.hint !== 'string' || profile.hand.hint.trim().length === 0) {
 			issues.push({ code: 'invalid_hand_hint', message: 'uiProfile.hand.hint must be a non-empty string' });
+		}
+		if (
+			profile.hand.cardVisibility !== undefined &&
+			profile.hand.cardVisibility !== 'public' &&
+			profile.hand.cardVisibility !== 'owner_only' &&
+			profile.hand.cardVisibility !== 'hidden'
+		) {
+			issues.push({
+				code: 'invalid_hand_card_visibility',
+				message: 'uiProfile.hand.cardVisibility must be one of public|owner_only|hidden'
+			});
 		}
 		if (!Array.isArray(profile.hand.quickPlayTargets)) {
 			issues.push({ code: 'invalid_quick_play_targets', message: 'uiProfile.hand.quickPlayTargets must be an array' });
@@ -499,6 +532,17 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 					for (const issue of validateLayout(profile.seats.cards.layout, 'uiProfile.seats.cards.layout')) {
 						issues.push(issue);
 					}
+				}
+				if (
+					profile.seats.cards.cardVisibility !== undefined &&
+					profile.seats.cards.cardVisibility !== 'public' &&
+					profile.seats.cards.cardVisibility !== 'owner_only' &&
+					profile.seats.cards.cardVisibility !== 'hidden'
+				) {
+					issues.push({
+						code: 'invalid_seat_cards_card_visibility',
+						message: 'uiProfile.seats.cards.cardVisibility must be one of public|owner_only|hidden'
+					});
 				}
 			}
 		}

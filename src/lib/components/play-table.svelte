@@ -83,6 +83,10 @@
 	const DRAW_TOP_ALLOWED_ZONE_IDS = drawTopAllowedZoneIdsFromUiProfile(ACTIVE_UI_PROFILE);
 	const DRAW_PICK_MODES = drawPickModeByZoneFromUiProfile(ACTIVE_UI_PROFILE);
 	const DRAW_VISIBILITY_MODES = drawVisibilityModeByZoneFromUiProfile(ACTIVE_UI_PROFILE);
+	const HAND_CARD_VISIBILITY = ACTIVE_UI_PROFILE.hand.cardVisibility ?? 'owner_only';
+	const TABLE_CARD_VISIBILITY_BY_ZONE = Object.fromEntries(
+		ACTIVE_UI_PROFILE.table.zones.map((zone) => [zone.id, zone.cardVisibility ?? 'public'])
+	);
 	const ACTION_LABELS = playSurfaceActionLabelsFromUiProfile(ACTIVE_UI_PROFILE);
 	const SEAT_CARDS_PROFILE = seatCardsProfileFromUiProfile(ACTIVE_UI_PROFILE);
 	const HAND_ZONE = ACTIVE_GAMEPLAY_RULE_PACK.handZoneName;
@@ -142,6 +146,8 @@
 		tableZoneOrder: TABLE_ZONE_IDS,
 		includeDiscoveredTableZones: false,
 		zoneLabels: TABLE_ZONE_LABELS,
+		handCardVisibility: HAND_CARD_VISIBILITY,
+		tableCardVisibilityByZone: TABLE_CARD_VISIBILITY_BY_ZONE,
 		handLayout: ACTIVE_UI_PROFILE.hand.layout,
 		...(SEAT_CARDS_PROFILE
 			? {
@@ -149,6 +155,7 @@
 						zoneId: SEAT_CARDS_PROFILE.zoneId,
 						label: SEAT_CARDS_PROFILE.label,
 						includeSelf: SEAT_CARDS_PROFILE.includeSelf,
+						cardVisibility: SEAT_CARDS_PROFILE.cardVisibility ?? 'public',
 						...(SEAT_CARDS_PROFILE.layout ? { layout: SEAT_CARDS_PROFILE.layout } : {})
 					}
 				}

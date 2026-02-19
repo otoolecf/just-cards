@@ -101,6 +101,48 @@ describe('ui-profile', () => {
 		expect(issues.some((issue) => issue.code === 'invalid_zone_draw_pick_mode')).toBe(true);
 	});
 
+	test('ui_profile_validation_rejects_invalid_card_visibility_modes', () => {
+		const profile = {
+			schemaVersion: 'ui-profile/v0',
+			hand: {
+				zoneId: 'hand',
+				label: 'Your Hand',
+				hint: 'Choose a card',
+				cardVisibility: 'friends_only',
+				quickPlayTargets: [{ zoneId: 'discard' }]
+			},
+			table: {
+				zones: [
+					{
+						id: 'discard',
+						label: 'Discard',
+						hint: 'Face-up discard',
+						cardVisibility: 'secret'
+					}
+				]
+			},
+			actions: {
+				primary: [{ id: 'advance', kind: 'advance_turn', label: 'Next' }]
+			},
+			log: {
+				label: 'Log',
+				emptyText: 'No events yet.'
+			},
+			seats: {
+				cards: {
+					zoneId: 'hand',
+					label: 'Player Cards',
+					cardVisibility: 'friends_only'
+				}
+			}
+		};
+
+		const issues = validateUiProfile(profile);
+		expect(issues.some((issue) => issue.code === 'invalid_hand_card_visibility')).toBe(true);
+		expect(issues.some((issue) => issue.code === 'invalid_zone_card_visibility')).toBe(true);
+		expect(issues.some((issue) => issue.code === 'invalid_seat_cards_card_visibility')).toBe(true);
+	});
+
 	test('ui_profile_generator_derives_visible_zones_and_labels_from_runtime_pack', () => {
 		const runtimeRulePack: RuntimeRulePack = {
 			gameplayRulePack: createGameplayRulePack({

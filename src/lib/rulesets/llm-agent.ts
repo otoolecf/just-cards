@@ -226,7 +226,8 @@ function extractRankOverrides(value: unknown, baseline: Partial<Record<Rank, num
 
 function extractSetup(
 	value: unknown,
-	baseline: RuleFactsV0['setup']
+	baseline: RuleFactsV0['setup'],
+	allowPartialFaceUpSetup: boolean
 ): RuleFactsV0['setup'] {
 	const object = asObject(value);
 	if (!object) {
@@ -234,8 +235,19 @@ function extractSetup(
 	}
 
 	const cardsPerPlayer = clampInteger(object.cardsPerPlayer, 1, 52) ?? baseline?.cardsPerPlayer;
-	const initialFaceUpCards =
-		clampInteger(object.initialFaceUpCards, 0, 52) ?? baseline?.initialFaceUpCards;
+	const candidateInitialFaceUpCards = clampInteger(object.initialFaceUpCards, 0, 52);
+	let initialFaceUpCards = candidateInitialFaceUpCards ?? baseline?.initialFaceUpCards;
+	if (initialFaceUpCards !== undefined && cardsPerPlayer !== undefined) {
+		initialFaceUpCards = Math.max(0, Math.min(initialFaceUpCards, cardsPerPlayer));
+	}
+	if (
+		candidateInitialFaceUpCards !== undefined &&
+		cardsPerPlayer !== undefined &&
+		candidateInitialFaceUpCards < cardsPerPlayer &&
+		!allowPartialFaceUpSetup
+	) {
+		initialFaceUpCards = baseline?.initialFaceUpCards;
+	}
 
 	const playerLayoutObject = asObject(object.playerLayout);
 	const rows = clampInteger(playerLayoutObject?.rows, 1, 20);
@@ -277,6 +289,20 @@ function extractSetup(
 		...(playerLayout ? { playerLayout } : {}),
 		...(hasDrawVisibility ? { drawVisibility: mergedDrawVisibility } : {})
 	};
+}
+
+function baselineAllowsPartialFaceUpSetup(baseline: RuleFactsV0): boolean {
+	if (baseline.setup?.initialFaceUpCards !== undefined) {
+		return true;
+	}
+
+	const diagnostics = baseline.diagnostics.map((line) => line.toLowerCase());
+	return diagnostics.some(
+		(line) =>
+			line.includes('hand cards start face down') ||
+			line.includes('cannot be looked at') ||
+			line.includes('remain hidden until revealed')
+	);
 }
 
 function extractSourceDrawRules(
@@ -359,7 +385,11 @@ function normalizeLlmCandidate(raw: unknown, baseline: RuleFactsV0): RuleFactsV0
 		...baseline.diagnostics,
 		...asStringArray(payload.diagnostics)
 	]).slice(0, 24);
-	const setup = extractSetup(payload.setup, baseline.setup);
+	const setup = extractSetup(
+		payload.setup,
+		baseline.setup,
+		baselineAllowsPartialFaceUpSetup(baseline)
+	);
 
 	return {
 		schemaVersion: 'rule-facts/v0',

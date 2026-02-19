@@ -344,4 +344,47 @@ describe('play-surface-model', () => {
 		expect(slotTags).toContain('slot:r2c1');
 		expect(slotTags).toContain('slot:r2c3');
 	});
+
+	test('build_play_surface_view_masks_cards_for_owner_only_seat_visibility', () => {
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['You', 'Riv'], dealerIndex: 0 },
+			{ type: 'deal_cards', playerId: 'You', zone: 'hand', cards: [makeCard('A', 'spades', 'y1')] },
+			{ type: 'deal_cards', playerId: 'Riv', zone: 'hand', cards: [makeCard('7', 'clubs', 'r1')] }
+		];
+
+		const state = deriveGameState(events, createGameplayRulePack({ handZoneName: 'hand' }));
+		const view = buildPlaySurfaceView(state, {
+			selfPlayerId: 'You',
+			handZoneName: 'hand',
+			tableZoneOrder: ['discard'],
+			seatPublicCards: {
+				zoneId: 'hand',
+				label: 'Player Layouts',
+				includeSelf: false,
+				cardVisibility: 'owner_only'
+			}
+		} as unknown as Parameters<typeof buildPlaySurfaceView>[1]);
+
+		const rivCards = view.seats.find((seat) => seat.playerId === 'Riv')?.publicZone?.cards ?? [];
+		expect(rivCards).toHaveLength(1);
+		expect(rivCards[0]?.label).toBe('??');
+	});
+
+	test('build_play_surface_view_masks_self_hand_when_hand_visibility_is_hidden', () => {
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['You', 'Riv'], dealerIndex: 0 },
+			{ type: 'deal_cards', playerId: 'You', zone: 'hand', cards: [makeCard('K', 'hearts', 'y1')] }
+		];
+
+		const state = deriveGameState(events, createGameplayRulePack({ handZoneName: 'hand' }));
+		const view = buildPlaySurfaceView(state, {
+			selfPlayerId: 'You',
+			handZoneName: 'hand',
+			tableZoneOrder: [],
+			handCardVisibility: 'hidden'
+		} as unknown as Parameters<typeof buildPlaySurfaceView>[1]);
+
+		expect(view.hand.cards).toHaveLength(1);
+		expect(view.hand.cards[0]?.label).toBe('??');
+	});
 });

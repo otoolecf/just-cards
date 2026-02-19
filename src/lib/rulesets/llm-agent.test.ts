@@ -240,4 +240,78 @@ describe('llm ruleset generation agent', () => {
 		expect(openAiCalls).toBe(0);
 		expect(generated.diagnostics.some((line) => line.toLowerCase().includes('deterministic'))).toBe(true);
 	});
+
+	it('llm_agent_ignores_spurious_initial_face_up_setup_for_500_rum', async () => {
+		const sourceUrl = 'https://bicyclecards.com/how-to-play/500-rum';
+		const sourceHtml = `
+		<html><body>
+			<h1>500 Rum</h1>
+			<p>Deal seven cards to each player.</p>
+			<p>Place undealt cards face down in the center of the table, forming the stock.</p>
+			<p>The top card is turned face up and placed beside the stock to start discard pile.</p>
+			<p>Players draw from stock or discard and meld sets.</p>
+		</body></html>`;
+
+		const fetchImpl: typeof fetch = async (input, init) => {
+			const url = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
+			if (url === sourceUrl) {
+				return new Response(sourceHtml, {
+					status: 200,
+					headers: { 'content-type': 'text/html; charset=utf-8' }
+				});
+			}
+			if (url === 'https://api.openai.com/v1/chat/completions') {
+				const payload = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+				if (payload.model === 'gpt-5-nano') {
+					return new Response(
+						JSON.stringify({
+							choices: [
+								{
+									message: {
+										content: JSON.stringify({
+											gameName: '500 Rum',
+											players: { min: 2, max: 8 },
+											handZoneName: 'hand',
+											zones: ['stock', 'discard', 'meld'],
+											turn: {
+												drawSources: ['stock', 'discard'],
+												playTargets: ['meld', 'discard']
+											},
+											scoring: {
+												lowScoreWins: false,
+												aceValue: 1,
+												rankOverrides: { J: 10, Q: 10, K: 10 }
+											},
+											setup: {
+												cardsPerPlayer: 7,
+												initialFaceUpCards: 1
+											},
+											diagnostics: []
+										})
+									}
+								}
+							]
+						}),
+						{ status: 200, headers: { 'content-type': 'application/json' } }
+					);
+				}
+			}
+			return new Response('not found', { status: 404 });
+		};
+
+		const generated = await generateRulesetDraftWithAgent(
+			{
+				source: { type: 'url', url: sourceUrl }
+			},
+			{
+				apiKey: 'test-key',
+				fetchImpl,
+				primaryModel: 'gpt-5-nano',
+				fallbackModel: 'gpt-5-mini'
+			}
+		);
+
+		expect(generated.facts.setup?.cardsPerPlayer).toBe(7);
+		expect(generated.facts.setup?.initialFaceUpCards).toBeUndefined();
+	});
 });

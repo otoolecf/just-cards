@@ -10,6 +10,7 @@ This folder holds project planning and architecture docs.
 - [`primitives-kb-v0.md`](./primitives-kb-v0.md): Canonical LLM/SLM primitive catalog for runtime bundle generation.
 - [`ui-profile-v0.md`](./ui-profile-v0.md): Canonical ruleset-driven UI profile primitive contract.
 - [`ui-primitives-v0.md`](./ui-primitives-v0.md): Canonical UI token and accessibility primitive catalog.
+- [`chatgpt-mcp-roadmap-v0.md`](./chatgpt-mcp-roadmap-v0.md): Roadmap for ChatGPT app integration, MCP tools/resources, and skill-guided MCP sampling.
 - [`ruleset-generation-v0.md`](./ruleset-generation-v0.md): End-to-end generation scaffold (`url|text` -> `RuleFacts` -> `runtime-bundle/v1`).
 - [`ruleset-explainability-v0.md`](./ruleset-explainability-v0.md): Human-readable/auditable rules payload contract for layman guide UX.
 - [`ruleset-golden-evals-v0.md`](./ruleset-golden-evals-v0.md): Offline confidence suite for source-link extraction and compile quality gates.
@@ -50,6 +51,8 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-19-gameplay-draw-resolve-policy.md`](./specs/2026-02-19-gameplay-draw-resolve-policy.md): TDD spec for generalized draw-then-resolve turn policy and `cid`-based zone-move identity matching.
 - [`specs/2026-02-19-discard-pickup-and-immediate-use-primitives.md`](./specs/2026-02-19-discard-pickup-and-immediate-use-primitives.md): TDD spec for generalized any-visible discard pickup, contiguous take-above draw batches, and immediate-use anchor resolve rules.
 - [`specs/2026-02-19-play-resolve-button-gating.md`](./specs/2026-02-19-play-resolve-button-gating.md): TDD spec for resolve quick-target disabled-state alignment with anchor/target constraints.
+- [`specs/2026-02-19-visibility-primitives-and-setup-guardrails.md`](./specs/2026-02-19-visibility-primitives-and-setup-guardrails.md): TDD spec for explicit viewer-visibility primitives and 500 Rum/Six Card Golf setup guardrails.
+- [`specs/2026-02-19-mcp-server-scaffold-and-skill-orchestration.md`](./specs/2026-02-19-mcp-server-scaffold-and-skill-orchestration.md): TDD spec for MCP tool/resource scaffold, model-source routing, and skill orchestration modules.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 

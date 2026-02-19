@@ -483,6 +483,35 @@ function detectDrawVisibility(
 	return undefined;
 }
 
+function detectHandFaceDownSetup(text: string): boolean {
+	const lines = text
+		.split(/\n|[.;]/)
+		.map((line) => line.trim().toLowerCase())
+		.filter((line) => line.length > 0);
+
+	for (const line of lines) {
+		const hasFaceDown = /\bface down\b/.test(line);
+		const hasCannotLook = /\bcannot be looked at\b|\bwithout looking\b/.test(line);
+		if (!hasFaceDown && !hasCannotLook) {
+			continue;
+		}
+
+		const handContext =
+			/\beach player\b|\bplayers?\b|\btheir\b|\bthese\b|\bdealt?\b|\bin front of\b|\bremaining cards stay\b/.test(
+				line
+			) || hasCannotLook;
+		const stockOnlyContext = /\bundealt\b|\bstock\b|\bdraw pile\b|\bdeck\b/.test(line);
+		if (handContext) {
+			return true;
+		}
+		if (hasFaceDown && !stockOnlyContext) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 function detectZones(text: string): string[] {
 	const lower = text.toLowerCase();
 	const zones: string[] = [];
@@ -779,7 +808,8 @@ function detectDiagnostics(
 	text: string,
 	zones: string[],
 	setup?: RuleFactsV0['setup'],
-	sourceDrawRules?: RuleFactsV0['turn']['sourceDrawRules']
+	sourceDrawRules?: RuleFactsV0['turn']['sourceDrawRules'],
+	handFaceDownSetup = false
 ): string[] {
 	const diagnostics: string[] = [];
 	const lower = text.toLowerCase();
@@ -805,8 +835,8 @@ function detectDiagnostics(
 	if (faceUpCount !== undefined) {
 		diagnostics.push(`Setup hint: ${faceUpCount} cards start face up.`);
 	}
-	if (/\bface down\b/i.test(text)) {
-		diagnostics.push('Setup hint: some cards start face down and should remain hidden until revealed by play.');
+	if (handFaceDownSetup) {
+		diagnostics.push('Setup hint: hand cards start face down and should remain hidden until revealed by play.');
 	}
 	if (setup?.cardsPerPlayer) {
 		diagnostics.push(`Setup hint: each player starts with ${setup.cardsPerPlayer} cards.`);
@@ -857,6 +887,7 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 	const initialFaceUpCards = detectInitialFaceUpCards(normalizedText, cardsPerPlayer);
 	const playerLayout = detectPlayerGridLayout(normalizedText, cardsPerPlayer);
 	const drawVisibility = detectDrawVisibility(normalizedText, zones);
+	const handFaceDownSetup = detectHandFaceDownSetup(normalizedText);
 	const setup: RuleFactsV0['setup'] =
 		cardsPerPlayer || initialFaceUpCards !== undefined || playerLayout || drawVisibility
 			? {
@@ -866,7 +897,7 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 					...(drawVisibility ? { drawVisibility } : {})
 				}
 			: undefined;
-	const diagnostics = detectDiagnostics(normalizedText, zones, setup, sourceDrawRules);
+	const diagnostics = detectDiagnostics(normalizedText, zones, setup, sourceDrawRules, handFaceDownSetup);
 
 	return {
 		schemaVersion: 'rule-facts/v0',
@@ -1026,6 +1057,7 @@ function patchedUiProfile(
 			zoneId: profile.hand.zoneId,
 			label: profile.hand.label,
 			hint: profile.hand.hint,
+			cardVisibility: 'owner_only',
 			quickPlayTargets: filteredQuickTargets.length > 0 ? filteredQuickTargets : profile.hand.quickPlayTargets,
 			...(setup?.playerLayout ? { layout: setup.playerLayout } : {})
 		},
@@ -1034,6 +1066,7 @@ function patchedUiProfile(
 				...zone,
 				label: COMMON_ZONE_LABELS[zone.id] ?? zone.label,
 				hint: COMMON_ZONE_HINTS[zone.id] ?? zone.hint,
+				cardVisibility: zone.cardVisibility ?? 'public',
 				...(setup?.drawVisibility?.[zone.id]
 					? { drawVisibility: setup.drawVisibility[zone.id] }
 					: {}),
@@ -1053,6 +1086,7 @@ function patchedUiProfile(
 							zoneId: profile.hand.zoneId,
 							label: 'Player Layouts',
 							includeSelf: false,
+							cardVisibility: 'public',
 							layout: setup.playerLayout
 						}
 					}

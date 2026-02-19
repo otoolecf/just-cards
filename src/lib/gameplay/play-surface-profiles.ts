@@ -1,5 +1,6 @@
 import type {
 	UiCardLayout,
+	UiCardVisibilityMode,
 	UiDrawPickMode,
 	UiDrawVisibilityMode,
 	UiPrimaryActionKind,
@@ -24,6 +25,7 @@ export interface PlaySurfaceSeatCardsProfile {
 	zoneId: string;
 	label: string;
 	includeSelf: boolean;
+	cardVisibility?: UiCardVisibilityMode;
 	layout?: UiCardLayout;
 }
 
@@ -145,6 +147,7 @@ export function seatCardsProfileFromUiProfile(
 		zoneId: seatCards.zoneId,
 		label: seatCards.label,
 		includeSelf: seatCards.includeSelf === true,
+		...(seatCards.cardVisibility ? { cardVisibility: seatCards.cardVisibility } : {}),
 		...(seatCards.layout ? { layout: { ...seatCards.layout } } : {})
 	};
 }

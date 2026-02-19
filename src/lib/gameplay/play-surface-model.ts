@@ -1,7 +1,7 @@
 import type { CardLocation, GameEvent, GameplayState } from '$lib/gameplay/engine';
 import type { CardInput } from '$lib/scorekeeper/engine';
 import type { RuntimeRulesetBundle } from '$lib/rulesets/types';
-import type { UiCardLayout } from '$lib/ui/ui-profile';
+import type { UiCardLayout, UiCardVisibilityMode } from '$lib/ui/ui-profile';
 
 const SUIT_SYMBOL: Record<NonNullable<CardInput['suit']>, string> = {
 	clubs: '♣',
@@ -68,10 +68,13 @@ export interface BuildPlaySurfaceViewOptions {
 	includeDiscoveredTableZones?: boolean;
 	zoneLabels?: Record<string, string>;
 	handLayout?: UiCardLayout;
+	handCardVisibility?: UiCardVisibilityMode;
+	tableCardVisibilityByZone?: Partial<Record<string, UiCardVisibilityMode>>;
 	seatPublicCards?: {
 		zoneId: string;
 		label?: string;
 		includeSelf?: boolean;
+		cardVisibility?: UiCardVisibilityMode;
 		layout?: UiCardLayout;
 	};
 }
@@ -196,8 +199,8 @@ export function setCardSlot(card: CardInput, row: number, col: number): CardInpu
 	};
 }
 
-function toCardView(card: CardInput, fallbackKey: string): PlayCardView {
-	const isFaceDown = cardIsFaceDown(card);
+function toCardView(card: CardInput, fallbackKey: string, canRevealToViewer: boolean): PlayCardView {
+	const isFaceDown = cardIsFaceDown(card) || !canRevealToViewer;
 	const suitTone: PlayCardView['suitTone'] = card.suit && RED_SUITS.has(card.suit) ? 'red' : 'dark';
 	const slot = cardSlotFromTags(card);
 	return {
@@ -212,9 +215,23 @@ function toCardView(card: CardInput, fallbackKey: string): PlayCardView {
 	};
 }
 
-function zoneCardsToView(zoneCards: CardInput[], zoneId: string): PlayCardView[] {
+function zoneCardsToView(zoneCards: CardInput[], zoneId: string, canRevealToViewer = true): PlayCardView[] {
 	const ordered = [...zoneCards].sort(compareCardSlots);
-	return ordered.map((card, index) => toCardView(card, `${zoneId}-${index}`));
+	return ordered.map((card, index) => toCardView(card, `${zoneId}-${index}`, canRevealToViewer));
+}
+
+function canRevealCardsToViewer(
+	visibility: UiCardVisibilityMode | undefined,
+	options: { isOwner: boolean }
+): boolean {
+	const mode = visibility ?? 'public';
+	if (mode === 'hidden') {
+		return false;
+	}
+	if (mode === 'owner_only') {
+		return options.isOwner;
+	}
+	return true;
 }
 
 export function cardViewKey(card: CardInput, fallbackKey: string): string {
@@ -239,6 +256,11 @@ export function buildPlaySurfaceView(state: GameplayState, options: BuildPlaySur
 		const publicZoneCards = shouldShowPublicCards
 			? state.playerZones[playerId]?.[seatPublicCards.zoneId] ?? []
 			: [];
+		const seatCardsAreVisible = seatPublicCards
+			? canRevealCardsToViewer(seatPublicCards.cardVisibility, {
+					isOwner: playerId === options.selfPlayerId
+				})
+			: true;
 		return {
 			playerId,
 			handCount: handCards.length,
@@ -253,7 +275,11 @@ export function buildPlaySurfaceView(state: GameplayState, options: BuildPlaySur
 								seatPublicCards.label ??
 								options.zoneLabels?.[seatPublicCards.zoneId] ??
 								toLabel(seatPublicCards.zoneId),
-							cards: zoneCardsToView(publicZoneCards, `${playerId}-${seatPublicCards.zoneId}`),
+							cards: zoneCardsToView(
+								publicZoneCards,
+								`${playerId}-${seatPublicCards.zoneId}`,
+								seatCardsAreVisible
+							),
 							...(seatPublicCards.layout ? { layout: seatPublicCards.layout } : {})
 						}
 					}
@@ -262,10 +288,11 @@ export function buildPlaySurfaceView(state: GameplayState, options: BuildPlaySur
 	});
 
 	const selfHandCards = state.playerZones[options.selfPlayerId]?.[options.handZoneName] ?? [];
+	const selfHandVisible = canRevealCardsToViewer(options.handCardVisibility, { isOwner: true });
 	const hand: PlayZoneView = {
 		zoneId: options.handZoneName,
 		label: options.zoneLabels?.[options.handZoneName] ?? toLabel(options.handZoneName),
-		cards: zoneCardsToView(selfHandCards, options.handZoneName),
+		cards: zoneCardsToView(selfHandCards, options.handZoneName, selfHandVisible),
 		...(options.handLayout ? { layout: options.handLayout } : {})
 	};
 
@@ -285,10 +312,13 @@ export function buildPlaySurfaceView(state: GameplayState, options: BuildPlaySur
 
 	const tableZones: PlayZoneView[] = orderedZoneIds.map((zoneId) => {
 		const cards = state.tableZones[zoneId] ?? [];
+		const tableZoneVisible = canRevealCardsToViewer(options.tableCardVisibilityByZone?.[zoneId], {
+			isOwner: false
+		});
 		return {
 			zoneId,
 			label: options.zoneLabels?.[zoneId] ?? toLabel(zoneId),
-			cards: zoneCardsToView(cards, zoneId)
+			cards: zoneCardsToView(cards, zoneId, tableZoneVisible)
 		};
 	});
 

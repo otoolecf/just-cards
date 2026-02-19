@@ -10,6 +10,7 @@ This document defines the runtime UI profile primitive for ruleset-driven play r
 
 ```ts
 type UiPrimaryActionKind = 'advance_turn' | 'undo' | 'redo' | 'set_phase';
+type UiCardVisibilityMode = 'public' | 'owner_only' | 'hidden';
 
 interface UiProfileV0 {
   schemaVersion: 'ui-profile/v0';
@@ -18,6 +19,7 @@ interface UiProfileV0 {
     label: string;
     hint: string;
     quickPlayTargets: { zoneId: string; visible?: boolean }[];
+    cardVisibility?: UiCardVisibilityMode;
     layout?: {
       kind: 'row' | 'grid';
       rows?: number;
@@ -33,6 +35,7 @@ interface UiProfileV0 {
       allowDrawFromTop?: boolean;
       drawVisibility?: 'reveal' | 'preserve';
       drawPickMode?: 'top' | 'any_visible';
+      cardVisibility?: UiCardVisibilityMode;
     }[];
   };
   actions: {
@@ -51,6 +54,7 @@ interface UiProfileV0 {
       label: string;
       visible?: boolean;
       includeSelf?: boolean;
+      cardVisibility?: UiCardVisibilityMode;
       layout?: {
         kind: 'row' | 'grid';
         rows?: number;
@@ -72,7 +76,8 @@ interface UiProfileV0 {
 4. `layout.kind` must be one of `row|grid`; `grid` requires `columns >= 1`.
 5. `table.zones[*].drawVisibility` (when provided) must be `reveal|preserve`.
 6. `table.zones[*].drawPickMode` (when provided) must be `top|any_visible`.
-7. `seats.cards.zoneId` must match either `hand.zoneId` or a declared table zone.
+7. `hand.cardVisibility`, `table.zones[*].cardVisibility`, and `seats.cards.cardVisibility` (when provided) must be `public|owner_only|hidden`.
+8. `seats.cards.zoneId` must match either `hand.zoneId` or a declared table zone.
 
 ## Generation Defaults
 
@@ -84,6 +89,10 @@ interface UiProfileV0 {
 4. Primary actions: `advance_turn`, `undo`, `redo`.
 5. `drawVisibility` defaults to `reveal` unless overridden in generated/edited profile data.
 6. `drawPickMode` defaults to `top`, and is promoted to `any_visible` when gameplay draw-source policy indicates non-top visible pickup behavior.
+7. Card visibility defaults:
+   - `hand.cardVisibility = owner_only`
+   - `table.zones[*].cardVisibility = public`
+   - `seats.cards.cardVisibility = public` (when seat cards profile exists)
 
 ## Bundle Contract
 

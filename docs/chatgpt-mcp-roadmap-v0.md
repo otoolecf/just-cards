@@ -1,0 +1,113 @@
+# ChatGPT + MCP Roadmap v0
+
+This document defines the implementation roadmap for a ChatGPT-integrated Just Cards experience using MCP tools/resources and MCP sampling.
+
+## Objective
+
+Enable users to:
+
+1. provide a rules URL or prose in chat,
+2. generate auditable `runtime-bundle/v1` rulesets from that input,
+3. open and play those rulesets in the existing Just Cards play surface,
+4. optionally play against an AI seat with server-validated moves.
+
+## Architecture Split
+
+1. `just-cards web app`
+- owns rendering, mobile UX, score/play screens, and room/game state UI.
+
+2. `just-cards backend`
+- owns ruleset persistence, gameplay validation, scoring, and authoritative move application.
+
+3. `just-cards-mcp server`
+- exposes tools and resources so chat agents can use backend capabilities.
+
+4. `chat model runtime (MCP sampling)`
+- performs extraction/repair/ranking using the in-session model/version.
+
+## Skills vs MCP vs MCP Sampling
+
+1. Skills (policy/orchestration)
+- define workflow strategy and quality bars:
+  - extraction sequence,
+  - retry/repair logic,
+  - ambiguity handling,
+  - confidence acceptance thresholds.
+- should not perform side effects directly.
+
+2. MCP (capabilities/data bridge)
+- exposes executable tools and readable resources.
+- is the only layer that performs side effects (create ruleset, start game, submit move).
+
+3. MCP sampling (model reasoning)
+- uses the current in-session model by default for candidate generation and repair loops.
+- consumes primitives/docs/schema context from MCP resources.
+
+## User-Facing Modes
+
+1. Web-first
+- user generates rulesets and plays directly in Just Cards UI.
+
+2. ChatGPT-first
+- user asks ChatGPT app to ingest rules and create game.
+- ChatGPT calls MCP tools, then returns deep links to Just Cards routes.
+
+3. BYO-chatbot MCP
+- user runs another MCP-capable client against `just-cards-mcp`.
+
+## MCP Tool Set (Target)
+
+1. `generate_ruleset`
+2. `validate_ruleset`
+3. `list_rulesets`
+4. `get_ruleset`
+5. `start_game`
+6. `get_game_state`
+7. `submit_move`
+8. `suggest_move`
+
+### Model Source Policy
+
+`generate_ruleset` should support:
+
+1. `model_source: "session"` (default)
+- use MCP sampling and the current in-session model/version.
+
+2. `model_source: "server"` (fallback)
+- use backend-configured models (current nano/mini pipeline) when session sampling is unavailable or explicitly requested.
+
+## MCP Resource Set (Target)
+
+1. primitives KB docs (`rulepack`, `gameplay`, `ui-profile`)
+2. JSON schema artifacts
+3. golden/eval fixture summaries
+4. stored ruleset records
+5. live game snapshots
+
+## Phased Plan
+
+1. Phase 1: Contracts and eval hardening
+- tighten visibility primitives and setup inference for hidden vs visible hands.
+- add deterministic tests for 500 Rum and Six Card Golf visibility/draw semantics.
+
+2. Phase 2: MCP server scaffold
+- ship initial MCP tools/resources backed by existing backend services.
+
+3. Phase 3: skill-guided sampling pipeline
+- add multi-candidate sampling, compile/validate/rank, and repair loops.
+
+4. Phase 4: ChatGPT app integration
+- wire auth and action/MCP transport.
+- provide generate/explain/open-play flows.
+
+5. Phase 5: AI-seat gameplay
+- implement `suggest_move` + validated move-application loop.
+
+6. Phase 6: operational hardening
+- tracing, budgets, fallback behavior, and production guardrails.
+
+## Success Criteria
+
+1. Generated rulesets render with game-appropriate visibility/flow on mobile without manual rule edits.
+2. ChatGPT can generate and open playable rulesets from URL/prose with explainable diagnostics.
+3. AI-assisted move suggestions are always validated by server gameplay rules before state mutation.

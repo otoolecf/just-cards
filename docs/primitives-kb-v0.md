@@ -296,6 +296,7 @@ Generated play UI metadata is modeled with `ui-profile/v0`.
 
 ```ts
 type UiPrimaryActionKind = 'advance_turn' | 'undo' | 'redo' | 'set_phase';
+type UiCardVisibilityMode = 'public' | 'owner_only' | 'hidden';
 
 interface UiProfileV0 {
   schemaVersion: 'ui-profile/v0';
@@ -304,6 +305,7 @@ interface UiProfileV0 {
     label: string;
     hint: string;
     quickPlayTargets: { zoneId: string; visible?: boolean }[];
+    cardVisibility?: UiCardVisibilityMode;
     layout?: {
       kind: 'row' | 'grid';
       rows?: number;
@@ -319,6 +321,7 @@ interface UiProfileV0 {
       allowDrawFromTop?: boolean;
       drawVisibility?: 'reveal' | 'preserve';
       drawPickMode?: 'top' | 'any_visible';
+      cardVisibility?: UiCardVisibilityMode;
     }[];
   };
   actions: {
@@ -337,6 +340,7 @@ interface UiProfileV0 {
       label: string;
       visible?: boolean;
       includeSelf?: boolean;
+      cardVisibility?: UiCardVisibilityMode;
       layout?: {
         kind: 'row' | 'grid';
         rows?: number;
@@ -354,6 +358,10 @@ interface UiProfileV0 {
 - Quick target zones must be legal gameplay targets (`zoneMovePolicy.targetZoneAllowlist`, excluding hand).
 - `set_phase` actions must reference declared gameplay phases.
 - `table.zones[*].drawVisibility = preserve` means draws from that zone should not auto-reveal card identity in client feedback/UI.
+- `cardVisibility` controls viewer policy independent of face tags:
+  - `public`: visible to current viewer (subject to `face:down` tags)
+  - `owner_only`: visible only when current viewer is owner of that zone/cards
+  - `hidden`: always masked to current viewer
 - `seats.cards` describes optional opponent/public card rendering from a zone (often `hand` in hidden-information table games).
 
 ## Rule Generation Output Contract
