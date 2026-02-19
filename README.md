@@ -7,6 +7,7 @@ Mobile-first web app for casual, in-person card gaming.
 - [Inspiration](./docs/inspiration.md)
 - [Architecture Plan](./docs/architecture.md)
 - [Docs Index](./docs/README.md)
+- [MCP OAuth Setup](./docs/mcp-oauth-setup.md)
 
 ## Stack
 
@@ -53,6 +54,21 @@ OPENAI_API_KEY=your-key-here
 RULESET_LLM_PRIMARY_MODEL=gpt-5-nano
 RULESET_LLM_FALLBACK_MODEL=gpt-5-mini
 ```
+
+MCP auth (optional):
+
+```sh
+# simple local token mode
+JUST_CARDS_MCP_AUTH_TOKEN=local-mcp-token
+
+# OAuth JWT mode (production-style; requires issuer/JWKS)
+JUST_CARDS_MCP_OAUTH_ISSUER=https://your-auth.example.com
+JUST_CARDS_MCP_OAUTH_JWKS_URL=https://your-auth.example.com/.well-known/jwks.json
+JUST_CARDS_MCP_OAUTH_AUDIENCE=just-cards-mcp
+JUST_CARDS_MCP_OAUTH_REQUIRED_SCOPES="mcp:tools mcp:resources"
+```
+
+See full guide: [MCP OAuth Setup](./docs/mcp-oauth-setup.md)
 
 Generation and play-loader server logs are emitted as structured lines prefixed with `[just-cards]` for easier debugging.
 

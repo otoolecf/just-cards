@@ -11,6 +11,7 @@ This folder holds project planning and architecture docs.
 - [`ui-profile-v0.md`](./ui-profile-v0.md): Canonical ruleset-driven UI profile primitive contract.
 - [`ui-primitives-v0.md`](./ui-primitives-v0.md): Canonical UI token and accessibility primitive catalog.
 - [`chatgpt-mcp-roadmap-v0.md`](./chatgpt-mcp-roadmap-v0.md): Roadmap for ChatGPT app integration, MCP tools/resources, and skill-guided MCP sampling.
+- [`mcp-oauth-setup.md`](./mcp-oauth-setup.md): Practical setup guide for shared-token mode and OAuth JWT mode (issuer/JWKS/audience/scope) for MCP endpoints.
 - [`ruleset-generation-v0.md`](./ruleset-generation-v0.md): End-to-end generation scaffold (`url|text` -> `RuleFacts` -> `runtime-bundle/v1`).
 - [`ruleset-explainability-v0.md`](./ruleset-explainability-v0.md): Human-readable/auditable rules payload contract for layman guide UX.
 - [`ruleset-golden-evals-v0.md`](./ruleset-golden-evals-v0.md): Offline confidence suite for source-link extraction and compile quality gates.

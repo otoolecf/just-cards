@@ -5,3 +5,17 @@
 # OPENAI_API_KEY=your-key-here
 # RULESET_LLM_PRIMARY_MODEL=gpt-5-nano
 # RULESET_LLM_FALLBACK_MODEL=gpt-5-mini
+#
+# MCP auth (choose one mode):
+#
+# Shared token mode:
+# JUST_CARDS_MCP_AUTH_TOKEN=local-mcp-token
+#
+# OAuth JWT mode:
+# JUST_CARDS_MCP_OAUTH_ISSUER=https://your-auth.example.com
+# JUST_CARDS_MCP_OAUTH_JWKS_URL=https://your-auth.example.com/.well-known/jwks.json
+# JUST_CARDS_MCP_OAUTH_AUDIENCE=just-cards-mcp
+# JUST_CARDS_MCP_OAUTH_REQUIRED_SCOPES=mcp:tools mcp:resources
+# JUST_CARDS_MCP_OAUTH_REALM=just-cards-mcp
+# JUST_CARDS_MCP_OAUTH_ALLOWED_ALGS=RS256
+# JUST_CARDS_MCP_OAUTH_CLOCK_SKEW_SECONDS=60
