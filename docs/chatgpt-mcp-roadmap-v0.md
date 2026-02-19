@@ -121,7 +121,15 @@ Delivered endpoints:
 - `GET /api/mcp/resources` (`?uri=...` for read)
 - `POST /api/mcp/call` (`{ tool, args, trace_id? }`)
 
-2. Chat action endpoint (auth-aware):
+2. MCP SSE transport endpoints (auth-aware):
+- `GET /api/mcp/sse` (legacy SSE session stream with endpoint event)
+- `POST /api/mcp/messages?sessionId=...` (JSON-RPC request ingress, SSE response egress)
+
+3. OAuth protected resource metadata:
+- `GET /.well-known/oauth-protected-resource`
+- returns `resource`, `authorization_servers`, `scopes_supported`, and bearer metadata for MCP resource discovery.
+
+4. Chat action endpoint (auth-aware):
 - `POST /api/chat/actions`
 - actions:
   - `create_from_url`
@@ -129,7 +137,7 @@ Delivered endpoints:
   - `open_playable_table`
   - `ask_next_move`
 
-3. AI seat + hardening primitives:
+5. AI seat + hardening primitives:
 - `start_game` supports optional `ai_seats`
 - `get_game_state` returns `aiSeats`
 - `suggest_move` supports `mode` (`coach|opponent|dealer_narrator`) and returns legal suggestions only
@@ -139,6 +147,12 @@ Delivered endpoints:
 Environment controls:
 
 1. `JUST_CARDS_MCP_AUTH_TOKEN` (when set, MCP/action routes require bearer token)
-2. `JUST_CARDS_MCP_MAX_SOURCE_CHARS` (default `24000`)
-3. `JUST_CARDS_MCP_MAX_SERVER_RETRIES` (default `1`)
-4. `JUST_CARDS_MCP_MAX_TOOL_CALLS_PER_TRACE` (default `32`)
+2. OAuth JWT mode:
+- `JUST_CARDS_MCP_OAUTH_ISSUER` (enables OAuth JWT validation mode)
+- `JUST_CARDS_MCP_OAUTH_JWKS_URL` (optional, defaults to `{issuer}/.well-known/jwks.json`)
+- `JUST_CARDS_MCP_OAUTH_AUDIENCE` (optional expected `aud`)
+- `JUST_CARDS_MCP_OAUTH_REQUIRED_SCOPES` (defaults to `mcp:tools mcp:resources`)
+- `JUST_CARDS_MCP_OAUTH_REALM` (optional bearer challenge realm)
+3. `JUST_CARDS_MCP_MAX_SOURCE_CHARS` (default `24000`)
+4. `JUST_CARDS_MCP_MAX_SERVER_RETRIES` (default `1`)
+5. `JUST_CARDS_MCP_MAX_TOOL_CALLS_PER_TRACE` (default `32`)

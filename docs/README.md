@@ -53,6 +53,7 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-19-play-resolve-button-gating.md`](./specs/2026-02-19-play-resolve-button-gating.md): TDD spec for resolve quick-target disabled-state alignment with anchor/target constraints.
 - [`specs/2026-02-19-visibility-primitives-and-setup-guardrails.md`](./specs/2026-02-19-visibility-primitives-and-setup-guardrails.md): TDD spec for explicit viewer-visibility primitives and 500 Rum/Six Card Golf setup guardrails.
 - [`specs/2026-02-19-mcp-server-scaffold-and-skill-orchestration.md`](./specs/2026-02-19-mcp-server-scaffold-and-skill-orchestration.md): TDD spec for MCP tool/resource scaffold, model-source routing, and skill orchestration modules.
+- [`specs/2026-02-19-mcp-sse-oauth-resource-server.md`](./specs/2026-02-19-mcp-sse-oauth-resource-server.md): TDD spec for standards-aligned MCP SSE transport and OAuth bearer-token resource-server auth.
 - [`specs/2026-02-19-scorekeeper-guided-raw-ruleset-scoring.md`](./specs/2026-02-19-scorekeeper-guided-raw-ruleset-scoring.md): TDD spec for guided-vs-raw score setup, ruleset-driven zone scoring inputs, and win-direction session metadata.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.

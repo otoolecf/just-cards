@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDefaultMcpServer } from '$lib/mcp/default-server';
-import { getMcpAuthToken, isAuthorizedMcpRequest } from '$lib/mcp/auth';
+import { authorizeMcpRequest } from '$lib/mcp/auth';
 import type { McpToolName } from '$lib/mcp/types';
 
 interface McpCallPayload {
@@ -28,9 +28,15 @@ function isMcpToolName(name: string): name is McpToolName {
 }
 
 export const POST: RequestHandler = async ({ request, fetch }) => {
-	const token = getMcpAuthToken();
-	if (!isAuthorizedMcpRequest(request, token)) {
-		return json({ error: 'unauthorized' }, { status: 401 });
+	const auth = await authorizeMcpRequest(request, { fetchImpl: fetch });
+	if (!auth.ok) {
+		return json(
+			{
+				error: auth.error,
+				error_description: auth.errorDescription
+			},
+			{ status: auth.status, headers: auth.headers }
+		);
 	}
 
 	const payload = (await request.json().catch(() => ({}))) as McpCallPayload;

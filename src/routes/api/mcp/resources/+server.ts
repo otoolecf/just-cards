@@ -1,16 +1,22 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDefaultMcpServer } from '$lib/mcp/default-server';
-import { getMcpAuthToken, isAuthorizedMcpRequest } from '$lib/mcp/auth';
+import { authorizeMcpRequest } from '$lib/mcp/auth';
 
 function randomTraceId(): string {
 	return `trace-${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}`;
 }
 
 export const GET: RequestHandler = async ({ request, url, fetch }) => {
-	const token = getMcpAuthToken();
-	if (!isAuthorizedMcpRequest(request, token)) {
-		return json({ error: 'unauthorized' }, { status: 401 });
+	const auth = await authorizeMcpRequest(request, { fetchImpl: fetch });
+	if (!auth.ok) {
+		return json(
+			{
+				error: auth.error,
+				error_description: auth.errorDescription
+			},
+			{ status: auth.status, headers: auth.headers }
+		);
 	}
 
 	const traceId = randomTraceId();
