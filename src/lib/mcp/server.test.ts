@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createRulesetStore } from '$lib/rulesets/store';
 import { createRulesetService } from '$lib/rulesets/service';
 import { createJustCardsMcpServer, type CreateJustCardsMcpServerOptions } from './server';
+import { InMemoryMcpAuditLog } from './audit-log';
 import type {
 	McpGenerateRulesetResult,
 	McpGetGameStateResult,
@@ -123,6 +124,118 @@ describe('mcp server scaffold', () => {
 		expect(before.gameId).toBe(started.gameId);
 		expect(submitted.accepted).toBe(true);
 		expect(after.events.length).toBe(before.events.length + 1);
+	});
+
+	it('mcp_server_start_game_persists_ai_seats_and_get_game_state_returns_them', async () => {
+		const server = await createServer();
+		const generated = (await server.callTool('generate_ruleset', {
+			source: { type: 'text', text: RUMMY_TEXT },
+			model_source: 'server'
+		})) as McpGenerateRulesetResult;
+
+		const started = (await server.callTool('start_game', {
+			ruleset_id: generated.ruleset.id,
+			players: ['You', 'Riv', 'Mina'],
+			ai_seats: [{ playerId: 'Riv', mode: 'opponent' }]
+		})) as McpStartGameResult & { aiSeats?: Array<{ playerId: string; mode: string }> };
+
+		const state = (await server.callTool('get_game_state', {
+			game_id: started.gameId
+		})) as McpGetGameStateResult & { aiSeats?: Array<{ playerId: string; mode: string }> };
+
+		expect(started.aiSeats).toEqual([{ playerId: 'Riv', mode: 'opponent' }]);
+		expect(state.aiSeats).toEqual([{ playerId: 'Riv', mode: 'opponent' }]);
+	});
+
+	it('mcp_suggest_move_returns_legal_event_for_requested_mode', async () => {
+		const server = await createServer();
+		const generated = (await server.callTool('generate_ruleset', {
+			source: { type: 'text', text: RUMMY_TEXT },
+			model_source: 'server'
+		})) as McpGenerateRulesetResult;
+		const started = (await server.callTool('start_game', {
+			ruleset_id: generated.ruleset.id,
+			players: ['You', 'Riv', 'Mina'],
+			ai_seats: [{ playerId: 'Riv', mode: 'opponent' }]
+		})) as McpStartGameResult;
+
+		const suggestion = (await server.callTool('suggest_move', {
+			game_id: started.gameId,
+			mode: 'dealer_narrator'
+		})) as McpSuggestMoveResult & { mode?: string; actorId?: string };
+		expect(suggestion.mode).toBe('dealer_narrator');
+		expect(typeof suggestion.actorId).toBe('string');
+
+		const submitted = (await server.callTool('submit_move', {
+			game_id: started.gameId,
+			event: suggestion.event
+		})) as McpSubmitMoveResult;
+		expect(submitted.accepted).toBe(true);
+	});
+
+	it('mcp_generate_ruleset_enforces_source_budget_and_retries_then_fallback', async () => {
+		const openAiCalls: string[] = [];
+		const fetchImpl: typeof fetch = async (input, init) => {
+			const url = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
+			if (url === 'https://api.openai.com/v1/chat/completions') {
+				openAiCalls.push(String(init?.body ?? ''));
+				return new Response('upstream error', { status: 500 });
+			}
+			return new Response('ok', { status: 200, headers: { 'content-type': 'text/plain' } });
+		};
+
+		const budgetServer = await createServer({
+			generationBudget: {
+				maxSourceChars: 64
+			}
+		});
+		await expect(
+			budgetServer.callTool('generate_ruleset', {
+				source: {
+					type: 'text',
+					text: 'x'.repeat(128)
+				}
+			})
+		).rejects.toThrow(/maxSourceChars/i);
+
+		const retryServer = await createServer({
+			fetchImpl,
+			serverAgent: {
+				apiKey: 'test-openai-key',
+				primaryModel: 'gpt-5-nano',
+				fallbackModel: 'gpt-5-nano'
+			},
+			generationBudget: {
+				maxServerRetries: 1
+			}
+		});
+		const generated = (await retryServer.callTool('generate_ruleset', {
+			source: { type: 'text', text: RUMMY_TEXT },
+			model_source: 'server'
+		})) as McpGenerateRulesetResult;
+
+		expect(openAiCalls.length).toBeGreaterThanOrEqual(2);
+		expect(generated.generation.usedModelSource).toBe('server');
+		expect(generated.generation.deterministicFallback).toBe(true);
+	});
+
+	it('mcp_audit_log_records_tool_calls_with_trace_id', async () => {
+		const auditLog = new InMemoryMcpAuditLog({ maxEntries: 20 });
+		const server = await createServer({ auditLog });
+		await server.callTool('list_rulesets', {}, { traceId: 'trace-audit-1' });
+		await server.callTool(
+			'generate_ruleset',
+			{
+				source: { type: 'text', text: RUMMY_TEXT },
+				model_source: 'server'
+			},
+			{ traceId: 'trace-audit-2' }
+		);
+
+		const entries = auditLog.list();
+		expect(entries.length).toBeGreaterThanOrEqual(2);
+		expect(entries.some((entry) => entry.traceId === 'trace-audit-1' && entry.tool === 'list_rulesets')).toBe(true);
+		expect(entries.some((entry) => entry.traceId === 'trace-audit-2' && entry.status === 'ok')).toBe(true);
 	});
 
 	it('mcp_resources_include_live_ruleset_and_game_snapshots', async () => {

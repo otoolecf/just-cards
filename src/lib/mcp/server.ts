@@ -23,8 +23,13 @@ import { evaluateRulesetBundleConfidence } from '$lib/rulesets/confidence';
 import type { RulesetService } from '$lib/rulesets/service';
 import type { RulesetRecord, RuntimeRulesetBundle } from '$lib/rulesets/types';
 import rulePackSchema from '$lib/scorekeeper/rulepack-schema.json';
+import { logServerEvent } from '$lib/server/log';
+import { InMemoryMcpAuditLog, type McpAuditLog } from './audit-log';
 import { InMemoryMcpGameStore, type McpGameStore } from './game-store';
 import type {
+	McpAiMode,
+	McpAiSeatConfig,
+	McpGenerationBudget,
 	McpGenerateRulesetArgs,
 	McpGenerateRulesetResult,
 	McpGetGameStateArgs,
@@ -40,6 +45,7 @@ import type {
 	McpSuggestMoveArgs,
 	McpSuggestMoveResult,
 	McpToolDefinition,
+	McpToolCallMeta,
 	McpToolName,
 	McpValidateRulesetArgs,
 	McpValidateRulesetResult
@@ -85,6 +91,12 @@ const STATIC_RESOURCES: McpResourceDefinition[] = [
 		uri: 'just-cards://examples/ruleset/500-rum',
 		name: 'Example Bundle: 500 Rum',
 		description: 'Sample runtime bundle generated from 500-rum-style rules text.',
+		mimeType: 'application/json'
+	},
+	{
+		uri: 'just-cards://audit/recent',
+		name: 'Recent MCP Audit Events',
+		description: 'Recent MCP tool-call audit entries (sanitized).',
 		mimeType: 'application/json'
 	}
 ];
@@ -194,9 +206,68 @@ function summarizeValidationIssues(issues: string[]): string {
 	return issues.length === 0 ? 'none' : issues.join(', ');
 }
 
+function randomTraceId(): string {
+	return `trace-${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}`;
+}
+
+function sanitizeMode(mode: unknown): McpAiMode {
+	if (mode === 'coach' || mode === 'opponent' || mode === 'dealer_narrator') {
+		return mode;
+	}
+	return 'coach';
+}
+
+function normalizeAiSeats(players: string[], aiSeats: McpStartGameArgs['ai_seats']): McpAiSeatConfig[] {
+	const normalized: McpAiSeatConfig[] = [];
+	for (const entry of aiSeats ?? []) {
+		const playerId = typeof entry.playerId === 'string' ? entry.playerId.trim() : '';
+		if (!playerId || !players.includes(playerId) || normalized.some((seat) => seat.playerId === playerId)) {
+			continue;
+		}
+		normalized.push({
+			playerId,
+			mode: sanitizeMode(entry.mode)
+		});
+	}
+	return normalized;
+}
+
+function legalSuggestionReason(mode: McpAiMode, baseReason: string): string {
+	switch (mode) {
+		case 'dealer_narrator':
+			return `Dealer: ${baseReason}`;
+		case 'opponent':
+			return `Opponent: ${baseReason}`;
+		case 'coach':
+		default:
+			return `Coach: ${baseReason}`;
+	}
+}
+
+function summarizeToolArgs(name: McpToolName, args: Record<string, unknown>): string {
+	if (name === 'generate_ruleset') {
+		const source = isRecord(args.source) ? args.source : undefined;
+		const sourceType = typeof source?.type === 'string' ? source.type : 'unknown';
+		return `sourceType=${sourceType}`;
+	}
+	if (name === 'start_game') {
+		const playerCount = Array.isArray(args.players) ? args.players.length : 0;
+		const aiSeatCount = Array.isArray(args.ai_seats) ? args.ai_seats.length : 0;
+		return `players=${playerCount},aiSeats=${aiSeatCount}`;
+	}
+	if (name === 'submit_move') {
+		const event = isRecord(args.event) ? args.event : undefined;
+		const eventType = typeof event?.type === 'string' ? event.type : 'unknown';
+		return `eventType=${eventType}`;
+	}
+	return 'ok';
+}
+
 export interface CreateJustCardsMcpServerOptions {
 	rulesetService: RulesetService;
 	gameStore?: McpGameStore;
+	auditLog?: McpAuditLog;
+	generationBudget?: McpGenerationBudget;
 	sessionSampler?: McpSessionSampler;
 	fetchImpl?: typeof fetch;
 	serverAgent?: Pick<
@@ -208,16 +279,21 @@ export interface CreateJustCardsMcpServerOptions {
 export class JustCardsMcpServer {
 	private readonly rulesetService: RulesetService;
 	private readonly gameStore: McpGameStore;
+	private readonly auditLog: McpAuditLog;
+	private readonly generationBudget: McpGenerationBudget;
 	private readonly sessionSampler?: McpSessionSampler;
 	private readonly fetchImpl?: typeof fetch;
 	private readonly serverAgent: Pick<
 		GenerateRulesetWithAgentOptions,
 		'apiKey' | 'primaryModel' | 'fallbackModel'
 	>;
+	private readonly traceToolCounts = new Map<string, number>();
 
 	constructor(options: CreateJustCardsMcpServerOptions) {
 		this.rulesetService = options.rulesetService;
 		this.gameStore = options.gameStore ?? new InMemoryMcpGameStore();
+		this.auditLog = options.auditLog ?? new InMemoryMcpAuditLog();
+		this.generationBudget = options.generationBudget ?? {};
 		this.sessionSampler = options.sessionSampler;
 		this.fetchImpl = options.fetchImpl;
 		this.serverAgent = options.serverAgent ?? {};
@@ -288,6 +364,15 @@ export class JustCardsMcpServer {
 				)
 			};
 		}
+		if (uri === 'just-cards://audit/recent') {
+			return {
+				uri,
+				mimeType: 'application/json',
+				json: {
+					entries: this.auditLog.list(100)
+				}
+			};
+		}
 		if (uri.startsWith('just-cards://rulesets/')) {
 			const rulesetId = uri.slice('just-cards://rulesets/'.length).trim();
 			const ruleset = await this.rulesetService.getById(rulesetId);
@@ -308,26 +393,82 @@ export class JustCardsMcpServer {
 		throw new Error(`Unknown resource "${uri}"`);
 	}
 
-	async callTool(name: McpToolName, args: Record<string, unknown> = {}): Promise<unknown> {
-		switch (name) {
-			case 'generate_ruleset':
-				return this.generateRuleset(args as unknown as McpGenerateRulesetArgs);
-			case 'validate_ruleset':
-				return this.validateRuleset(args as unknown as McpValidateRulesetArgs);
-			case 'list_rulesets':
-				return this.listRulesets();
-			case 'get_ruleset':
-				return this.getRuleset(args);
-			case 'start_game':
-				return this.startGame(args as unknown as McpStartGameArgs);
-			case 'get_game_state':
-				return this.getGameState(args as unknown as McpGetGameStateArgs);
-			case 'submit_move':
-				return this.submitMove(args as unknown as McpSubmitMoveArgs);
-			case 'suggest_move':
-				return this.suggestMove(args as unknown as McpSuggestMoveArgs);
-			default:
-				throw new Error(`Unknown tool "${name}"`);
+	async callTool(
+		name: McpToolName,
+		args: Record<string, unknown> = {},
+		meta: McpToolCallMeta = {}
+	): Promise<unknown> {
+		const traceId = meta.traceId?.trim() || randomTraceId();
+		const startedAt = Date.now();
+		const maxToolCallsPerTrace = this.generationBudget.maxToolCallsPerTrace;
+		if (typeof maxToolCallsPerTrace === 'number' && maxToolCallsPerTrace > 0) {
+			const current = this.traceToolCounts.get(traceId) ?? 0;
+			const next = current + 1;
+			this.traceToolCounts.set(traceId, next);
+			if (next > maxToolCallsPerTrace) {
+				throw new Error(`tool call budget exceeded for trace ${traceId}`);
+			}
+		}
+
+		logServerEvent('mcp_tool_call_start', {
+			traceId,
+			tool: name,
+			args: summarizeToolArgs(name, args)
+		});
+
+		try {
+			let result: unknown;
+			switch (name) {
+				case 'generate_ruleset':
+					result = await this.generateRuleset(args as unknown as McpGenerateRulesetArgs);
+					break;
+				case 'validate_ruleset':
+					result = await this.validateRuleset(args as unknown as McpValidateRulesetArgs);
+					break;
+				case 'list_rulesets':
+					result = await this.listRulesets();
+					break;
+				case 'get_ruleset':
+					result = await this.getRuleset(args);
+					break;
+				case 'start_game':
+					result = await this.startGame(args as unknown as McpStartGameArgs);
+					break;
+				case 'get_game_state':
+					result = await this.getGameState(args as unknown as McpGetGameStateArgs);
+					break;
+				case 'submit_move':
+					result = await this.submitMove(args as unknown as McpSubmitMoveArgs);
+					break;
+				case 'suggest_move':
+					result = await this.suggestMove(args as unknown as McpSuggestMoveArgs);
+					break;
+				default:
+					throw new Error(`Unknown tool "${name}"`);
+			}
+
+			const durationMs = Date.now() - startedAt;
+			this.auditLog.append({
+				traceId,
+				tool: name,
+				status: 'ok',
+				durationMs,
+				details: summarizeToolArgs(name, args)
+			});
+			logServerEvent('mcp_tool_call_success', { traceId, tool: name, durationMs });
+			return result;
+		} catch (error) {
+			const durationMs = Date.now() - startedAt;
+			const message = error instanceof Error ? error.message : 'tool call failed';
+			this.auditLog.append({
+				traceId,
+				tool: name,
+				status: 'error',
+				durationMs,
+				details: message
+			});
+			logServerEvent('mcp_tool_call_error', { traceId, tool: name, durationMs, error: message }, 'error');
+			throw error;
 		}
 	}
 
@@ -338,6 +479,7 @@ export class JustCardsMcpServer {
 			...(args.name ? { name: args.name } : {}),
 			...(args.notes ? { notes: args.notes } : {})
 		};
+		this.assertGenerateSourceBudget(baseInput.source);
 
 		let fallbackReason: string | undefined;
 		if (requestedModelSource === 'session') {
@@ -360,43 +502,91 @@ export class JustCardsMcpServer {
 			}
 		}
 
-		try {
-			const generated = await generateRulesetDraftWithAgent(baseInput, {
-				fetchImpl: this.fetchImpl,
-				...this.serverAgent
-			});
-			const ruleset = await this.rulesetService.createDraft(generated.draft);
-			return {
-				ruleset,
-				facts: generated.facts,
-				diagnostics: generated.diagnostics,
-				generation: {
-					requestedModelSource,
-					usedModelSource: 'server',
-					deterministicFallback: generated.pipeline.strategy === 'deterministic',
-					...(fallbackReason ? { fallbackReason } : {}),
-					pipeline: generated.pipeline
+		const maxServerRetries = Math.max(0, this.generationBudget.maxServerRetries ?? 0);
+		for (let attempt = 0; attempt <= maxServerRetries; attempt += 1) {
+			try {
+				const generated = await generateRulesetDraftWithAgent(baseInput, {
+					fetchImpl: this.fetchImpl,
+					maxSourceChars: this.generationBudget.maxSourceChars,
+					...this.serverAgent
+				});
+				const shouldRetryDeterministic =
+					generated.pipeline.strategy === 'deterministic' &&
+					(this.serverAgent.apiKey?.trim().length ?? 0) > 0 &&
+					attempt < maxServerRetries;
+				if (shouldRetryDeterministic) {
+					continue;
 				}
-			};
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'server model generation failed';
-			const deterministic = await generateRulesetDraftFromInput(baseInput, {
-				fetchImpl: this.fetchImpl
-			});
-			const ruleset = await this.rulesetService.createDraft(deterministic.draft);
-			return {
-				ruleset,
-				facts: deterministic.facts,
-				diagnostics: deterministic.diagnostics,
-				generation: {
-					requestedModelSource,
-					usedModelSource: 'server',
-					deterministicFallback: true,
-					fallbackReason: fallbackReason
-						? `${fallbackReason}; server:${message}`
-						: `server:${message}`
+				const ruleset = await this.rulesetService.createDraft(generated.draft);
+				return {
+					ruleset,
+					facts: generated.facts,
+					diagnostics: generated.diagnostics,
+					generation: {
+						requestedModelSource,
+						usedModelSource: 'server',
+						deterministicFallback: generated.pipeline.strategy === 'deterministic',
+						...(fallbackReason ? { fallbackReason } : {}),
+						pipeline: generated.pipeline
+					}
+				};
+			} catch (error) {
+				const canRetry = attempt < maxServerRetries;
+				if (canRetry) {
+					continue;
 				}
-			};
+				const message = error instanceof Error ? error.message : 'server model generation failed';
+				const deterministic = await generateRulesetDraftFromInput(baseInput, {
+					fetchImpl: this.fetchImpl,
+					maxSourceChars: this.generationBudget.maxSourceChars
+				});
+				const ruleset = await this.rulesetService.createDraft(deterministic.draft);
+				return {
+					ruleset,
+					facts: deterministic.facts,
+					diagnostics: deterministic.diagnostics,
+					generation: {
+						requestedModelSource,
+						usedModelSource: 'server',
+						deterministicFallback: true,
+						fallbackReason: fallbackReason
+							? `${fallbackReason}; server:${message}`
+							: `server:${message}`
+					}
+				};
+			}
+		}
+
+		// Defensive fallback; control flow above should always return.
+		const deterministic = await generateRulesetDraftFromInput(baseInput, {
+			fetchImpl: this.fetchImpl,
+			maxSourceChars: this.generationBudget.maxSourceChars
+		});
+		const ruleset = await this.rulesetService.createDraft(deterministic.draft);
+		return {
+			ruleset,
+			facts: deterministic.facts,
+			diagnostics: deterministic.diagnostics,
+			generation: {
+				requestedModelSource,
+				usedModelSource: 'server',
+				deterministicFallback: true,
+				...(fallbackReason ? { fallbackReason } : {})
+			}
+		};
+	}
+
+	private assertGenerateSourceBudget(source: GenerateRulesetInput['source']): void {
+		const maxSourceChars = this.generationBudget.maxSourceChars;
+		if (typeof maxSourceChars !== 'number' || maxSourceChars <= 0) {
+			return;
+		}
+		if (source.type !== 'text') {
+			return;
+		}
+		const length = source.text.trim().length;
+		if (length > maxSourceChars) {
+			throw new Error(`maxSourceChars budget exceeded (${length} > ${maxSourceChars})`);
 		}
 	}
 
@@ -404,7 +594,10 @@ export class JustCardsMcpServer {
 		if (!this.sessionSampler) {
 			throw new Error('session sampler is not configured');
 		}
-		const source = await ingestSource(baseInput.source, { fetchImpl: this.fetchImpl });
+		const source = await ingestSource(baseInput.source, {
+			fetchImpl: this.fetchImpl,
+			maxSourceChars: this.generationBudget.maxSourceChars
+		});
 		const baselineFacts = extractRuleFacts({
 			sourceText: source.text,
 			sourceType: source.type,
@@ -489,6 +682,7 @@ export class JustCardsMcpServer {
 
 		const players = uniquePlayers(args.players);
 		const resolvedPlayers = players.length >= 2 ? players : ['You', 'Riv', 'Mina'];
+		const aiSeats = normalizeAiSeats(resolvedPlayers, args.ai_seats);
 		const events = buildRulesetPlayEvents(resolvedPlayers, ruleset.bundle);
 		const rulePack = ruleset.bundle.runtimeRulePack.gameplayRulePack ?? createGameplayRulePack();
 		const state = deriveGameState(events, rulePack, { strictValidation: true });
@@ -499,7 +693,8 @@ export class JustCardsMcpServer {
 			gameId: args.game_id,
 			rulesetId: ruleset.id,
 			players: resolvedPlayers,
-			events
+			events,
+			aiSeats
 		});
 
 		return {
@@ -508,7 +703,8 @@ export class JustCardsMcpServer {
 			players: resolvedPlayers,
 			eventCount: events.length,
 			phase: state.phase,
-			currentTurnPlayer: actorIdForState(state)
+			currentTurnPlayer: actorIdForState(state),
+			aiSeats: structuredClone(aiSeats)
 		};
 	}
 
@@ -533,7 +729,8 @@ export class JustCardsMcpServer {
 			rulesetId: snapshot.rulesetId,
 			players: [...snapshot.players],
 			events: structuredClone(snapshot.events),
-			state
+			state,
+			aiSeats: structuredClone(snapshot.aiSeats)
 		};
 	}
 
@@ -597,14 +794,37 @@ export class JustCardsMcpServer {
 			);
 		}
 
-		const actorId = actorIdForState(state);
-		if (!actorId) {
+		const mode = sanitizeMode(args.mode);
+		const actorId =
+			(typeof args.actor_id === 'string' && args.actor_id.trim().length > 0
+				? args.actor_id.trim()
+				: actorIdForState(state)) ?? '';
+		if (!actorId || !snapshot.players.includes(actorId)) {
 			return {
 				gameId,
 				event: { type: 'advance_turn' },
-				reason: 'No active player found; advance turn as a safe fallback.'
+				reason: legalSuggestionReason(mode, 'No active player found; advance turn as a safe fallback.'),
+				mode
 			};
 		}
+
+		const isLegal = (event: GameEvent): boolean => {
+			const candidate = deriveGameState([...snapshot.events, event], rulePack, {
+				strictValidation: true
+			});
+			return (candidate.validationIssues?.length ?? 0) === 0;
+		};
+
+		const legalCandidate = (
+			candidates: Array<{ event: GameEvent; reason: string }>
+		): { event: GameEvent; reason: string } | undefined => {
+			for (const candidate of candidates) {
+				if (isLegal(candidate.event)) {
+					return candidate;
+				}
+			}
+			return undefined;
+		};
 
 		const handZone = rulePack.handZoneName;
 		const policy =
@@ -615,13 +835,13 @@ export class JustCardsMcpServer {
 		const pendingDraw = state.turnActionState?.pendingDrawByPlayer?.[actorId] === true;
 
 		if (policy && !pendingDraw) {
+			const candidates: Array<{ event: GameEvent; reason: string }> = [];
 			for (const zoneId of policy.drawFromZoneAllowlist) {
 				const card = topCard(state.tableZones[zoneId] ?? []);
 				if (!card) {
 					continue;
 				}
-				return {
-					gameId,
+				candidates.push({
 					event: {
 						type: 'zone_move',
 						actorId,
@@ -630,6 +850,16 @@ export class JustCardsMcpServer {
 						cards: [card]
 					},
 					reason: `Draw from ${zoneId} to start the turn flow.`
+				});
+			}
+			const selected = legalCandidate(candidates);
+			if (selected) {
+				return {
+					gameId,
+					event: selected.event,
+					reason: legalSuggestionReason(mode, selected.reason),
+					mode,
+					actorId
 				};
 			}
 		}
@@ -646,17 +876,25 @@ export class JustCardsMcpServer {
 				requiredTargets.find((zoneId) => policy.resolveToZoneAllowlist.includes(zoneId)) ??
 				policy.resolveToZoneAllowlist[0];
 			if (card && targetZone) {
-				return {
-					gameId,
-					event: {
+				const event: GameEvent = {
 						type: 'zone_move',
 						actorId,
 						from: { kind: 'player', playerId: actorId, zone: handZone },
 						to: { kind: 'table', zone: targetZone },
 						cards: [card]
-					},
-					reason: `Resolve pending draw by moving a hand card to ${targetZone}.`
-				};
+					};
+				if (isLegal(event)) {
+					return {
+						gameId,
+						event,
+						reason: legalSuggestionReason(
+							mode,
+							`Resolve pending draw by moving a hand card to ${targetZone}.`
+						),
+						mode,
+						actorId
+					};
+				}
 			}
 		}
 
@@ -665,24 +903,36 @@ export class JustCardsMcpServer {
 			(zoneId) => zoneId !== handZone
 		);
 		if (fallbackCard && fallbackTarget) {
-			return {
-				gameId,
-				event: {
+			const event: GameEvent = {
 					type: 'zone_move',
 					actorId,
 					from: { kind: 'player', playerId: actorId, zone: handZone },
 					to: { kind: 'table', zone: fallbackTarget },
 					cards: [fallbackCard]
-				},
-				reason: `Play a fallback legal move to ${fallbackTarget}.`
+				};
+			if (isLegal(event)) {
+				return {
+					gameId,
+					event,
+					reason: legalSuggestionReason(mode, `Play a fallback legal move to ${fallbackTarget}.`),
+					mode,
+					actorId
+				};
+			}
+		}
+
+		const advanceTurn: GameEvent = { type: 'advance_turn' };
+		if (isLegal(advanceTurn)) {
+			return {
+				gameId,
+				event: advanceTurn,
+				reason: legalSuggestionReason(mode, 'No legal draw/resolve move found; advance turn.'),
+				mode,
+				actorId
 			};
 		}
 
-		return {
-			gameId,
-			event: { type: 'advance_turn' },
-			reason: 'No legal draw/resolve move found; advance turn.'
-		};
+		throw new Error('No legal move suggestion available for current state');
 	}
 }
 

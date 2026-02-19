@@ -33,6 +33,18 @@ export interface McpResourceReadResult {
 }
 
 export type McpModelSource = 'session' | 'server';
+export type McpAiMode = 'coach' | 'opponent' | 'dealer_narrator';
+
+export interface McpAiSeatConfig {
+	playerId: string;
+	mode: McpAiMode;
+}
+
+export interface McpGenerationBudget {
+	maxSourceChars?: number;
+	maxServerRetries?: number;
+	maxToolCallsPerTrace?: number;
+}
 
 export interface McpGenerationSummary {
 	requestedModelSource: McpModelSource;
@@ -71,6 +83,10 @@ export interface McpStartGameArgs {
 	ruleset_id: string;
 	players?: string[];
 	game_id?: string;
+	ai_seats?: Array<{
+		playerId: string;
+		mode?: McpAiMode;
+	}>;
 }
 
 export interface McpStartGameResult {
@@ -80,6 +96,7 @@ export interface McpStartGameResult {
 	eventCount: number;
 	phase: string;
 	currentTurnPlayer?: string;
+	aiSeats?: McpAiSeatConfig[];
 }
 
 export interface McpGetGameStateArgs {
@@ -92,6 +109,7 @@ export interface McpGetGameStateResult {
 	players: string[];
 	events: GameEvent[];
 	state: GameplayState;
+	aiSeats?: McpAiSeatConfig[];
 }
 
 export interface McpSubmitMoveArgs {
@@ -108,12 +126,16 @@ export interface McpSubmitMoveResult {
 
 export interface McpSuggestMoveArgs {
 	game_id: string;
+	mode?: McpAiMode;
+	actor_id?: string;
 }
 
 export interface McpSuggestMoveResult {
 	gameId: string;
 	event: GameEvent;
 	reason: string;
+	mode: McpAiMode;
+	actorId?: string;
 }
 
 export interface McpGameSessionSnapshot {
@@ -121,6 +143,7 @@ export interface McpGameSessionSnapshot {
 	rulesetId: string;
 	players: string[];
 	events: GameEvent[];
+	aiSeats: McpAiSeatConfig[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -138,4 +161,8 @@ export type McpSessionSampler = (
 
 export interface McpToolCallContext {
 	callTool: (name: McpToolName, args: Record<string, unknown>) => Promise<unknown>;
+}
+
+export interface McpToolCallMeta {
+	traceId?: string;
 }

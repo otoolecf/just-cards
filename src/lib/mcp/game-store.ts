@@ -1,5 +1,5 @@
 import type { GameEvent } from '$lib/gameplay/engine';
-import type { McpGameSessionSnapshot } from './types';
+import type { McpAiSeatConfig, McpGameSessionSnapshot } from './types';
 
 export interface McpGameStore {
 	create(input: {
@@ -7,6 +7,7 @@ export interface McpGameStore {
 		rulesetId: string;
 		players: string[];
 		events: GameEvent[];
+		aiSeats?: McpAiSeatConfig[];
 	}): Promise<McpGameSessionSnapshot>;
 	getById(gameId: string): Promise<McpGameSessionSnapshot | undefined>;
 	list(): Promise<McpGameSessionSnapshot[]>;
@@ -33,6 +34,7 @@ export class InMemoryMcpGameStore implements McpGameStore {
 		rulesetId: string;
 		players: string[];
 		events: GameEvent[];
+		aiSeats?: McpAiSeatConfig[];
 	}): Promise<McpGameSessionSnapshot> {
 		const gameId = input.gameId?.trim() || randomGameId();
 		if (this.snapshots.has(gameId)) {
@@ -44,6 +46,7 @@ export class InMemoryMcpGameStore implements McpGameStore {
 			rulesetId: input.rulesetId,
 			players: [...input.players],
 			events: structuredClone(input.events),
+			aiSeats: structuredClone(input.aiSeats ?? []),
 			createdAt: now,
 			updatedAt: now
 		};

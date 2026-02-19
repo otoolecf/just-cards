@@ -111,3 +111,34 @@ Enable users to:
 1. Generated rulesets render with game-appropriate visibility/flow on mobile without manual rule edits.
 2. ChatGPT can generate and open playable rulesets from URL/prose with explainable diagnostics.
 3. AI-assisted move suggestions are always validated by server gameplay rules before state mutation.
+
+## Current Implementation Snapshot (2026-02-19)
+
+Delivered endpoints:
+
+1. MCP HTTP endpoints (auth-aware):
+- `GET /api/mcp/tools`
+- `GET /api/mcp/resources` (`?uri=...` for read)
+- `POST /api/mcp/call` (`{ tool, args, trace_id? }`)
+
+2. Chat action endpoint (auth-aware):
+- `POST /api/chat/actions`
+- actions:
+  - `create_from_url`
+  - `explain_rules`
+  - `open_playable_table`
+  - `ask_next_move`
+
+3. AI seat + hardening primitives:
+- `start_game` supports optional `ai_seats`
+- `get_game_state` returns `aiSeats`
+- `suggest_move` supports `mode` (`coach|opponent|dealer_narrator`) and returns legal suggestions only
+- generation budget controls: `maxSourceChars`, `maxServerRetries`, `maxToolCallsPerTrace`
+- trace IDs on tool/action execution, structured server logs, and `just-cards://audit/recent` audit resource
+
+Environment controls:
+
+1. `JUST_CARDS_MCP_AUTH_TOKEN` (when set, MCP/action routes require bearer token)
+2. `JUST_CARDS_MCP_MAX_SOURCE_CHARS` (default `24000`)
+3. `JUST_CARDS_MCP_MAX_SERVER_RETRIES` (default `1`)
+4. `JUST_CARDS_MCP_MAX_TOOL_CALLS_PER_TRACE` (default `32`)

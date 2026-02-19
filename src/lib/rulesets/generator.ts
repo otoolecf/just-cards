@@ -166,6 +166,7 @@ export interface GenerateRulesetInput {
 
 export interface GenerateRulesetOptions {
 	fetchImpl?: typeof fetch;
+	maxSourceChars?: number;
 }
 
 export interface GeneratedRulesetDraft {
@@ -1179,10 +1180,18 @@ export async function ingestSource(
 	input: GeneratorSourceInput,
 	options: GenerateRulesetOptions = {}
 ): Promise<IngestedSource> {
+	const maxSourceChars =
+		typeof options.maxSourceChars === 'number' && options.maxSourceChars > 0
+			? Math.trunc(options.maxSourceChars)
+			: undefined;
+
 	if (input.type === 'text') {
 		const text = normalizeWhitespace(input.text ?? '');
 		if (!text) {
 			throw new Error('text source requires non-empty text');
+		}
+		if (maxSourceChars !== undefined && text.length > maxSourceChars) {
+			throw new Error(`maxSourceChars budget exceeded (${text.length} > ${maxSourceChars})`);
 		}
 		return { text, type: 'text' };
 	}
@@ -1214,6 +1223,9 @@ export async function ingestSource(
 	const text = contentType.includes('html') || /<html|<body|<main/i.test(raw) ? htmlToText(raw) : normalizeWhitespace(raw);
 	if (!text) {
 		throw new Error('source url returned empty content');
+	}
+	if (maxSourceChars !== undefined && text.length > maxSourceChars) {
+		throw new Error(`maxSourceChars budget exceeded (${text.length} > ${maxSourceChars})`);
 	}
 
 	return {
