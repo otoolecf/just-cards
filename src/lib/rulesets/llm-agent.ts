@@ -76,6 +76,8 @@ Field requirements:
 - zones: table zone ids only (do not include hand)
 - turn.drawSources: zone ids where players draw cards
 - turn.playTargets: zone ids where players play/discard/lay cards
+- turn.drawThenResolve: optional boolean (true when the turn flow is draw first, then play/discard/resolve)
+- turn.sourceDrawRules: optional array of { zoneId, pickMode: "top"|"any_visible", requireTakeAbove?: boolean, requireResolveIncludesPicked?: boolean }
 - scoring.lowScoreWins: boolean
 - scoring.aceValue: integer
 - scoring.rankOverrides: map from rank keys (A,2,3,4,5,6,7,8,9,10,J,Q,K) to integer values
@@ -277,6 +279,36 @@ function extractSetup(
 	};
 }
 
+function extractSourceDrawRules(
+	value: unknown,
+	baseline: RuleFactsV0['turn']['sourceDrawRules']
+): RuleFactsV0['turn']['sourceDrawRules'] {
+	if (!Array.isArray(value)) {
+		return baseline ? [...baseline] : undefined;
+	}
+
+	const rules: NonNullable<RuleFactsV0['turn']['sourceDrawRules']> = [];
+	for (const entry of value) {
+		const object = asObject(entry);
+		const zoneId = normalizeZoneId(asString(object?.zoneId) ?? '');
+		const pickMode = object?.pickMode === 'top' || object?.pickMode === 'any_visible' ? object.pickMode : undefined;
+		if (!zoneId || !pickMode) {
+			continue;
+		}
+		if (rules.some((rule) => rule.zoneId === zoneId)) {
+			continue;
+		}
+		rules.push({
+			zoneId,
+			pickMode,
+			...(object?.requireTakeAbove === true ? { requireTakeAbove: true } : {}),
+			...(object?.requireResolveIncludesPicked === true ? { requireResolveIncludesPicked: true } : {})
+		});
+	}
+
+	return rules.length > 0 ? rules : baseline ? [...baseline] : undefined;
+}
+
 function normalizeLlmCandidate(raw: unknown, baseline: RuleFactsV0): RuleFactsV0 {
 	let payload = asObject(raw);
 	if (!payload) {
@@ -311,6 +343,11 @@ function normalizeLlmCandidate(raw: unknown, baseline: RuleFactsV0): RuleFactsV0
 
 	const drawSources = drawSourcesCandidate.length > 0 ? uniqueStrings(drawSourcesCandidate) : [...baseline.turn.drawSources];
 	const playTargets = playTargetsCandidate.length > 0 ? uniqueStrings(playTargetsCandidate) : [...baseline.turn.playTargets];
+	const drawThenResolve =
+		typeof turn?.drawThenResolve === 'boolean'
+			? turn.drawThenResolve
+			: baseline.turn.drawThenResolve;
+	const sourceDrawRules = extractSourceDrawRules(turn?.sourceDrawRules, baseline.turn.sourceDrawRules);
 
 	const scoring = asObject(payload.scoring);
 	const aceValue = clampInteger(scoring?.aceValue, -100, 100) ?? baseline.scoring.aceValue;
@@ -334,7 +371,9 @@ function normalizeLlmCandidate(raw: unknown, baseline: RuleFactsV0): RuleFactsV0
 		zones,
 		turn: {
 			drawSources,
-			playTargets
+			playTargets,
+			...(drawThenResolve === true ? { drawThenResolve: true } : {}),
+			...(sourceDrawRules ? { sourceDrawRules } : {})
 		},
 		scoring: {
 			lowScoreWins,

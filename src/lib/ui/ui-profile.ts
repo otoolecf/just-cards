@@ -4,6 +4,7 @@ import type { RuntimeRulePack } from '$lib/runtime/game-runtime';
 export type UiPrimaryActionKind = 'advance_turn' | 'undo' | 'redo' | 'set_phase';
 export type UiCardLayoutKind = 'row' | 'grid';
 export type UiDrawVisibilityMode = 'reveal' | 'preserve';
+export type UiDrawPickMode = 'top' | 'any_visible';
 
 export interface UiCardLayout {
 	kind: UiCardLayoutKind;
@@ -31,6 +32,7 @@ export interface UiTableZoneProfile {
 	visible?: boolean;
 	allowDrawFromTop?: boolean;
 	drawVisibility?: UiDrawVisibilityMode;
+	drawPickMode?: UiDrawPickMode;
 }
 
 export interface UiSeatCardsProfile {
@@ -397,6 +399,16 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 				message: `uiProfile.table.zones[${zoneIndex}].drawVisibility must be one of reveal|preserve`
 			});
 		}
+		if (
+			zone.drawPickMode !== undefined &&
+			zone.drawPickMode !== 'top' &&
+			zone.drawPickMode !== 'any_visible'
+		) {
+			issues.push({
+				code: 'invalid_zone_draw_pick_mode',
+				message: `uiProfile.table.zones[${zoneIndex}].drawPickMode must be one of top|any_visible`
+			});
+		}
 	}
 
 	if (isObject(profile.hand)) {
@@ -562,10 +574,21 @@ export function generateUiProfileFromRuntime(
 	const gameplay = runtimeGameplayRulePack(runtimeRulePack);
 	const sourceZones = new Set(gameplay.zoneMovePolicy.sourceZoneAllowlist);
 	const targetZones = new Set(gameplay.zoneMovePolicy.targetZoneAllowlist);
+	const drawSourcePolicies = gameplay.turnActionPolicy?.drawSourcePolicies ?? [];
 	const tableZoneIds = orderedTableZoneIds(runtimeRulePack);
 	const quickPlayTargets = tableZoneIds
 		.filter((zoneId) => targetZones.has(zoneId) && zoneId !== gameplay.handZoneName)
 		.map((zoneId) => ({ zoneId }));
+	const drawPickModeByZone = new Map<string, UiDrawPickMode>();
+	for (const rule of drawSourcePolicies) {
+		const pickMode: UiDrawPickMode =
+			rule.requireContiguousFromTop === true ||
+			rule.maxCards === undefined ||
+			(typeof rule.maxCards === 'number' && rule.maxCards > 1)
+				? 'any_visible'
+				: 'top';
+		drawPickModeByZone.set(rule.zoneId, pickMode);
+	}
 
 	const profile = createUiProfile({
 		hand: {
@@ -580,7 +603,12 @@ export function generateUiProfileFromRuntime(
 				label: defaultZoneLabel(zoneId),
 				hint: defaultZoneHint(zoneId),
 				visible: true,
-				allowDrawFromTop: sourceZones.has(zoneId)
+				allowDrawFromTop: sourceZones.has(zoneId),
+				...(sourceZones.has(zoneId)
+					? {
+							drawPickMode: drawPickModeByZone.get(zoneId) ?? 'top'
+						}
+					: {})
 			}))
 		}
 	});

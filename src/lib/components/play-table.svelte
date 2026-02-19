@@ -12,12 +12,12 @@
 		buildDemoPlayEvents,
 		buildRulesetPlayEvents,
 		buildPlaySurfaceView,
-		cardIsFaceDown,
 		setCardFaceDown,
 		createHandMoveEvent,
 		type PlayCardView
 	} from '$lib/gameplay/play-surface-model';
 	import {
+		drawPickModeByZoneFromUiProfile,
 		drawVisibilityModeByZoneFromUiProfile,
 		drawTopAllowedZoneIdsFromUiProfile,
 		playSurfaceActionLabelsFromUiProfile,
@@ -81,10 +81,12 @@
 		.map((zoneId) => TABLE_ZONES.find((zone) => zone.id === zoneId))
 		.filter((zone): zone is (typeof TABLE_ZONES)[number] => zone !== undefined);
 	const DRAW_TOP_ALLOWED_ZONE_IDS = drawTopAllowedZoneIdsFromUiProfile(ACTIVE_UI_PROFILE);
+	const DRAW_PICK_MODES = drawPickModeByZoneFromUiProfile(ACTIVE_UI_PROFILE);
 	const DRAW_VISIBILITY_MODES = drawVisibilityModeByZoneFromUiProfile(ACTIVE_UI_PROFILE);
 	const ACTION_LABELS = playSurfaceActionLabelsFromUiProfile(ACTIVE_UI_PROFILE);
 	const SEAT_CARDS_PROFILE = seatCardsProfileFromUiProfile(ACTIVE_UI_PROFILE);
 	const HAND_ZONE = ACTIVE_GAMEPLAY_RULE_PACK.handZoneName;
+	const TURN_ACTION_POLICY = ACTIVE_GAMEPLAY_RULE_PACK.turnActionPolicy;
 
 	function preferredPlayPhase(rulePack: GameplayRulePack): string {
 		if (rulePack.zoneMovePolicy.allowedPhases.includes('play')) {
@@ -156,6 +158,11 @@
 	$: if (selectedCardKey && !surface.hand.cards.some((card) => card.key === selectedCardKey)) {
 		selectedCardKey = '';
 	}
+	$: pendingDrawForSelf = gameplayState.turnActionState?.pendingDrawByPlayer?.[SELF_PLAYER_ID] === true;
+	$: requiredResolveCardIdForSelf =
+		gameplayState.turnActionState?.requiredResolveCardIdByPlayer?.[SELF_PLAYER_ID];
+	$: requiredResolveTargetZonesForSelf =
+		gameplayState.turnActionState?.requiredResolveTargetZonesByPlayer?.[SELF_PLAYER_ID];
 	$: activeSeat = surface.seats.find((seat) => seat.isCurrentTurn);
 	$: quickStartPreview = GUIDE_MODEL.quickStart.slice(0, 2);
 
@@ -167,9 +174,110 @@
 		selectedCardKey = selectedCardKey === card.key ? '' : card.key;
 	}
 
+	function turnActionPolicyApplies(): boolean {
+		if (!TURN_ACTION_POLICY?.enabled) {
+			return false;
+		}
+		return TURN_ACTION_POLICY.allowedPhases.includes(surface.phase);
+	}
+
+	function cardIdFromTags(tags: string[] | undefined): string | undefined {
+		for (const tag of tags ?? []) {
+			if (!tag.startsWith('cid:')) {
+				continue;
+			}
+			const value = tag.slice(4).trim();
+			if (value.length > 0) {
+				return value;
+			}
+		}
+		return undefined;
+	}
+
+	function selectedCardMatchesRequiredResolveAnchor(): boolean {
+		if (!requiredResolveCardIdForSelf) {
+			return true;
+		}
+		if (!selectedCard) {
+			return false;
+		}
+		return cardIdFromTags(selectedCard.tags) === requiredResolveCardIdForSelf;
+	}
+
+	function isDrawBlocked(zone: string): boolean {
+		if (!turnActionPolicyApplies()) {
+			return false;
+		}
+		if (!TURN_ACTION_POLICY?.drawFromZoneAllowlist.includes(zone)) {
+			return false;
+		}
+		return TURN_ACTION_POLICY.requireResolveAfterDraw && pendingDrawForSelf;
+	}
+
+	function isResolveBlocked(zone: string): boolean {
+		if (!turnActionPolicyApplies()) {
+			return false;
+		}
+		if (!TURN_ACTION_POLICY?.resolveToZoneAllowlist.includes(zone)) {
+			return true;
+		}
+		if (TURN_ACTION_POLICY.requireDrawBeforeResolve && !pendingDrawForSelf) {
+			return true;
+		}
+		if (
+			requiredResolveTargetZonesForSelf &&
+			requiredResolveTargetZonesForSelf.length > 0 &&
+			!requiredResolveTargetZonesForSelf.includes(zone)
+		) {
+			return true;
+		}
+		if (requiredResolveCardIdForSelf && !selectedCardMatchesRequiredResolveAnchor()) {
+			return true;
+		}
+		return false;
+	}
+
+	function handHintText(): string {
+		if (requiredResolveTargetZonesForSelf && requiredResolveTargetZonesForSelf.length > 0) {
+			const zoneLabels = requiredResolveTargetZonesForSelf.map(
+				(zoneId) => TABLE_ZONE_LABELS[zoneId] ?? zoneId
+			);
+			return `Resolve picked discard card to: ${zoneLabels.join(', ')}.`;
+		}
+		if (requiredResolveCardIdForSelf) {
+			return 'Resolve turn by playing the picked discard card first.';
+		}
+		if (turnActionPolicyApplies() && TURN_ACTION_POLICY?.requireResolveAfterDraw && pendingDrawForSelf) {
+			return 'Draw resolved pending: select one hand card and play/discard it before drawing again.';
+		}
+		if (turnActionPolicyApplies() && TURN_ACTION_POLICY?.requireDrawBeforeResolve && !pendingDrawForSelf) {
+			return 'Start turn by drawing from an allowed pile, then resolve one card to a play target.';
+		}
+		return ACTIVE_UI_PROFILE.hand.hint;
+	}
+
 	function moveSelectedCardTo(zone: string): void {
 		if (!selectedCard) {
 			feedback = 'Select a card from your hand first.';
+			return;
+		}
+		if (isResolveBlocked(zone)) {
+			feedback = `Draw first, then resolve to ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
+			return;
+		}
+		if (!selectedCardMatchesRequiredResolveAnchor()) {
+			feedback = 'Resolve must include the picked discard card first.';
+			return;
+		}
+		if (
+			requiredResolveTargetZonesForSelf &&
+			requiredResolveTargetZonesForSelf.length > 0 &&
+			!requiredResolveTargetZonesForSelf.includes(zone)
+		) {
+			const labels = requiredResolveTargetZonesForSelf
+				.map((zoneId) => TABLE_ZONE_LABELS[zoneId] ?? zoneId)
+				.join(', ');
+			feedback = `Resolve picked discard card to: ${labels}.`;
 			return;
 		}
 
@@ -181,27 +289,62 @@
 		selectedCardKey = '';
 	}
 
-	function drawFromTable(zone: string): void {
+	function drawPickModeForZone(zone: string): 'top' | 'any_visible' {
+		return DRAW_PICK_MODES.get(zone) ?? 'top';
+	}
+
+	function canDrawAnyVisibleCard(zone: string, card: PlayCardView): boolean {
+		return (
+			canDrawFromZone(zone) &&
+			drawPickModeForZone(zone) === 'any_visible' &&
+			!isDrawBlocked(zone) &&
+			!card.isFaceDown
+		);
+	}
+
+	function drawLabel(card: PlayCardView): string {
+		return card.isFaceDown ? 'hidden card' : cardLabelForAction(card);
+	}
+
+	function drawFromTable(zone: string, fromCardKey?: string): void {
+		if (isDrawBlocked(zone)) {
+			feedback = 'Resolve your current draw before drawing again.';
+			return;
+		}
 		const cards = gameplayState.tableZones[zone] ?? [];
+		const zoneView = surface.tableZones.find((entry) => entry.zoneId === zone);
 		const topCard = cards[cards.length - 1];
-		if (!topCard) {
+		if (!topCard || !zoneView) {
 			feedback = `No cards in ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
 			return;
 		}
+		const pickMode = drawPickModeForZone(zone);
+		let drawnCards = [topCard];
+		if (pickMode === 'any_visible' && fromCardKey) {
+			const selectedIndex = zoneView.cards.findIndex((card) => card.key === fromCardKey);
+			if (selectedIndex >= 0 && selectedIndex < cards.length) {
+				drawnCards = cards.slice(selectedIndex);
+			}
+		}
 		const drawVisibility = DRAW_VISIBILITY_MODES.get(zone) ?? 'reveal';
-		const drawnCard = drawVisibility === 'preserve' ? topCard : setCardFaceDown(topCard, false);
-		const drawnLabel = cardIsFaceDown(drawnCard)
-			? 'hidden card'
-			: `${drawnCard.rank}${drawnCard.suit ? drawnCard.suit.slice(0, 1).toUpperCase() : ''}`;
+		const renderedDrawnCards = drawnCards.map((card) =>
+			drawVisibility === 'preserve' ? card : setCardFaceDown(card, false)
+		);
+		const pickedCardView = zoneView.cards.find((card) => card.key === fromCardKey) ?? zoneView.cards.at(-1);
+		const pickedLabel = pickedCardView ? drawLabel(pickedCardView) : 'card';
 
 		addEvent({
 			type: 'zone_move',
 			actorId: SELF_PLAYER_ID,
 			from: { kind: 'table', zone },
 			to: { kind: 'player', playerId: SELF_PLAYER_ID, zone: HAND_ZONE },
-			cards: [drawnCard]
+			cards: renderedDrawnCards
 		});
-		feedback = `Drew ${drawnLabel} from ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
+		if (renderedDrawnCards.length > 1) {
+			feedback = `Drew ${renderedDrawnCards.length} cards from ${TABLE_ZONE_LABELS[zone] ?? zone} (picked ${pickedLabel}).`;
+		} else {
+			feedback = `Drew ${pickedLabel} from ${TABLE_ZONE_LABELS[zone] ?? zone}.`;
+		}
 	}
 
 	function resetDemo(): void {
@@ -374,6 +517,8 @@
 											<button
 												type="button"
 												class={`play-card play-card-sm ${card.suitTone === 'red' ? 'play-card-red' : ''} ${card.isFaceDown ? 'play-card-face-down' : ''}`.trim()}
+												disabled={!canDrawAnyVisibleCard(zone.zoneId, card)}
+												onclick={() => drawFromTable(zone.zoneId, card.key)}
 												in:receive={{ key: card.key }}
 												out:send={{ key: card.key }}
 											>
@@ -383,7 +528,13 @@
 									{/if}
 								</div>
 								{#if canDrawFromZone(zone.zoneId)}
-									<ScoreButton className="zone-action" onPress={() => drawFromTable(zone.zoneId)}>Draw top</ScoreButton>
+									<ScoreButton
+										className="zone-action"
+										disabled={isDrawBlocked(zone.zoneId)}
+										onPress={() => drawFromTable(zone.zoneId)}
+									>
+										Draw top
+									</ScoreButton>
 								{/if}
 							</section>
 						{/each}
@@ -466,13 +617,17 @@
 					<p class="hand-action-label">Play {cardLabelForAction(selectedCard)} to:</p>
 					<div class="hand-targets">
 						{#each HAND_QUICK_TARGETS as zone (zone.id)}
-							<ScoreButton className="hand-target-button" onPress={() => moveSelectedCardTo(zone.id)}>
+							<ScoreButton
+								className="hand-target-button"
+								disabled={isResolveBlocked(zone.id)}
+								onPress={() => moveSelectedCardTo(zone.id)}
+							>
 								{zone.label}
 							</ScoreButton>
 						{/each}
 					</div>
 				{:else}
-					<p class="hand-action-label hand-action-hint">{ACTIVE_UI_PROFILE.hand.hint}</p>
+					<p class="hand-action-label hand-action-hint">{handHintText()}</p>
 				{/if}
 			</div>
 			<div

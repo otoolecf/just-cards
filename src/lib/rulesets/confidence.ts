@@ -48,16 +48,6 @@ function buildSmokeRuntimeEvents(bundle: RuntimeRulesetBundle): RuntimeEvent[] {
 		events.push({ type: 'gameplay', event: { type: 'start_round' } });
 	}
 
-	const stateBeforeMoves = deriveGameState(
-		events
-			.filter((entry): entry is Extract<RuntimeEvent, { type: 'gameplay' }> => entry.type === 'gameplay')
-			.map((entry) => entry.event),
-		gameplayRulePack,
-		{ strictValidation: true }
-	);
-
-	const actorId = stateBeforeMoves.turnOrder[stateBeforeMoves.currentTurnIndex] ?? players[0];
-
 	const cardsByPlayer: Record<string, CardInput[]> = {
 		You: [sampleCard('2', 'spades', 'smoke-you-2'), sampleCard('4', 'clubs', 'smoke-you-4')],
 		Riv: [sampleCard('5', 'hearts', 'smoke-riv-5'), sampleCard('K', 'spades', 'smoke-riv-k')],
@@ -76,6 +66,15 @@ function buildSmokeRuntimeEvents(bundle: RuntimeRulesetBundle): RuntimeEvent[] {
 		});
 	}
 
+	const stateBeforeMoves = deriveGameState(
+		events
+			.filter((entry): entry is Extract<RuntimeEvent, { type: 'gameplay' }> => entry.type === 'gameplay')
+			.map((entry) => entry.event),
+		gameplayRulePack,
+		{ strictValidation: true }
+	);
+
+	const actorId = stateBeforeMoves.turnOrder[stateBeforeMoves.currentTurnIndex] ?? players[0];
 	const quickTargetZoneIds = quickPlayZoneIdsFromUiProfile(bundle.uiProfile);
 	const legalTargetZoneIds = gameplayRulePack.zoneMovePolicy.targetZoneAllowlist.filter(
 		(zoneId) => zoneId !== handZone
@@ -83,8 +82,81 @@ function buildSmokeRuntimeEvents(bundle: RuntimeRulesetBundle): RuntimeEvent[] {
 	const targetZone = quickTargetZoneIds.find((zoneId) => legalTargetZoneIds.includes(zoneId));
 	const phaseAllowsMoves = gameplayRulePack.zoneMovePolicy.allowedPhases.includes(stateBeforeMoves.phase);
 	const sourceAllowsHand = gameplayRulePack.zoneMovePolicy.sourceZoneAllowlist.includes(handZone);
+	const targetAllowsHand = gameplayRulePack.zoneMovePolicy.targetZoneAllowlist.includes(handZone);
+	const turnActionPolicy =
+		gameplayRulePack.turnActionPolicy?.enabled &&
+		gameplayRulePack.turnActionPolicy.allowedPhases.includes(stateBeforeMoves.phase)
+			? gameplayRulePack.turnActionPolicy
+			: undefined;
 
-	if (targetZone && phaseAllowsMoves && sourceAllowsHand) {
+	if (turnActionPolicy && phaseAllowsMoves && sourceAllowsHand && targetAllowsHand) {
+		const drawSource = turnActionPolicy.drawFromZoneAllowlist.find((zoneId) =>
+			gameplayRulePack.zoneMovePolicy.sourceZoneAllowlist.includes(zoneId)
+		);
+		const drawSourcePolicy =
+			drawSource !== undefined
+				? turnActionPolicy.drawSourcePolicies?.find((policy) => policy.zoneId === drawSource)
+				: undefined;
+		const requiredResolveTargets = drawSourcePolicy?.requiredResolveTargetZoneAllowlist ?? [];
+		const resolveTargetCandidates = [...quickTargetZoneIds, ...turnActionPolicy.resolveToZoneAllowlist];
+		const prioritizedResolveCandidates =
+			requiredResolveTargets.length > 0
+				? [...requiredResolveTargets, ...resolveTargetCandidates]
+				: resolveTargetCandidates;
+		const resolveTarget = prioritizedResolveCandidates.find(
+			(zoneId) =>
+				(requiredResolveTargets.length === 0 || requiredResolveTargets.includes(zoneId)) &&
+				turnActionPolicy.resolveToZoneAllowlist.includes(zoneId) &&
+				gameplayRulePack.zoneMovePolicy.targetZoneAllowlist.includes(zoneId)
+		);
+		const sourceMustBelongToActor = gameplayRulePack.zoneMovePolicy.sourceMustBelongToActor;
+		const canSeedFromOtherPlayer = !sourceMustBelongToActor;
+		const canSeedFromActor =
+			turnActionPolicy.requireDrawBeforeResolve !== true ||
+			(drawSource !== undefined && !turnActionPolicy.resolveToZoneAllowlist.includes(drawSource));
+
+		if (drawSource && resolveTarget) {
+			const seedPlayerId = canSeedFromOtherPlayer
+				? players.find((playerId) => playerId !== actorId) ?? actorId
+				: canSeedFromActor
+					? actorId
+					: undefined;
+			const seedCard = seedPlayerId ? cardsByPlayer[seedPlayerId]?.[0] : undefined;
+
+			if (seedCard && seedPlayerId) {
+				events.push({
+					type: 'gameplay',
+					event: {
+						type: 'zone_move',
+						actorId,
+						from: { kind: 'player', playerId: seedPlayerId, zone: handZone },
+						to: { kind: 'table', zone: drawSource },
+						cards: [seedCard]
+					}
+				});
+				events.push({
+					type: 'gameplay',
+					event: {
+						type: 'zone_move',
+						actorId,
+						from: { kind: 'table', zone: drawSource },
+						to: { kind: 'player', playerId: actorId, zone: handZone },
+						cards: [seedCard]
+					}
+				});
+				events.push({
+					type: 'gameplay',
+					event: {
+						type: 'zone_move',
+						actorId,
+						from: { kind: 'player', playerId: actorId, zone: handZone },
+						to: { kind: 'table', zone: resolveTarget },
+						cards: [seedCard]
+					}
+				});
+			}
+		}
+	} else if (targetZone && phaseAllowsMoves && sourceAllowsHand) {
 		events.push({
 			type: 'gameplay',
 			event: {

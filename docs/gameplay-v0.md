@@ -67,6 +67,30 @@ When needed, `deriveGameState` can enforce validator rules for `zone_move` via
   - allowed source/target zones
   - min/max card counts
 - `turnPolicy.direction`: supports forward (`1`) and reverse (`-1`) turn order.
+- `turnActionPolicy` (optional draw/resolve sequencing):
+  - `enabled`
+  - `allowedPhases`
+  - `drawFromZoneAllowlist`
+  - `resolveToZoneAllowlist`
+  - `requireDrawBeforeResolve`
+  - `requireResolveAfterDraw`
+  - `drawSourcePolicies?[]`:
+    - `zoneId`
+    - `minCards`
+    - `maxCards?`
+    - `requireContiguousFromTop?`
+    - `requireResolveIncludesAnchor?`
+    - `requiredResolveTargetZoneAllowlist?`
+
+When enabled, `turnActionPolicy` allows rulesets to enforce turn flow such as:
+1. draw from stock/discard first
+2. resolve to discard/meld/board next
+3. prevent repeated draws before resolution
+
+`drawSourcePolicies` allow per-source draw constraints used by discard-pickup games:
+1. force draw-card count ranges for a specific source zone,
+2. require selected cards to be a contiguous run ending at the top of the source stack,
+3. require resolve action to include the picked anchor card from the draw batch.
 
 ### Round model
 
@@ -83,6 +107,8 @@ When needed, `deriveGameState` can enforce validator rules for `zone_move` via
 - The same event list must derive to the same state every time.
 - A source zone must contain requested cards to execute `zone_move`.
 - Card movement does not mutate untouched player zones.
+- `zone_move` identity prefers `cid:*` tag matching when present, so face/tag transforms can move the same physical card deterministically.
+- When configured, discard-pickup draws must be contiguous top runs and resolve must include required anchor card.
 - `validationIssues` should remain stable and explain reasons for each skipped operation.
 
 ## Cross-Reference

@@ -32,6 +32,7 @@ interface UiProfileV0 {
       visible?: boolean;
       allowDrawFromTop?: boolean;
       drawVisibility?: 'reveal' | 'preserve';
+      drawPickMode?: 'top' | 'any_visible';
     }[];
   };
   actions: {
@@ -70,7 +71,8 @@ interface UiProfileV0 {
    - each `set_phase` action phase must exist in gameplay `phases`.
 4. `layout.kind` must be one of `row|grid`; `grid` requires `columns >= 1`.
 5. `table.zones[*].drawVisibility` (when provided) must be `reveal|preserve`.
-6. `seats.cards.zoneId` must match either `hand.zoneId` or a declared table zone.
+6. `table.zones[*].drawPickMode` (when provided) must be `top|any_visible`.
+7. `seats.cards.zoneId` must match either `hand.zoneId` or a declared table zone.
 
 ## Generation Defaults
 
@@ -81,6 +83,7 @@ interface UiProfileV0 {
 3. Human-friendly labels/hints from known zone IDs plus fallback title-casing.
 4. Primary actions: `advance_turn`, `undo`, `redo`.
 5. `drawVisibility` defaults to `reveal` unless overridden in generated/edited profile data.
+6. `drawPickMode` defaults to `top`, and is promoted to `any_visible` when gameplay draw-source policy indicates non-top visible pickup behavior.
 
 ## Bundle Contract
 

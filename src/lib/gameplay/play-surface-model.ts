@@ -349,6 +349,23 @@ function preferredPlayPhase(bundle: RuntimeRulesetBundle): string {
 	return gameplayRulePack.phaseAfterRoundStart;
 }
 
+function setupPhaseForSeeding(bundle: RuntimeRulesetBundle): string {
+	const gameplayRulePack = bundle.runtimeRulePack.gameplayRulePack;
+	if (!gameplayRulePack) {
+		return 'play';
+	}
+	if (gameplayRulePack.zoneMovePolicy.allowedPhases.includes('deal') && gameplayRulePack.phases.includes('deal')) {
+		return 'deal';
+	}
+	const firstAllowedKnownPhase = gameplayRulePack.zoneMovePolicy.allowedPhases.find((phase) =>
+		gameplayRulePack.phases.includes(phase)
+	);
+	if (firstAllowedKnownPhase) {
+		return firstAllowedKnownPhase;
+	}
+	return preferredPlayPhase(bundle);
+}
+
 function parseNumericToken(token: string): number | undefined {
 	const normalized = token.trim().toLowerCase();
 	if (!normalized) {
@@ -540,6 +557,7 @@ export function buildRulesetPlayEvents(
 
 	const handZoneName = bundle.runtimeRulePack.gameplayRulePack?.handZoneName ?? bundle.uiProfile.hand.zoneId ?? 'hand';
 	const initialPhase = preferredPlayPhase(bundle);
+	const setupPhase = setupPhaseForSeeding(bundle);
 	const cardsPerPlayer = Math.max(2, options.cardsPerPlayer ?? cardsPerPlayerFromBundle(bundle));
 	const initialFaceUpCount = initialFaceUpCountFromBundle(bundle, cardsPerPlayer);
 	const handLayout = handLayoutFromBundle(bundle, cardsPerPlayer);
@@ -555,7 +573,7 @@ export function buildRulesetPlayEvents(
 	const events: GameEvent[] = [
 		{ type: 'init_game', players, dealerIndex: 0 },
 		{ type: 'start_round' },
-		{ type: 'set_phase', phase: initialPhase }
+		{ type: 'set_phase', phase: setupPhase }
 	];
 
 	for (const playerId of players) {
@@ -588,6 +606,9 @@ export function buildRulesetPlayEvents(
 		}
 		const stockCards = discardZone ? extraCards.slice(1) : extraCards;
 		events.push(...seedZoneEventsFromPlayerCards(seedPlayer, handZoneName, stockCards, stockZone));
+		if (initialPhase !== setupPhase) {
+			events.push({ type: 'set_phase', phase: initialPhase });
+		}
 		return events;
 	}
 
@@ -610,6 +631,9 @@ export function buildRulesetPlayEvents(
 		}
 	}
 
+	if (initialPhase !== setupPhase) {
+		events.push({ type: 'set_phase', phase: initialPhase });
+	}
 	return events;
 }
 

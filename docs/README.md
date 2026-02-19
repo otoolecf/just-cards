@@ -47,6 +47,9 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-18-hidden-info-and-layout-primitives.md`](./specs/2026-02-18-hidden-info-and-layout-primitives.md): TDD spec for hidden-information visibility controls and layout primitives (seat/public card arrangement).
 - [`specs/2026-02-18-scorekeeper-real-game-usability-and-variant-scoring.md`](./specs/2026-02-18-scorekeeper-real-game-usability-and-variant-scoring.md): TDD spec for score-page flow simplification and deterministic 500 Rummy/Six Card Golf scoring assists.
 - [`specs/2026-02-18-scorekeeper-mode-driven-standings-order.md`](./specs/2026-02-18-scorekeeper-mode-driven-standings-order.md): TDD spec for score mode win-direction metadata and leaderboard ordering by mode.
+- [`specs/2026-02-19-gameplay-draw-resolve-policy.md`](./specs/2026-02-19-gameplay-draw-resolve-policy.md): TDD spec for generalized draw-then-resolve turn policy and `cid`-based zone-move identity matching.
+- [`specs/2026-02-19-discard-pickup-and-immediate-use-primitives.md`](./specs/2026-02-19-discard-pickup-and-immediate-use-primitives.md): TDD spec for generalized any-visible discard pickup, contiguous take-above draw batches, and immediate-use anchor resolve rules.
+- [`specs/2026-02-19-play-resolve-button-gating.md`](./specs/2026-02-19-play-resolve-button-gating.md): TDD spec for resolve quick-target disabled-state alignment with anchor/target constraints.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 

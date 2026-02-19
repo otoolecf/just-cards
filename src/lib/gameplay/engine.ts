@@ -31,6 +31,25 @@ export interface GameplayRoundPolicy {
 	clearTableZonesOnRoundStart: string[];
 }
 
+export interface GameplayTurnActionPolicy {
+	enabled: boolean;
+	allowedPhases: GameplayPhase[];
+	drawFromZoneAllowlist: string[];
+	resolveToZoneAllowlist: string[];
+	requireDrawBeforeResolve: boolean;
+	requireResolveAfterDraw: boolean;
+	drawSourcePolicies?: GameplayTurnDrawSourcePolicy[];
+}
+
+export interface GameplayTurnDrawSourcePolicy {
+	zoneId: string;
+	minCards: number;
+	maxCards?: number;
+	requireContiguousFromTop?: boolean;
+	requireResolveIncludesAnchor?: boolean;
+	requiredResolveTargetZoneAllowlist?: string[];
+}
+
 export interface GameplayRulePack {
 	schemaVersion: 'gameplay/v0';
 	capabilities: GameplayRuleCapability[];
@@ -46,6 +65,7 @@ export interface GameplayRulePack {
 	};
 	zoneMovePolicy: GameplayZoneMovePolicy;
 	roundPolicy: GameplayRoundPolicy;
+	turnActionPolicy?: GameplayTurnActionPolicy;
 }
 
 export interface GameplayValidationIssue {
@@ -73,6 +93,11 @@ export interface GameplayState {
 	roundNumber: number;
 	playerZones: Record<string, PlayerZoneState>;
 	tableZones: Record<string, CardInput[]>;
+	turnActionState?: {
+		pendingDrawByPlayer: Record<string, boolean>;
+		requiredResolveCardIdByPlayer: Record<string, string>;
+		requiredResolveTargetZonesByPlayer: Record<string, string[]>;
+	};
 	validationIssues?: GameplayValidationIssue[];
 	trace?: GameTraceEntry[];
 }
@@ -102,6 +127,9 @@ export interface CreateGameplayRulePackOptions {
 	turnDirection?: 1 | -1;
 	zoneMovePolicy?: Partial<GameplayZoneMovePolicy>;
 	roundPolicy?: Partial<GameplayRoundPolicy>;
+	turnActionPolicy?: Partial<Omit<GameplayTurnActionPolicy, 'drawSourcePolicies'>> & {
+		drawSourcePolicies?: Array<Partial<GameplayTurnDrawSourcePolicy>>;
+	};
 }
 
 export type GameEvent =
@@ -197,6 +225,29 @@ export function createGameplayRulePack(options: CreateGameplayRulePackOptions = 
 		maxCards: undefined,
 		...(options.zoneMovePolicy ?? {})
 	};
+	const drawSourcePolicies: GameplayTurnDrawSourcePolicy[] = (options.turnActionPolicy?.drawSourcePolicies ?? [])
+		.filter((entry): entry is Partial<GameplayTurnDrawSourcePolicy> & { zoneId: string } =>
+			typeof entry.zoneId === 'string' && entry.zoneId.trim().length > 0
+		)
+		.map((entry) => ({
+			zoneId: entry.zoneId.trim(),
+			minCards:
+				typeof entry.minCards === 'number' && Number.isInteger(entry.minCards) && entry.minCards >= 1
+					? entry.minCards
+					: 1,
+			...(typeof entry.maxCards === 'number' && Number.isInteger(entry.maxCards) && entry.maxCards >= 1
+				? { maxCards: entry.maxCards }
+				: {}),
+			...(entry.requireContiguousFromTop === true ? { requireContiguousFromTop: true } : {}),
+			...(entry.requireResolveIncludesAnchor === true ? { requireResolveIncludesAnchor: true } : {}),
+			...(Array.isArray(entry.requiredResolveTargetZoneAllowlist)
+				? {
+						requiredResolveTargetZoneAllowlist: uniqueStrings(
+							entry.requiredResolveTargetZoneAllowlist.filter((zoneId): zoneId is string => typeof zoneId === 'string')
+						)
+					}
+				: {})
+		}));
 
 	return {
 		schemaVersion: 'gameplay/v0',
@@ -217,12 +268,34 @@ export function createGameplayRulePack(options: CreateGameplayRulePackOptions = 
 			rotateDealerBetweenRounds: true,
 			clearTableZonesOnRoundStart: ['table', 'discard', 'meld'],
 			...(options.roundPolicy ?? {})
+		},
+		turnActionPolicy: {
+			enabled: false,
+			allowedPhases: ['play'],
+			drawFromZoneAllowlist: [],
+			resolveToZoneAllowlist: [],
+			requireDrawBeforeResolve: false,
+			requireResolveAfterDraw: false,
+			...(options.turnActionPolicy ?? {}),
+			drawSourcePolicies
 		}
 	};
 }
 
 function cloneCards(cards: CardInput[]): CardInput[] {
 	return cards.map((card) => ({ ...card, tags: card.tags ? [...card.tags] : undefined }));
+}
+
+function uniqueStrings(values: string[]): string[] {
+	const unique: string[] = [];
+	for (const value of values) {
+		const normalized = value.trim();
+		if (!normalized || unique.includes(normalized)) {
+			continue;
+		}
+		unique.push(normalized);
+	}
+	return unique;
 }
 
 function deepCardEqual(left: unknown, right: unknown): boolean {
@@ -253,6 +326,53 @@ function deepCardEqual(left: unknown, right: unknown): boolean {
 	}
 
 	return true;
+}
+
+function cardId(card: CardInput): string | undefined {
+	for (const tag of card.tags ?? []) {
+		if (!tag.startsWith('cid:')) {
+			continue;
+		}
+		const normalized = tag.slice(4).trim();
+		if (normalized.length > 0) {
+			return normalized;
+		}
+	}
+	return undefined;
+}
+
+function hasCardIdentityTag(tags: string[] | undefined): boolean {
+	return (tags ?? []).some((tag) => tag.startsWith('cid:') && tag.trim().length > 4);
+}
+
+function cardsMatchForMove(source: CardInput, requested: CardInput): boolean {
+	const sourceId = cardId(source);
+	const requestedId = cardId(requested);
+	if (requestedId && sourceId) {
+		return requestedId === sourceId;
+	}
+	if (requestedId && !sourceId) {
+		return false;
+	}
+	return deepCardEqual(source, requested);
+}
+
+function mergeRequestedMoveCard(source: CardInput, requested: CardInput): CardInput {
+	if (!requested.tags || requested.tags.length === 0) {
+		return source;
+	}
+
+	const tags = [...requested.tags];
+	const sourceIdentity = cardId(source);
+	if (sourceIdentity && !hasCardIdentityTag(tags)) {
+		tags.push(`cid:${sourceIdentity}`);
+	}
+
+	return {
+		...source,
+		...requested,
+		tags
+	};
 }
 
 function emitTrace(
@@ -316,6 +436,138 @@ function validateGameplayRulePack(rulePack: unknown): GameplayValidationIssue[] 
 	} else if (!Array.isArray((typedRulePack.zoneMovePolicy as Record<string, unknown>).allowedPhases)) {
 		issues.push({ code: 'invalid_zone_move_policy', message: 'zoneMovePolicy.allowedPhases must be an array of phases' });
 	}
+	if (typedRulePack.turnActionPolicy !== undefined) {
+		if (!isObject(typedRulePack.turnActionPolicy)) {
+			issues.push({ code: 'invalid_turn_action_policy', message: 'turnActionPolicy must be an object when provided' });
+		} else {
+			const turnActionPolicy = typedRulePack.turnActionPolicy as Record<string, unknown>;
+			if (turnActionPolicy.enabled !== undefined && typeof turnActionPolicy.enabled !== 'boolean') {
+				issues.push({
+					code: 'invalid_turn_action_policy_enabled',
+					message: 'turnActionPolicy.enabled must be boolean'
+				});
+			}
+			if (
+				turnActionPolicy.allowedPhases !== undefined &&
+				!Array.isArray(turnActionPolicy.allowedPhases)
+			) {
+				issues.push({
+					code: 'invalid_turn_action_policy_allowed_phases',
+					message: 'turnActionPolicy.allowedPhases must be an array of phases'
+				});
+			}
+			if (
+				turnActionPolicy.drawFromZoneAllowlist !== undefined &&
+				!Array.isArray(turnActionPolicy.drawFromZoneAllowlist)
+			) {
+				issues.push({
+					code: 'invalid_turn_action_policy_draw_from',
+					message: 'turnActionPolicy.drawFromZoneAllowlist must be an array of zone ids'
+				});
+			}
+			if (
+				turnActionPolicy.resolveToZoneAllowlist !== undefined &&
+				!Array.isArray(turnActionPolicy.resolveToZoneAllowlist)
+			) {
+				issues.push({
+					code: 'invalid_turn_action_policy_resolve_to',
+					message: 'turnActionPolicy.resolveToZoneAllowlist must be an array of zone ids'
+				});
+			}
+			if (
+				turnActionPolicy.requireDrawBeforeResolve !== undefined &&
+				typeof turnActionPolicy.requireDrawBeforeResolve !== 'boolean'
+			) {
+				issues.push({
+					code: 'invalid_turn_action_policy_require_draw',
+					message: 'turnActionPolicy.requireDrawBeforeResolve must be boolean'
+				});
+			}
+			if (
+				turnActionPolicy.requireResolveAfterDraw !== undefined &&
+				typeof turnActionPolicy.requireResolveAfterDraw !== 'boolean'
+			) {
+				issues.push({
+					code: 'invalid_turn_action_policy_require_resolve',
+					message: 'turnActionPolicy.requireResolveAfterDraw must be boolean'
+				});
+			}
+			if (
+				turnActionPolicy.drawSourcePolicies !== undefined &&
+				!Array.isArray(turnActionPolicy.drawSourcePolicies)
+			) {
+				issues.push({
+					code: 'invalid_turn_action_policy_draw_source_policies',
+					message: 'turnActionPolicy.drawSourcePolicies must be an array when provided'
+				});
+			} else if (Array.isArray(turnActionPolicy.drawSourcePolicies)) {
+				for (let index = 0; index < turnActionPolicy.drawSourcePolicies.length; index += 1) {
+					const raw = turnActionPolicy.drawSourcePolicies[index];
+					if (!isObject(raw)) {
+						issues.push({
+							code: 'invalid_turn_action_policy_draw_source_policy',
+							message: `turnActionPolicy.drawSourcePolicies[${index}] must be an object`
+						});
+						continue;
+					}
+					if (typeof raw.zoneId !== 'string' || raw.zoneId.trim().length === 0) {
+						issues.push({
+							code: 'invalid_turn_action_policy_draw_source_zone',
+							message: `turnActionPolicy.drawSourcePolicies[${index}].zoneId must be a non-empty string`
+						});
+					}
+					if (
+						typeof raw.minCards !== 'number' ||
+						!Number.isInteger(raw.minCards) ||
+						raw.minCards < 1
+					) {
+						issues.push({
+							code: 'invalid_turn_action_policy_draw_source_min_cards',
+							message: `turnActionPolicy.drawSourcePolicies[${index}].minCards must be an integer >= 1`
+						});
+					}
+					if (
+						raw.maxCards !== undefined &&
+						(typeof raw.maxCards !== 'number' ||
+							!Number.isInteger(raw.maxCards) ||
+							raw.maxCards < 1)
+					) {
+						issues.push({
+							code: 'invalid_turn_action_policy_draw_source_max_cards',
+							message: `turnActionPolicy.drawSourcePolicies[${index}].maxCards must be an integer >= 1 when provided`
+						});
+					}
+					if (
+						raw.requireContiguousFromTop !== undefined &&
+						typeof raw.requireContiguousFromTop !== 'boolean'
+					) {
+						issues.push({
+							code: 'invalid_turn_action_policy_draw_source_contiguous',
+							message: `turnActionPolicy.drawSourcePolicies[${index}].requireContiguousFromTop must be boolean`
+						});
+					}
+					if (
+						raw.requireResolveIncludesAnchor !== undefined &&
+						typeof raw.requireResolveIncludesAnchor !== 'boolean'
+					) {
+						issues.push({
+							code: 'invalid_turn_action_policy_draw_source_anchor',
+							message: `turnActionPolicy.drawSourcePolicies[${index}].requireResolveIncludesAnchor must be boolean`
+						});
+					}
+					if (
+						raw.requiredResolveTargetZoneAllowlist !== undefined &&
+						!Array.isArray(raw.requiredResolveTargetZoneAllowlist)
+					) {
+						issues.push({
+							code: 'invalid_turn_action_policy_draw_source_required_targets',
+							message: `turnActionPolicy.drawSourcePolicies[${index}].requiredResolveTargetZoneAllowlist must be an array when provided`
+						});
+					}
+				}
+			}
+		}
+	}
 	return issues;
 }
 
@@ -369,14 +621,149 @@ function removeCardsFromZone(cards: CardInput[], requested: CardInput[]): { remo
 	const remaining = [...cards];
 	const removed: CardInput[] = [];
 	for (const requestedCard of requested) {
-		const index = remaining.findIndex((candidate) => deepCardEqual(candidate, requestedCard));
+		const index = remaining.findIndex((candidate) => cardsMatchForMove(candidate, requestedCard));
 		if (index === -1) {
 			return { removed: [], remaining: cards };
 		}
-		removed.push(remaining[index]);
+		const sourceCard = remaining[index];
+		removed.push(mergeRequestedMoveCard(sourceCard, requestedCard));
 		remaining.splice(index, 1);
 	}
 	return { removed, remaining };
+}
+
+function activeTurnActionPolicy(
+	rulePack: GameplayRulePack,
+	state: GameplayState
+): GameplayTurnActionPolicy | undefined {
+	const policy = rulePack.turnActionPolicy;
+	if (!policy?.enabled) {
+		return undefined;
+	}
+	if (!policy.allowedPhases.includes(state.phase)) {
+		return undefined;
+	}
+	return policy;
+}
+
+function isDrawMoveByPolicy(
+	event: Extract<GameEvent, { type: 'zone_move' }>,
+	handZoneName: string,
+	policy: GameplayTurnActionPolicy
+): boolean {
+	return (
+		event.from.kind === 'table' &&
+		event.to.kind === 'player' &&
+		event.to.playerId === event.actorId &&
+		event.to.zone === handZoneName &&
+		policy.drawFromZoneAllowlist.includes(event.from.zone)
+	);
+}
+
+function isResolveMoveByPolicy(
+	event: Extract<GameEvent, { type: 'zone_move' }>,
+	handZoneName: string,
+	policy: GameplayTurnActionPolicy
+): boolean {
+	return (
+		event.from.kind === 'player' &&
+		event.from.playerId === event.actorId &&
+		event.from.zone === handZoneName &&
+		event.to.kind === 'table' &&
+		policy.resolveToZoneAllowlist.includes(event.to.zone)
+	);
+}
+
+function drawSourcePolicyForZone(
+	policy: GameplayTurnActionPolicy,
+	zoneId: string
+): GameplayTurnDrawSourcePolicy | undefined {
+	if (!policy.drawSourcePolicies || policy.drawSourcePolicies.length === 0) {
+		return undefined;
+	}
+	return policy.drawSourcePolicies.find((entry) => entry.zoneId === zoneId);
+}
+
+function isContiguousTopRun(sourceCards: CardInput[], requestedCards: CardInput[]): boolean {
+	if (requestedCards.length === 0 || requestedCards.length > sourceCards.length) {
+		return false;
+	}
+	const expected = sourceCards.slice(sourceCards.length - requestedCards.length);
+	for (let index = 0; index < expected.length; index += 1) {
+		if (!cardsMatchForMove(expected[index], requestedCards[index])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function pendingDrawForPlayer(state: GameplayState, playerId: string): boolean {
+	return state.turnActionState?.pendingDrawByPlayer?.[playerId] === true;
+}
+
+function requiredResolveCardIdForPlayer(state: GameplayState, playerId: string): string | undefined {
+	const value = state.turnActionState?.requiredResolveCardIdByPlayer?.[playerId];
+	return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function requiredResolveTargetZonesForPlayer(state: GameplayState, playerId: string): string[] | undefined {
+	const zones = state.turnActionState?.requiredResolveTargetZonesByPlayer?.[playerId];
+	if (!Array.isArray(zones) || zones.length === 0) {
+		return undefined;
+	}
+	return zones;
+}
+
+function setPendingDrawForPlayer(
+	state: GameplayState,
+	playerId: string,
+	pending: boolean,
+	requiredResolveCardId?: string,
+	requiredResolveTargetZones?: string[]
+): void {
+	if (!state.turnActionState) {
+		state.turnActionState = {
+			pendingDrawByPlayer: {},
+			requiredResolveCardIdByPlayer: {},
+			requiredResolveTargetZonesByPlayer: {}
+		};
+	}
+	if (!state.turnActionState.requiredResolveCardIdByPlayer) {
+		state.turnActionState.requiredResolveCardIdByPlayer = {};
+	}
+	if (!state.turnActionState.requiredResolveTargetZonesByPlayer) {
+		state.turnActionState.requiredResolveTargetZonesByPlayer = {};
+	}
+	state.turnActionState.pendingDrawByPlayer[playerId] = pending;
+	if (!pending) {
+		delete state.turnActionState.requiredResolveCardIdByPlayer[playerId];
+		delete state.turnActionState.requiredResolveTargetZonesByPlayer[playerId];
+		return;
+	}
+	if (requiredResolveCardId) {
+		state.turnActionState.requiredResolveCardIdByPlayer[playerId] = requiredResolveCardId;
+	} else {
+		delete state.turnActionState.requiredResolveCardIdByPlayer[playerId];
+	}
+	if (requiredResolveTargetZones && requiredResolveTargetZones.length > 0) {
+		state.turnActionState.requiredResolveTargetZonesByPlayer[playerId] = [...requiredResolveTargetZones];
+	} else {
+		delete state.turnActionState.requiredResolveTargetZonesByPlayer[playerId];
+	}
+}
+
+function clearPendingDrawState(state: GameplayState): void {
+	if (!state.turnActionState) {
+		state.turnActionState = {
+			pendingDrawByPlayer: {},
+			requiredResolveCardIdByPlayer: {},
+			requiredResolveTargetZonesByPlayer: {}
+		};
+		return;
+	}
+	state.turnActionState.pendingDrawByPlayer = {};
+	state.turnActionState.requiredResolveCardIdByPlayer = {};
+	state.turnActionState.requiredResolveTargetZonesByPlayer = {};
 }
 
 function validateGameEvent(
@@ -464,6 +851,79 @@ function validateGameEvent(
 			issues.push({ code: 'too_many_cards', message: `zone_move allows at most ${policy.maxCards} cards` });
 		}
 
+		const turnActionPolicy = activeTurnActionPolicy(rulePack, state);
+		if (turnActionPolicy) {
+			const pendingDraw = pendingDrawForPlayer(state, event.actorId);
+			const isDrawMove = isDrawMoveByPolicy(event, rulePack.handZoneName, turnActionPolicy);
+			const isResolveMove = isResolveMoveByPolicy(event, rulePack.handZoneName, turnActionPolicy);
+			const drawSourcePolicy = isDrawMove
+				? drawSourcePolicyForZone(turnActionPolicy, event.from.zone)
+				: undefined;
+
+			if (isDrawMove && drawSourcePolicy) {
+				if (event.cards.length < drawSourcePolicy.minCards) {
+					issues.push({
+						code: 'draw_too_few_cards',
+						message: `draw from "${drawSourcePolicy.zoneId}" requires at least ${drawSourcePolicy.minCards} cards`
+					});
+				}
+				if (
+					typeof drawSourcePolicy.maxCards === 'number' &&
+					event.cards.length > drawSourcePolicy.maxCards
+				) {
+					issues.push({
+						code: 'draw_too_many_cards',
+						message: `draw from "${drawSourcePolicy.zoneId}" allows at most ${drawSourcePolicy.maxCards} cards`
+					});
+				}
+				if (drawSourcePolicy.requireContiguousFromTop) {
+					const sourceCards = getZoneCards(state, event.from);
+					if (sourceCards && !isContiguousTopRun(sourceCards, event.cards)) {
+						issues.push({
+							code: 'draw_batch_not_contiguous_top_run',
+							message: `draw from "${drawSourcePolicy.zoneId}" must be a contiguous run ending at the top card`
+						});
+					}
+				}
+			}
+
+			if (isDrawMove && pendingDraw && turnActionPolicy.requireResolveAfterDraw) {
+				issues.push({
+					code: 'draw_requires_resolution',
+					message: 'Draw is blocked until previous drawn card is resolved to a play target'
+				});
+			}
+			if (isResolveMove && !pendingDraw && turnActionPolicy.requireDrawBeforeResolve) {
+				issues.push({
+					code: 'resolve_requires_draw',
+					message: 'Resolve move is blocked until a draw action happens first'
+				});
+			}
+			if (isResolveMove) {
+				const requiredResolveCardId = requiredResolveCardIdForPlayer(state, event.actorId);
+				if (requiredResolveCardId) {
+					const includesAnchor = event.cards.some((card) => cardId(card) === requiredResolveCardId);
+					if (!includesAnchor) {
+						issues.push({
+							code: 'resolve_missing_draw_anchor',
+							message: 'Resolve move must include the selected drawn card from discard pickup'
+						});
+					}
+				}
+				const requiredTargetZones = requiredResolveTargetZonesForPlayer(state, event.actorId);
+				if (
+					requiredTargetZones &&
+					event.to.kind === 'table' &&
+					!requiredTargetZones.includes(event.to.zone)
+				) {
+					issues.push({
+						code: 'resolve_anchor_requires_target_zone',
+						message: `Resolve move must send picked draw card to one of: ${requiredTargetZones.join(', ')}`
+					});
+				}
+			}
+		}
+
 		const sourceCards = getZoneCards(state, event.from);
 		if (!sourceCards) {
 			issues.push({ code: 'missing_source_zone', message: `Source zone ${event.from.kind === 'player' ? `${event.from.playerId}:${event.from.zone}` : `table:${event.from.zone}`} does not exist` });
@@ -542,6 +1002,7 @@ function applyGameEvent(
 		state.phase = rulePack.startingPhase;
 		state.playerZones = initializePlayerZones(state.players, rulePack.handZoneName);
 		state.tableZones = { table: [], discard: [], meld: [] };
+		clearPendingDrawState(state);
 		emitTrace(trace, eventIndex, 'turn', 'game initialized', { players: state.players.length });
 		return;
 	}
@@ -562,6 +1023,7 @@ function applyGameEvent(
 		for (const zone of rulePack.roundPolicy.clearTableZonesOnRoundStart) {
 			state.tableZones[zone] = [];
 		}
+		clearPendingDrawState(state);
 		emitTrace(trace, eventIndex, 'round', 'round started', { roundNumber: state.roundNumber, dealerIndex: state.dealerIndex });
 		return;
 	}
@@ -596,6 +1058,18 @@ function applyGameEvent(
 		ensureZone(state, event.to);
 		const targetCards = getZoneCards(state, event.to) ?? [];
 		setZoneCards(state, event.to, [...targetCards, ...cloneCards(removeResult.removed)]);
+		const turnActionPolicy = activeTurnActionPolicy(rulePack, state);
+		if (turnActionPolicy) {
+			if (isDrawMoveByPolicy(event, rulePack.handZoneName, turnActionPolicy)) {
+				const drawSourcePolicy = drawSourcePolicyForZone(turnActionPolicy, event.from.zone);
+				const requiredAnchorId =
+					drawSourcePolicy?.requireResolveIncludesAnchor === true ? cardId(event.cards[0]) : undefined;
+				const requiredTargetZones = drawSourcePolicy?.requiredResolveTargetZoneAllowlist;
+				setPendingDrawForPlayer(state, event.actorId, true, requiredAnchorId, requiredTargetZones);
+			} else if (isResolveMoveByPolicy(event, rulePack.handZoneName, turnActionPolicy)) {
+				setPendingDrawForPlayer(state, event.actorId, false);
+			}
+		}
 		emitTrace(trace, eventIndex, 'move', 'zone move applied', {
 			actorId: event.actorId,
 			from: event.from,
@@ -607,12 +1081,14 @@ function applyGameEvent(
 
 	if (event.type === 'advance_turn') {
 		state.currentTurnIndex = (state.currentTurnIndex + rulePack.turnPolicy.direction + state.turnOrder.length) % state.turnOrder.length;
+		clearPendingDrawState(state);
 		emitTrace(trace, eventIndex, 'turn', 'turn advanced');
 		return;
 	}
 
 	if (event.type === 'end_round') {
 		state.phase = rulePack.phaseAfterRoundEnd;
+		clearPendingDrawState(state);
 		emitTrace(trace, eventIndex, 'round', 'round ended');
 		return;
 	}
@@ -638,7 +1114,12 @@ export function deriveGameState(
 		dealerIndex: -1,
 		roundNumber: 0,
 		playerZones: {},
-		tableZones: {}
+		tableZones: {},
+		turnActionState: {
+			pendingDrawByPlayer: {},
+			requiredResolveCardIdByPlayer: {},
+			requiredResolveTargetZonesByPlayer: {}
+		}
 	};
 
 	if (validationIssues.length > 0) {

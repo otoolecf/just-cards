@@ -41,7 +41,8 @@ describe('ui-profile', () => {
 						label: 'Discard',
 						hint: 'Face-up discard',
 						allowDrawFromTop: true,
-						drawVisibility: 'reveal'
+						drawVisibility: 'reveal',
+						drawPickMode: 'any_visible'
 					}
 				]
 			},
@@ -59,6 +60,7 @@ describe('ui-profile', () => {
 		expect(issues).toEqual([]);
 		expect(profile.hand.layout?.kind).toBe('grid');
 		expect(profile.table.zones.find((zone) => zone.id === 'stock')?.drawVisibility).toBe('preserve');
+		expect(profile.table.zones.find((zone) => zone.id === 'discard')?.drawPickMode).toBe('any_visible');
 		expect(profile.seats?.cards?.zoneId).toBe('hand');
 	});
 
@@ -79,6 +81,24 @@ describe('ui-profile', () => {
 
 		const issues = validateUiProfile(profile, runtimeRulePack);
 		expect(issues.some((issue) => issue.code === 'unknown_quick_target_zone')).toBe(true);
+	});
+
+	test('ui_profile_validation_rejects_invalid_draw_pick_mode', () => {
+		const profile = createUiProfile({
+			table: {
+				zones: [
+					{
+						id: 'discard',
+						label: 'Discard',
+						hint: 'Face-up discard',
+						drawPickMode: 'middle' as 'top'
+					}
+				]
+			}
+		});
+
+		const issues = validateUiProfile(profile);
+		expect(issues.some((issue) => issue.code === 'invalid_zone_draw_pick_mode')).toBe(true);
 	});
 
 	test('ui_profile_generator_derives_visible_zones_and_labels_from_runtime_pack', () => {

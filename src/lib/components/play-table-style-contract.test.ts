@@ -16,4 +16,19 @@ describe('play table style contract', () => {
 		expect(source).toContain(':global(.guide-panel)');
 		expect(source).toContain(':global(.action-panel)');
 	});
+
+	it('play_table_includes_draw_resolve_action_gating_hooks', () => {
+		const source = playTableSource();
+		expect(source).toContain('isDrawBlocked(');
+		expect(source).toContain('isResolveBlocked(');
+		expect(source).toContain('drawPickModeForZone(');
+		expect(source).toContain('drawFromTable(zone.zoneId, card.key)');
+	});
+
+	it('play_table_resolve_blocking_reflects_required_target_and_anchor_constraints', () => {
+		const source = playTableSource();
+		const match = source.match(/function isResolveBlocked\(zone: string\): boolean \{([\s\S]*?)\n\t\}/);
+		expect(match?.[1]).toContain('requiredResolveTargetZonesForSelf');
+		expect(match?.[1]).toContain('selectedCardMatchesRequiredResolveAnchor()');
+	});
 });

@@ -118,6 +118,13 @@ export interface RuleFactsV0 {
 	turn: {
 		drawSources: string[];
 		playTargets: string[];
+		drawThenResolve?: boolean;
+		sourceDrawRules?: Array<{
+			zoneId: string;
+			pickMode: 'top' | 'any_visible';
+			requireTakeAbove?: boolean;
+			requireResolveIncludesPicked?: boolean;
+		}>;
 	};
 	scoring: {
 		lowScoreWins: boolean;
@@ -555,6 +562,56 @@ function detectPlayTargets(text: string, zones: string[]): string[] {
 	return uniqueStrings(targets);
 }
 
+function detectDrawThenResolveTurnFlow(text: string, drawSources: string[], playTargets: string[]): boolean {
+	if (drawSources.length === 0 || playTargets.length === 0) {
+		return false;
+	}
+
+	const lower = text.toLowerCase();
+	const sequentialPatterns = [
+		/\bon your turn\b[\s\S]{0,160}\bdraw\b[\s\S]{0,200}\b(?:then|before discarding|before you discard|and)\b[\s\S]{0,160}\b(?:discard|play|lay|replace|swap)\b/,
+		/\bafter drawing\b[\s\S]{0,140}\b(?:discard|play|lay|replace|swap)\b/,
+		/\bdraw(?:ing)?\b[\s\S]{0,140}\b(?:from|top of)\b[\s\S]{0,80}\b(?:stock|draw pile|discard)\b[\s\S]{0,200}\b(?:discard|replace|swap)\b/
+	];
+	for (const pattern of sequentialPatterns) {
+		if (pattern.test(lower)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function detectSourceDrawRules(
+	text: string,
+	drawSources: string[]
+): RuleFactsV0['turn']['sourceDrawRules'] {
+	const rules: NonNullable<RuleFactsV0['turn']['sourceDrawRules']> = [];
+	const lower = text.toLowerCase();
+
+	if (!drawSources.includes('discard')) {
+		return undefined;
+	}
+
+	const discardAnyCardPattern =
+		/\bany\s+card\s+(?:from|in)\s+(?:the\s+)?discard(?:\s+pile)?\b|\bfrom\s+(?:the\s+)?discard(?:\s+pile)?\b[\s\S]{0,40}\bany\s+card\b/i;
+	const takeAbovePattern =
+		/\b(?:must|has to|need to)\s+take\s+all\s+(?:the\s+)?cards?\s+above\b|\btake\s+all\s+(?:the\s+)?cards?\s+above\b/i;
+	const immediateUsePattern =
+		/\b(?:must|has to|need to)\s+(?:immediately\s+be\s+used|be\s+used\s+immediately)\b|\bselected\s+card\b[\s\S]{0,40}\bimmediately\b[\s\S]{0,40}\b(?:lay|meld|play)\b/i;
+
+	if (discardAnyCardPattern.test(lower)) {
+		rules.push({
+			zoneId: 'discard',
+			pickMode: 'any_visible',
+			...(takeAbovePattern.test(lower) ? { requireTakeAbove: true } : {}),
+			...(immediateUsePattern.test(lower) ? { requireResolveIncludesPicked: true } : {})
+		});
+	}
+
+	return rules.length > 0 ? rules : undefined;
+}
+
 function detectLowScoreWins(text: string): boolean {
 	return /low score wins|lower is better|fewest points|least points|lowest(?:\s+\w+){0,3}\s+score/i.test(text);
 }
@@ -721,7 +778,8 @@ function detectScoringOverrides(text: string): { aceValue: number; rankOverrides
 function detectDiagnostics(
 	text: string,
 	zones: string[],
-	setup?: RuleFactsV0['setup']
+	setup?: RuleFactsV0['setup'],
+	sourceDrawRules?: RuleFactsV0['turn']['sourceDrawRules']
 ): string[] {
 	const diagnostics: string[] = [];
 	const lower = text.toLowerCase();
@@ -761,6 +819,12 @@ function detectDiagnostics(
 	if (setup?.drawVisibility?.stock === 'preserve') {
 		diagnostics.push('Visibility hint: stock draws should stay hidden until explicitly revealed.');
 	}
+	if (sourceDrawRules?.some((rule) => rule.pickMode === 'any_visible')) {
+		diagnostics.push('Turn hint: some draw zones allow selecting a visible card and taking cards above it.');
+	}
+	if (sourceDrawRules?.some((rule) => rule.requireResolveIncludesPicked === true)) {
+		diagnostics.push('Turn hint: selected discard pickup card must be included in immediate resolve.');
+	}
 
 	if (/\bside pot\b|\bbetting round\b|\ball-in\b/.test(lower)) {
 		diagnostics.push('Detected betting/side-pot language that may require future settlement primitives.');
@@ -786,6 +850,8 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 	const zones = detectZones(normalizedText);
 	const drawSources = detectDrawSources(normalizedText, zones);
 	const playTargets = detectPlayTargets(normalizedText, zones);
+	const drawThenResolve = detectDrawThenResolveTurnFlow(normalizedText, drawSources, playTargets);
+	const sourceDrawRules = detectSourceDrawRules(normalizedText, drawSources);
 	const scoringOverrides = detectScoringOverrides(normalizedText);
 	const cardsPerPlayer = detectCardsPerPlayer(normalizedText);
 	const initialFaceUpCards = detectInitialFaceUpCards(normalizedText, cardsPerPlayer);
@@ -800,7 +866,7 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 					...(drawVisibility ? { drawVisibility } : {})
 				}
 			: undefined;
-	const diagnostics = detectDiagnostics(normalizedText, zones, setup);
+	const diagnostics = detectDiagnostics(normalizedText, zones, setup, sourceDrawRules);
 
 	return {
 		schemaVersion: 'rule-facts/v0',
@@ -812,7 +878,9 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 		zones,
 		turn: {
 			drawSources,
-			playTargets
+			playTargets,
+			...(drawThenResolve ? { drawThenResolve: true } : {}),
+			...(sourceDrawRules ? { sourceDrawRules } : {})
 		},
 		scoring: {
 			lowScoreWins: detectLowScoreWins(normalizedText),
@@ -857,6 +925,33 @@ function gameplayRulePackFromFacts(facts: RuleFactsV0): GameplayRulePack {
 		...facts.turn.playTargets,
 		...facts.turn.drawSources
 	]);
+	const drawFromZones = uniqueStrings(facts.turn.drawSources);
+	const resolveToZones = uniqueStrings(facts.turn.playTargets);
+	const sourceDrawRules = facts.turn.sourceDrawRules ?? [];
+	const nonDiscardResolveTargets = resolveToZones.filter((zoneId) => zoneId !== 'discard');
+	const drawSourcePolicies = sourceDrawRules.map((rule) => ({
+		zoneId: rule.zoneId,
+		minCards: 1,
+		...(rule.pickMode === 'top' ? { maxCards: 1 } : {}),
+		...(rule.pickMode === 'any_visible' && rule.requireTakeAbove === true
+			? { requireContiguousFromTop: true }
+			: {}),
+		...(rule.requireResolveIncludesPicked === true
+			? {
+					requireResolveIncludesAnchor: true,
+					requiredResolveTargetZoneAllowlist:
+						nonDiscardResolveTargets.length > 0 ? nonDiscardResolveTargets : resolveToZones
+				}
+			: {})
+	}));
+	const hasAnyVisiblePickupRule = sourceDrawRules.some((rule) => rule.pickMode === 'any_visible');
+	const requiresImmediateResolve =
+		facts.turn.drawThenResolve === true ||
+		sourceDrawRules.some((rule) => rule.requireResolveIncludesPicked === true);
+	const shouldEnableTurnActionPolicy =
+		(requiresImmediateResolve || drawSourcePolicies.length > 0) &&
+		drawFromZones.length > 0 &&
+		resolveToZones.length > 0;
 
 	return createGameplayRulePack({
 		handZoneName: facts.handZoneName,
@@ -869,8 +964,21 @@ function gameplayRulePackFromFacts(facts: RuleFactsV0): GameplayRulePack {
 			sourceZoneAllowlist,
 			targetZoneAllowlist,
 			minCards: 1,
-			maxCards: 1
+			...(hasAnyVisiblePickupRule ? {} : { maxCards: 1 })
 		},
+		...(shouldEnableTurnActionPolicy
+			? {
+					turnActionPolicy: {
+						enabled: true,
+						allowedPhases: ['play'],
+						drawFromZoneAllowlist: drawFromZones,
+						resolveToZoneAllowlist: resolveToZones,
+						requireDrawBeforeResolve: requiresImmediateResolve,
+						requireResolveAfterDraw: requiresImmediateResolve,
+						drawSourcePolicies
+					}
+				}
+			: {}),
 		roundPolicy: {
 			enabled: true,
 			rotateDealerBetweenRounds: true,
@@ -901,12 +1009,17 @@ function scoringTriggersFromFacts(facts: RuleFactsV0) {
 function patchedUiProfile(
 	profile: UiProfileV0,
 	quickTargetZoneIds: string[],
-	setup?: RuleFactsV0['setup']
+	setup?: RuleFactsV0['setup'],
+	sourceDrawRules?: RuleFactsV0['turn']['sourceDrawRules']
 ): UiProfileV0 {
 	const allowedQuickTargets = new Set(quickTargetZoneIds);
 	const filteredQuickTargets = profile.hand.quickPlayTargets.filter((target) =>
 		allowedQuickTargets.has(target.zoneId)
 	);
+	const drawRuleByZone = new Map<string, NonNullable<RuleFactsV0['turn']['sourceDrawRules']>[number]>();
+	for (const rule of sourceDrawRules ?? []) {
+		drawRuleByZone.set(rule.zoneId, rule);
+	}
 
 	return createUiProfile({
 		hand: {
@@ -923,6 +1036,9 @@ function patchedUiProfile(
 				hint: COMMON_ZONE_HINTS[zone.id] ?? zone.hint,
 				...(setup?.drawVisibility?.[zone.id]
 					? { drawVisibility: setup.drawVisibility[zone.id] }
+					: {}),
+				...(drawRuleByZone.get(zone.id)
+					? { drawPickMode: drawRuleByZone.get(zone.id)?.pickMode }
 					: {})
 			}))
 		},
@@ -1010,7 +1126,8 @@ export function compileRuleFactsToBundle(facts: RuleFactsV0): RuntimeRulesetBund
 			handHint: 'Select a card to reveal quick play targets.'
 		}),
 		facts.turn.playTargets,
-		facts.setup
+		facts.setup,
+		facts.turn.sourceDrawRules
 	);
 	const explain = explainFromFacts(facts, uiProfile);
 

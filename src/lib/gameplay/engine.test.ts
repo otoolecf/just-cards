@@ -177,6 +177,437 @@ describe('gameplay engine', () => {
 		expect(state.validationIssues).toBeUndefined();
 	});
 
+	it('zone_move_draw_policy_blocks_second_draw_before_resolve', () => {
+		const rules = createGameplayRulePack({
+			handZoneName: 'hand',
+			startingPhase: 'play',
+			zoneMovePolicy: {
+				allowedPhases: ['deal', 'play'],
+				actorMustBeCurrentPlayer: false,
+				sourceMustBelongToActor: false,
+				sourceZoneAllowlist: ['hand', 'stock', 'discard'],
+				targetZoneAllowlist: ['hand', 'stock', 'discard'],
+				minCards: 1,
+				maxCards: 1
+			},
+			turnActionPolicy: {
+				enabled: true,
+				allowedPhases: ['play'],
+				drawFromZoneAllowlist: ['stock', 'discard'],
+				resolveToZoneAllowlist: ['discard'],
+				requireDrawBeforeResolve: true,
+				requireResolveAfterDraw: true
+			}
+		});
+
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['alice', 'bob'], dealerIndex: 0 },
+			{ type: 'set_phase', phase: 'deal' },
+			{ type: 'deal_cards', playerId: 'alice', cards: [{ rank: 'A' }, { rank: '2' }, { rank: '3' }] },
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'stock' },
+				cards: [{ rank: '2' }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'stock' },
+				cards: [{ rank: '3' }]
+			},
+			{ type: 'set_phase', phase: 'play' },
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'table', zone: 'stock' },
+				to: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				cards: [{ rank: '2' }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'table', zone: 'stock' },
+				to: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				cards: [{ rank: '3' }]
+			}
+		];
+
+		const state = deriveGameState(events, rules);
+
+		expect(state.validationIssues?.map((issue) => issue.code)).toContain('draw_requires_resolution');
+		expect(state.playerZones.alice.hand).toEqual([{ rank: 'A' }, { rank: '2' }]);
+	});
+
+	it('zone_move_draw_policy_blocks_resolve_before_draw', () => {
+		const rules = createGameplayRulePack({
+			handZoneName: 'hand',
+			startingPhase: 'play',
+			zoneMovePolicy: {
+				allowedPhases: ['deal', 'play'],
+				actorMustBeCurrentPlayer: false,
+				sourceMustBelongToActor: false,
+				sourceZoneAllowlist: ['hand', 'stock', 'discard'],
+				targetZoneAllowlist: ['hand', 'stock', 'discard'],
+				minCards: 1,
+				maxCards: 1
+			},
+			turnActionPolicy: {
+				enabled: true,
+				allowedPhases: ['play'],
+				drawFromZoneAllowlist: ['stock', 'discard'],
+				resolveToZoneAllowlist: ['discard'],
+				requireDrawBeforeResolve: true,
+				requireResolveAfterDraw: true
+			}
+		});
+
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['alice', 'bob'], dealerIndex: 0 },
+			{ type: 'deal_cards', playerId: 'alice', cards: [{ rank: 'A' }] },
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: 'A' }]
+			}
+		];
+
+		const state = deriveGameState(events, rules);
+
+		expect(state.validationIssues?.map((issue) => issue.code)).toContain('resolve_requires_draw');
+		expect(state.playerZones.alice.hand).toEqual([{ rank: 'A' }]);
+		expect(state.tableZones.discard ?? []).toEqual([]);
+	});
+
+	it('zone_move_matches_by_cid_when_tags_change', () => {
+		const rules = createGameplayRulePack({
+			handZoneName: 'hand',
+			startingPhase: 'play',
+			zoneMovePolicy: {
+				allowedPhases: ['play'],
+				actorMustBeCurrentPlayer: false,
+				sourceMustBelongToActor: false,
+				sourceZoneAllowlist: ['hand', 'discard'],
+				targetZoneAllowlist: ['hand', 'discard'],
+				minCards: 1,
+				maxCards: 1
+			}
+		});
+
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['alice', 'bob'], dealerIndex: 0 },
+			{
+				type: 'deal_cards',
+				playerId: 'alice',
+				cards: [{ rank: 'A', suit: 'spades', tags: ['cid:a1', 'face:down'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: 'A', suit: 'spades', tags: ['cid:a1', 'face:up'] }]
+			}
+		];
+
+		const state = deriveGameState(events, rules);
+
+		expect(state.validationIssues).toBeUndefined();
+		expect(state.playerZones.alice.hand).toEqual([]);
+		expect(state.tableZones.discard).toEqual([{ rank: 'A', suit: 'spades', tags: ['cid:a1', 'face:up'] }]);
+	});
+
+	it('zone_move_draw_policy_rejects_non_contiguous_top_run_pickup', () => {
+		const rules = createGameplayRulePack({
+			handZoneName: 'hand',
+			startingPhase: 'play',
+			zoneMovePolicy: {
+				allowedPhases: ['deal', 'play'],
+				actorMustBeCurrentPlayer: false,
+				sourceMustBelongToActor: false,
+				sourceZoneAllowlist: ['hand', 'stock', 'discard'],
+				targetZoneAllowlist: ['hand', 'stock', 'discard', 'meld'],
+				minCards: 1
+			},
+			turnActionPolicy: {
+				enabled: true,
+				allowedPhases: ['play'],
+				drawFromZoneAllowlist: ['stock', 'discard'],
+				resolveToZoneAllowlist: ['discard', 'meld'],
+				requireDrawBeforeResolve: true,
+				requireResolveAfterDraw: true,
+				drawSourcePolicies: [
+					{ zoneId: 'stock', minCards: 1, maxCards: 1 },
+					{
+						zoneId: 'discard',
+						minCards: 1,
+						requireContiguousFromTop: true,
+						requireResolveIncludesAnchor: true
+					}
+				]
+			}
+		});
+
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['alice', 'bob'], dealerIndex: 0 },
+			{ type: 'set_phase', phase: 'deal' },
+			{
+				type: 'deal_cards',
+				playerId: 'alice',
+				cards: [
+					{ rank: 'A', suit: 'spades', tags: ['cid:a'] },
+					{ rank: '2', suit: 'spades', tags: ['cid:b'] },
+					{ rank: '3', suit: 'spades', tags: ['cid:c'] },
+					{ rank: '4', suit: 'spades', tags: ['cid:d'] }
+				]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: 'A', suit: 'spades', tags: ['cid:a'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: '2', suit: 'spades', tags: ['cid:b'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: '3', suit: 'spades', tags: ['cid:c'] }]
+			},
+			{ type: 'set_phase', phase: 'play' },
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'table', zone: 'discard' },
+				to: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				cards: [
+					{ rank: 'A', suit: 'spades', tags: ['cid:a'] },
+					{ rank: '3', suit: 'spades', tags: ['cid:c'] }
+				]
+			}
+		];
+
+		const state = deriveGameState(events, rules);
+
+		expect(state.validationIssues?.map((issue) => issue.code)).toContain('draw_batch_not_contiguous_top_run');
+		expect(state.tableZones.discard).toEqual([
+			{ rank: 'A', suit: 'spades', tags: ['cid:a'] },
+			{ rank: '2', suit: 'spades', tags: ['cid:b'] },
+			{ rank: '3', suit: 'spades', tags: ['cid:c'] }
+		]);
+	});
+
+	it('zone_move_draw_policy_requires_resolve_to_include_discard_pick_anchor', () => {
+		const rules = createGameplayRulePack({
+			handZoneName: 'hand',
+			startingPhase: 'play',
+			zoneMovePolicy: {
+				allowedPhases: ['deal', 'play'],
+				actorMustBeCurrentPlayer: false,
+				sourceMustBelongToActor: false,
+				sourceZoneAllowlist: ['hand', 'stock', 'discard'],
+				targetZoneAllowlist: ['hand', 'stock', 'discard', 'meld'],
+				minCards: 1
+			},
+			turnActionPolicy: {
+				enabled: true,
+				allowedPhases: ['play'],
+				drawFromZoneAllowlist: ['stock', 'discard'],
+				resolveToZoneAllowlist: ['discard', 'meld'],
+				requireDrawBeforeResolve: true,
+				requireResolveAfterDraw: true,
+				drawSourcePolicies: [
+					{ zoneId: 'stock', minCards: 1, maxCards: 1 },
+					{
+						zoneId: 'discard',
+						minCards: 1,
+						requireContiguousFromTop: true,
+						requireResolveIncludesAnchor: true
+					}
+				]
+			}
+		});
+
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['alice', 'bob'], dealerIndex: 0 },
+			{ type: 'set_phase', phase: 'deal' },
+			{
+				type: 'deal_cards',
+				playerId: 'alice',
+				cards: [
+					{ rank: 'A', suit: 'spades', tags: ['cid:a'] },
+					{ rank: '2', suit: 'spades', tags: ['cid:b'] },
+					{ rank: '3', suit: 'spades', tags: ['cid:c'] },
+					{ rank: '4', suit: 'spades', tags: ['cid:d'] },
+					{ rank: '5', suit: 'spades', tags: ['cid:e'] }
+				]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: 'A', suit: 'spades', tags: ['cid:a'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: '2', suit: 'spades', tags: ['cid:b'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: '3', suit: 'spades', tags: ['cid:c'] }]
+			},
+			{ type: 'set_phase', phase: 'play' },
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'table', zone: 'discard' },
+				to: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				cards: [
+					{ rank: '2', suit: 'spades', tags: ['cid:b'] },
+					{ rank: '3', suit: 'spades', tags: ['cid:c'] }
+				]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'meld' },
+				cards: [{ rank: '4', suit: 'spades', tags: ['cid:d'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'meld' },
+				cards: [{ rank: '2', suit: 'spades', tags: ['cid:b'] }]
+			}
+		];
+
+		const state = deriveGameState(events, rules);
+
+		expect(state.validationIssues?.map((issue) => issue.code)).toContain('resolve_missing_draw_anchor');
+		expect(state.tableZones.meld).toEqual([{ rank: '2', suit: 'spades', tags: ['cid:b'] }]);
+		expect(state.turnActionState?.pendingDrawByPlayer?.alice).toBe(false);
+	});
+
+	it('zone_move_draw_policy_can_require_anchor_resolve_target_zones', () => {
+		const rules = createGameplayRulePack({
+			handZoneName: 'hand',
+			startingPhase: 'play',
+			zoneMovePolicy: {
+				allowedPhases: ['deal', 'play'],
+				actorMustBeCurrentPlayer: false,
+				sourceMustBelongToActor: false,
+				sourceZoneAllowlist: ['hand', 'stock', 'discard'],
+				targetZoneAllowlist: ['hand', 'stock', 'discard', 'meld'],
+				minCards: 1
+			},
+			turnActionPolicy: {
+				enabled: true,
+				allowedPhases: ['play'],
+				drawFromZoneAllowlist: ['stock', 'discard'],
+				resolveToZoneAllowlist: ['discard', 'meld'],
+				requireDrawBeforeResolve: true,
+				requireResolveAfterDraw: true,
+				drawSourcePolicies: [
+					{
+						zoneId: 'discard',
+						minCards: 1,
+						requireContiguousFromTop: true,
+						requireResolveIncludesAnchor: true,
+						requiredResolveTargetZoneAllowlist: ['meld']
+					}
+				]
+			}
+		});
+
+		const events: GameEvent[] = [
+			{ type: 'init_game', players: ['alice', 'bob'], dealerIndex: 0 },
+			{ type: 'set_phase', phase: 'deal' },
+			{
+				type: 'deal_cards',
+				playerId: 'alice',
+				cards: [
+					{ rank: 'A', suit: 'spades', tags: ['cid:a'] },
+					{ rank: '2', suit: 'spades', tags: ['cid:b'] },
+					{ rank: '3', suit: 'spades', tags: ['cid:c'] },
+					{ rank: '4', suit: 'spades', tags: ['cid:d'] }
+				]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: 'A', suit: 'spades', tags: ['cid:a'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: '2', suit: 'spades', tags: ['cid:b'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: '3', suit: 'spades', tags: ['cid:c'] }]
+			},
+			{ type: 'set_phase', phase: 'play' },
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'table', zone: 'discard' },
+				to: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				cards: [
+					{ rank: '2', suit: 'spades', tags: ['cid:b'] },
+					{ rank: '3', suit: 'spades', tags: ['cid:c'] }
+				]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'discard' },
+				cards: [{ rank: '2', suit: 'spades', tags: ['cid:b'] }]
+			},
+			{
+				type: 'zone_move',
+				actorId: 'alice',
+				from: { kind: 'player', playerId: 'alice', zone: 'hand' },
+				to: { kind: 'table', zone: 'meld' },
+				cards: [{ rank: '2', suit: 'spades', tags: ['cid:b'] }]
+			}
+		];
+
+		const state = deriveGameState(events, rules);
+
+		expect(state.validationIssues?.map((issue) => issue.code)).toContain('resolve_anchor_requires_target_zone');
+		expect(state.tableZones.meld).toEqual([{ rank: '2', suit: 'spades', tags: ['cid:b'] }]);
+		expect(state.turnActionState?.pendingDrawByPlayer?.alice).toBe(false);
+	});
+
 	it('undo_and_redo_replay_mutating_events', () => {
 		const events: GameEvent[] = [
 			{ type: 'init_game', players: ['alice', 'bob'] },

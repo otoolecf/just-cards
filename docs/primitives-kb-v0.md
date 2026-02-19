@@ -116,6 +116,27 @@ type GameEvent =
   - `enabled`
   - `rotateDealerBetweenRounds`
   - `clearTableZonesOnRoundStart`
+- `turnActionPolicy?`:
+  - `enabled`
+  - `allowedPhases`
+  - `drawFromZoneAllowlist`
+  - `resolveToZoneAllowlist`
+  - `requireDrawBeforeResolve`
+  - `requireResolveAfterDraw`
+  - `drawSourcePolicies?[]`:
+    - `zoneId`
+    - `minCards`
+    - `maxCards?`
+    - `requireContiguousFromTop?`
+    - `requireResolveIncludesAnchor?`
+    - `requiredResolveTargetZoneAllowlist?`
+
+`turnActionPolicy` is the generalized primitive for draw-first games (Golf, many Rummy variants), where a player must resolve a draw before taking another draw.
+
+`drawSourcePolicies` are per-zone draw constraints for variants such as 500 Rum:
+1. top-only or multi-card pickup bounds by source zone,
+2. contiguous top-run enforcement for selected discard pickups,
+3. immediate-use anchor enforcement in resolve move.
 
 ## ValidatorRulePack Primitive
 
@@ -297,6 +318,7 @@ interface UiProfileV0 {
       visible?: boolean;
       allowDrawFromTop?: boolean;
       drawVisibility?: 'reveal' | 'preserve';
+      drawPickMode?: 'top' | 'any_visible';
     }[];
   };
   actions: {

@@ -1,5 +1,6 @@
 import type {
 	UiCardLayout,
+	UiDrawPickMode,
 	UiDrawVisibilityMode,
 	UiPrimaryActionKind,
 	UiProfileV0
@@ -121,6 +122,14 @@ export function drawVisibilityModeByZoneFromUiProfile(uiProfile: UiProfileV0): M
 	const modes = new Map<string, UiDrawVisibilityMode>();
 	for (const zone of uiProfile.table.zones) {
 		modes.set(zone.id, zone.drawVisibility ?? 'reveal');
+	}
+	return modes;
+}
+
+export function drawPickModeByZoneFromUiProfile(uiProfile: UiProfileV0): Map<string, UiDrawPickMode> {
+	const modes = new Map<string, UiDrawPickMode>();
+	for (const zone of uiProfile.table.zones) {
+		modes.set(zone.id, zone.drawPickMode ?? 'top');
 	}
 	return modes;
 }

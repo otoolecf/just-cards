@@ -35,6 +35,17 @@ Each jack or queen scores 10 points.
 Each king scores zero points.
 `;
 
+const RUMMY_500_DISCARD_PICKUP_TEXT = `
+500 Rum
+Players: 2 to 8
+Deal seven cards to each player.
+Each player may draw either the top card of the stock or any card from the discard pile.
+When drawing from discard, the player must take all the cards above the selected card.
+The selected card must immediately be used by laying it in a meld.
+The remaining cards may be melded or added to hand.
+First player to 500 points wins.
+`;
+
 describe('ruleset generator', () => {
 	it('extract_rule_facts_detects_six_card_golf_signals', () => {
 		const facts = extractRuleFacts({
@@ -47,6 +58,7 @@ describe('ruleset generator', () => {
 		expect(facts.players.min).toBe(2);
 		expect(facts.players.max).toBe(4);
 		expect(facts.turn.drawSources).toEqual(expect.arrayContaining(['stock', 'discard']));
+		expect(facts.turn.drawThenResolve).toBe(true);
 		expect(facts.scoring.lowScoreWins).toBe(true);
 		expect(facts.scoring.rankOverrides['K']).toBe(0);
 		expect(facts.scoring.rankOverrides['J']).toBe(10);
@@ -99,6 +111,25 @@ describe('ruleset generator', () => {
 		expect(facts.scoring.rankOverrides['K']).toBe(0);
 	});
 
+	it('extract_rule_facts_detects_discard_pickup_and_immediate_use_turn_rules', () => {
+		const facts = extractRuleFacts({
+			sourceText: RUMMY_500_DISCARD_PICKUP_TEXT,
+			sourceUrl: 'https://bicyclecards.com/how-to-play/500-rum'
+		});
+
+		expect(facts.turn.drawSources).toEqual(expect.arrayContaining(['stock', 'discard']));
+		expect(facts.turn.sourceDrawRules).toEqual(
+			expect.arrayContaining([
+				{
+					zoneId: 'discard',
+					pickMode: 'any_visible',
+					requireTakeAbove: true,
+					requireResolveIncludesPicked: true
+				}
+			])
+		);
+	});
+
 	it('compile_rule_facts_to_bundle_returns_runtime_bundle_v1', () => {
 		const facts: RuleFactsV0 = extractRuleFacts({
 			sourceText: FREEFORM_PROSE
@@ -122,6 +153,15 @@ describe('ruleset generator', () => {
 		const bundle = compileRuleFactsToBundle(facts);
 
 		expect(bundle.uiProfile.hand.layout).toEqual({ kind: 'grid', rows: 2, columns: 3 });
+		expect(bundle.runtimeRulePack.gameplayRulePack?.turnActionPolicy).toEqual({
+			enabled: true,
+			allowedPhases: ['play'],
+			drawFromZoneAllowlist: ['stock', 'discard'],
+			resolveToZoneAllowlist: ['discard'],
+			requireDrawBeforeResolve: true,
+			requireResolveAfterDraw: true,
+			drawSourcePolicies: []
+		});
 		expect(bundle.uiProfile.seats?.cards).toEqual({
 			zoneId: 'hand',
 			label: 'Player Layouts',
@@ -129,6 +169,28 @@ describe('ruleset generator', () => {
 			layout: { kind: 'grid', rows: 2, columns: 3 }
 		});
 		expect(bundle.uiProfile.table.zones.find((zone) => zone.id === 'stock')?.drawVisibility).toBe('preserve');
+	});
+
+	it('compile_rule_facts_to_bundle_maps_discard_pickup_rule_to_runtime_and_ui', () => {
+		const facts = extractRuleFacts({
+			sourceText: RUMMY_500_DISCARD_PICKUP_TEXT,
+			sourceUrl: 'https://bicyclecards.com/how-to-play/500-rum'
+		});
+		const bundle = compileRuleFactsToBundle(facts);
+
+		expect(bundle.runtimeRulePack.gameplayRulePack?.turnActionPolicy?.drawSourcePolicies).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					zoneId: 'discard',
+					minCards: 1,
+					requireContiguousFromTop: true,
+					requireResolveIncludesAnchor: true,
+					requiredResolveTargetZoneAllowlist: ['meld']
+				})
+			])
+		);
+		expect(bundle.runtimeRulePack.gameplayRulePack?.zoneMovePolicy.maxCards).toBeUndefined();
+		expect(bundle.uiProfile.table.zones.find((zone) => zone.id === 'discard')?.drawPickMode).toBe('any_visible');
 	});
 
 	it('generate_ruleset_draft_from_url_ingests_html_and_compiles', async () => {
