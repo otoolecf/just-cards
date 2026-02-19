@@ -4,25 +4,26 @@
 	import { Select, Tabs } from 'bits-ui';
 	import {
 		PATTERN_PRESETS,
-		SCORE_MODE_OPTIONS,
 		buildAddDeltaEvent,
 		buildAddRoundEvent,
-		buildRummy500NetDeltaEntries,
-		buildSixCardGolfHoleDeltaEntries,
+		buildGuidedRoundDeltaEntries,
 		buildPatternRoundEvent,
-		calculateSixCardGolfHoleScore,
+		deriveGuidedScoreProfileFromBundle,
 		getPatternPreset,
-		getModePreset,
 		parseCardsFromText,
 		parseNamedRoundText,
 		parsePatternScoringText,
-		sortStandingsByMode,
-		type PatternModePreset
+		sortStandingsByDirection,
+		type GuidedScoreProfile,
+		type GuidedScoreZoneProfile,
+		type PatternModePreset,
+		type ScoreInputMode,
+		type ScoreWinDirection
 	} from '$lib/session/score-session-commands';
 	import ScoreInput from '$lib/components/score-input.svelte';
 	import ScoreButton from '$lib/components/score-button.svelte';
 	import CardTapInput from '$lib/components/card-tap-input.svelte';
-	import { type CardInput, type ScoreEvent } from '$lib/scorekeeper/engine';
+	import { createRulePack, type CardInput, type ScoreEvent } from '$lib/scorekeeper/engine';
 	import { createStarterRulesetDraft } from '$lib/rulesets/picker';
 	import type { RulesetRecord } from '$lib/rulesets/types';
 	import {
@@ -35,15 +36,21 @@
 	export let data: PageData;
 
 	type FeedbackKind = 'idle' | 'error' | 'loading' | 'success';
-	type AddRoundMode = 'rows' | 'text' | 'delta' | 'rummy-net' | 'golf-hole';
+	type AddRoundMode = 'guided' | 'rows' | 'text' | 'delta';
 	type SelectOption = {
 		value: string;
 		label: string;
 	};
 
 	const POLL_INTERVAL_MS = 3000;
-
-	const gameModeItems = SCORE_MODE_OPTIONS.map((mode): SelectOption => ({ value: mode.id, label: mode.name }));
+	const scoringModeItems: SelectOption[] = [
+		{ value: 'guided', label: 'Guided (ruleset)' },
+		{ value: 'raw', label: 'Raw (calculator)' }
+	];
+	const winDirectionItems: SelectOption[] = [
+		{ value: 'high_wins', label: 'High score wins' },
+		{ value: 'low_wins', label: 'Low score wins' }
+	];
 	const patternPackItems = PATTERN_PRESETS.map((pack): SelectOption => ({ value: pack.id, label: pack.name }));
 
 	type Feedback = {
@@ -63,23 +70,29 @@
 	let setupPlayers = ['Player 1', 'Player 2'];
 	let sessionRoster: string[] = [];
 	let setupPlayerCount = 2;
-	let selectedModeId = SCORE_MODE_OPTIONS[0]?.id ?? '';
+	let selectedScoreInputMode: ScoreInputMode = 'guided';
+	let selectedRawWinDirection: ScoreWinDirection = 'high_wins';
+	let selectedRulesetId = '';
+	let selectedRulesetRecord: RulesetRecord | undefined;
+	let setupGuidedProfile: GuidedScoreProfile | null = null;
+	let activeGuidedProfile: GuidedScoreProfile | null = null;
+	let guidedEntryZones: GuidedScoreZoneProfile[] = [];
+
 	let selectedPatternPackId = PATTERN_PRESETS[0]?.id ?? '';
 	let modePatternPack: PatternModePreset | undefined = PATTERN_PRESETS[0];
-
-	let addRoundMode: AddRoundMode = 'rows';
+	let addRoundMode: AddRoundMode = 'guided';
 	let quickRoundText = '';
 	let playerCardsById: Record<string, string> = {};
 	let manualDeltaById: Record<string, string> = {};
-	let rummyTableCardsById: Record<string, string> = {};
-	let rummyHandCardsById: Record<string, string> = {};
-	let golfCardsById: Record<string, string> = {};
+	let guidedCardsByPlayerZone: Record<string, Record<string, string>> = {};
 
 	let patternCardsText = '';
 	let patternTargetId = '';
 	let patternScoringText = PATTERN_PRESETS[0]?.defaultPatternScoring ?? '';
 	let patternTargetItems: SelectOption[] = [];
+
 	let rulesets: RulesetRecord[] = data.rulesets ?? [];
+	let rulesetItems: SelectOption[] = [];
 	let isRulesetBusy = false;
 	let rulesetFeedback: Feedback =
 		data.rulesetLoadError && data.rulesetLoadError.length > 0
@@ -106,10 +119,7 @@
 		const seen = new Set<string>();
 		for (const value of values) {
 			const normalized = value.trim();
-			if (!normalized) {
-				continue;
-			}
-			if (seen.has(normalized)) {
+			if (!normalized || seen.has(normalized)) {
 				continue;
 			}
 			seen.add(normalized);
@@ -118,24 +128,111 @@
 		return result;
 	}
 
-	function getModeName(): string {
-		const mode = getModePreset(selectedModeId);
-		return mode?.name ?? SCORE_MODE_OPTIONS[0]?.name ?? '';
+	function formatWinDirection(winDirection: ScoreWinDirection): string {
+		return winDirection === 'low_wins' ? 'Low score wins' : 'High score wins';
+	}
+
+	function getSelectLabel(options: SelectOption[], value: string): string {
+		return options.find((option) => option.value === value)?.label ?? value;
+	}
+
+	function playerFieldId(prefix: string, player: string): string {
+		return `${prefix}-${player.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 	}
 
 	function syncSetupPlayers(): void {
 		const target = Math.max(2, setupPlayerCount);
 		setupPlayerCount = target;
-
 		if (setupPlayers.length < target) {
 			const next = [...setupPlayers];
-			for (let index = setupPlayers.length; index < target; index++) {
+			for (let index = setupPlayers.length; index < target; index += 1) {
 				next.push(`Player ${index + 1}`);
 			}
 			setupPlayers = next;
 		}
 		if (setupPlayers.length > target) {
 			setupPlayers = setupPlayers.slice(0, target);
+		}
+	}
+
+	function getActivePlayers(): string[] {
+		const preferredRoster = activeSessionId ? sessionRoster : setupPlayers;
+		if (!sessionState) {
+			return dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setupPlayers);
+		}
+		return dedupePlayers([
+			...dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setupPlayers),
+			...Object.keys(sessionState.state.totalsByPlayer)
+		]);
+	}
+
+	function activeScoreInputMode(): ScoreInputMode {
+		const mode = sessionState?.config?.scoreInputMode;
+		return mode === 'guided' || mode === 'raw' ? mode : selectedScoreInputMode;
+	}
+
+	function activeWinDirection(): ScoreWinDirection {
+		if (sessionState?.config?.scoreWinDirection) {
+			return sessionState.config.scoreWinDirection;
+		}
+		if (activeScoreInputMode() === 'guided' && activeGuidedProfile) {
+			return activeGuidedProfile.winDirection;
+		}
+		return selectedRawWinDirection;
+	}
+
+	function activeRulesetName(): string {
+		const rulesetId = sessionState?.config?.scoreRulesetId;
+		if (!rulesetId) {
+			return selectedRulesetRecord?.name ?? '';
+		}
+		return rulesets.find((ruleset) => ruleset.id === rulesetId)?.name ?? rulesetId;
+	}
+
+	function activeModeSummary(): string {
+		const mode = activeScoreInputMode();
+		if (mode === 'guided') {
+			const name = activeRulesetName();
+			return name ? `Guided (${name})` : 'Guided (ruleset)';
+		}
+		return 'Raw (calculator)';
+	}
+
+	function resolveActiveGuidedProfile(): GuidedScoreProfile | null {
+		const persisted = sessionState?.config?.scoreGuidedProfile;
+		if (persisted) {
+			return persisted;
+		}
+		if (selectedScoreInputMode !== 'guided' || !selectedRulesetRecord) {
+			return null;
+		}
+		try {
+			return deriveGuidedScoreProfileFromBundle(selectedRulesetRecord.bundle, selectedRulesetRecord.id);
+		} catch {
+			return null;
+		}
+	}
+
+	function scoreEntryZones(profile: GuidedScoreProfile | null): GuidedScoreZoneProfile[] {
+		return (profile?.zones ?? []).filter((zone) => zone.role !== 'exclude');
+	}
+
+	function allowedAddRoundModes(mode: ScoreInputMode): AddRoundMode[] {
+		return mode === 'guided' ? ['guided', 'delta'] : ['rows', 'text', 'delta'];
+	}
+
+	function syncGuidedInputsForRoster(players: string[], zones: GuidedScoreZoneProfile[]): void {
+		const next: Record<string, Record<string, string>> = {};
+		for (const player of players) {
+			const byZone = guidedCardsByPlayerZone[player] ?? {};
+			const zoneValues: Record<string, string> = {};
+			for (const zone of zones) {
+				zoneValues[zone.zoneId] = byZone[zone.zoneId] ?? '';
+			}
+			next[player] = zoneValues;
+		}
+		if (JSON.stringify(next) !== JSON.stringify(guidedCardsByPlayerZone)) {
+			guidedCardsByPlayerZone = next;
 		}
 	}
 
@@ -150,34 +247,35 @@
 
 		playerCardsById = syncMapByPlayers(playerCardsById);
 		manualDeltaById = syncMapByPlayers(manualDeltaById);
-		rummyTableCardsById = syncMapByPlayers(rummyTableCardsById);
-		rummyHandCardsById = syncMapByPlayers(rummyHandCardsById);
-		golfCardsById = syncMapByPlayers(golfCardsById);
-	}
-
-	function playerFieldId(prefix: string, player: string): string {
-		return `${prefix}-${player.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-	}
-
-	function getSelectLabel(options: SelectOption[], value: string): string {
-		return options.find((option) => option.value === value)?.label ?? value;
-	}
-
-	function getActivePlayers(): string[] {
-		const preferredRoster = activeSessionId ? sessionRoster : setupPlayers;
-		if (!sessionState) {
-			return dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setupPlayers);
-		}
-		const active = dedupePlayers([
-			...dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setupPlayers),
-			...Object.keys(sessionState.state.totalsByPlayer)
-		]);
-		return active;
+		syncGuidedInputsForRoster(players, guidedEntryZones);
 	}
 
 	$: activePlayers = getActivePlayers();
 	$: if (data.rulesets) {
 		rulesets = data.rulesets;
+	}
+	$: rulesetItems = rulesets.map((ruleset) => ({ value: ruleset.id, label: ruleset.name }));
+	$: if (rulesets.length > 0 && !selectedRulesetId) {
+		selectedRulesetId = rulesets[0].id;
+	}
+	$: selectedRulesetRecord = rulesets.find((ruleset) => ruleset.id === selectedRulesetId);
+	$: {
+		try {
+			setupGuidedProfile = selectedRulesetRecord
+				? deriveGuidedScoreProfileFromBundle(selectedRulesetRecord.bundle, selectedRulesetRecord.id)
+				: null;
+		} catch {
+			setupGuidedProfile = null;
+		}
+	}
+	$: activeGuidedProfile = resolveActiveGuidedProfile();
+	$: guidedEntryZones = scoreEntryZones(activeGuidedProfile);
+	$: {
+		const mode = activeScoreInputMode();
+		const allowed = allowedAddRoundModes(mode);
+		if (!allowed.includes(addRoundMode)) {
+			addRoundMode = allowed[0];
+		}
 	}
 	$: {
 		modePatternPack = getPatternPreset(selectedPatternPackId) ?? PATTERN_PRESETS[0];
@@ -190,6 +288,7 @@
 	$: if (sessionState && sessionState.state.totalsByPlayer && !patternTargetId && activePlayers.length > 0) {
 		patternTargetId = activePlayers[0];
 	}
+	$: syncGuidedInputsForRoster(activePlayers, guidedEntryZones);
 
 	$: if (activeSessionId) {
 		clearIntervalIfNeeded();
@@ -207,7 +306,7 @@
 		if (!sessionState) {
 			return [];
 		}
-		return sortStandingsByMode(sessionState.state.totalsByPlayer, sessionState.config?.scoreModeId ?? selectedModeId);
+		return sortStandingsByDirection(sessionState.state.totalsByPlayer, activeWinDirection());
 	};
 
 	function clearIntervalIfNeeded(): void {
@@ -228,9 +327,17 @@
 		try {
 			const state = await getSessionState(activeSessionId);
 			sessionState = state;
-			const persistedModeId = state.config?.scoreModeId;
-			if (persistedModeId && getModePreset(persistedModeId)) {
-				selectedModeId = persistedModeId;
+			if (state.config.scoreInputMode) {
+				selectedScoreInputMode = state.config.scoreInputMode;
+			}
+			if (state.config.scoreWinDirection) {
+				selectedRawWinDirection = state.config.scoreWinDirection;
+			}
+			if (state.config.scoreRulesetId) {
+				selectedRulesetId = state.config.scoreRulesetId;
+			}
+			if (state.config.scoreGuidedProfile?.rulesetId) {
+				selectedRulesetId = state.config.scoreGuidedProfile.rulesetId;
 			}
 			if (sessionRoster.length === 0) {
 				const knownPlayers = dedupePlayers(Object.keys(state.state.totalsByPlayer));
@@ -239,8 +346,7 @@
 				}
 			}
 			lastSynced = new Date().toLocaleTimeString();
-			const roster = getActivePlayers();
-			syncPlayerInputsForRoster(roster);
+			syncPlayerInputsForRoster(getActivePlayers());
 			if (activeSessionId && patternTargetId === '' && activePlayers.length > 0) {
 				patternTargetId = activePlayers[0];
 			}
@@ -271,22 +377,42 @@
 		if (isPosting || isBusy) {
 			return;
 		}
-		const modePreset = getModePreset(selectedModeId);
-		const config = modePreset?.createRulePack() ?? null;
-		if (!config) {
-			setFeedback('error', 'No game mode selected.');
-			return;
-		}
 		const names = dedupePlayers(setupPlayers);
 		if (names.length < 2) {
 			setFeedback('error', 'At least two players are required.');
 			return;
 		}
 
+		const scoreInputMode = selectedScoreInputMode;
+		let scoreRulePack: unknown = createRulePack();
+		let scoreWinDirection: ScoreWinDirection = selectedRawWinDirection;
+		let scoreRulesetId: string | undefined;
+		let scoreGuidedProfile: GuidedScoreProfile | undefined;
+		let summaryLabel = scoreInputMode === 'guided' ? 'guided' : 'raw';
+
+		if (scoreInputMode === 'guided') {
+			if (!selectedRulesetRecord || !setupGuidedProfile) {
+				setFeedback('error', 'Select a valid ruleset for Guided mode.');
+				return;
+			}
+			scoreRulePack = setupGuidedProfile.scoreRulePack;
+			scoreWinDirection = setupGuidedProfile.winDirection;
+			scoreRulesetId = selectedRulesetRecord.id;
+			scoreGuidedProfile = setupGuidedProfile;
+			summaryLabel = `${selectedRulesetRecord.name} (guided)`;
+		}
+
 		isPosting = true;
-		setFeedback('loading', `Creating ${getModeName()} session...`);
+		setFeedback('loading', `Creating ${summaryLabel} session...`);
 		try {
-			const created = await createSession({ scoreModeId: selectedModeId, scoreRulePack: config, trace: false });
+			const created = await createSession({
+				scoreRulePack,
+				scoreInputMode,
+				scoreWinDirection,
+				...(scoreRulesetId ? { scoreRulesetId } : {}),
+				...(scoreGuidedProfile ? { scoreGuidedProfile } : {}),
+				trace: false
+			});
 			activeSessionId = created.sessionId;
 			joinSessionId = created.sessionId;
 			sessionState = null;
@@ -346,9 +472,15 @@
 		}
 		playerCardsById = cleared;
 		manualDeltaById = cleared;
-		rummyTableCardsById = cleared;
-		rummyHandCardsById = cleared;
-		golfCardsById = cleared;
+		const clearedGuided: Record<string, Record<string, string>> = {};
+		for (const player of activePlayers) {
+			const byZone = guidedCardsByPlayerZone[player] ?? {};
+			clearedGuided[player] = {};
+			for (const zoneId of Object.keys(byZone)) {
+				clearedGuided[player][zoneId] = '';
+			}
+		}
+		guidedCardsByPlayerZone = clearedGuided;
 		quickRoundText = '';
 		patternCardsText = '';
 	}
@@ -365,7 +497,45 @@
 			let event: ScoreEvent | null = null;
 			let successMessage = 'Round added.';
 
-			if (addRoundMode === 'rows' || addRoundMode === 'text') {
+			if (addRoundMode === 'guided') {
+				if (!activeGuidedProfile || guidedEntryZones.length === 0) {
+					setFeedback('error', 'Guided scoring is not configured for this session.');
+					return;
+				}
+				const cardsByPlayerZone: Record<string, Record<string, CardInput[]>> = {};
+				for (const player of activePlayers) {
+					const byZone: Record<string, CardInput[]> = {};
+					for (const zone of guidedEntryZones) {
+						const rawCards = guidedCardsByPlayerZone[player]?.[zone.zoneId] ?? '';
+						const parsed = parseCardsFromText(rawCards);
+						if (parsed.errors.length > 0) {
+							errors.push(`${player} ${zone.label}: ${parsed.errors.join(' ')}`);
+							continue;
+						}
+						if (parsed.cards.length > 0) {
+							byZone[zone.zoneId] = parsed.cards;
+						}
+					}
+					cardsByPlayerZone[player] = byZone;
+				}
+				let deltas: Array<{ playerId: string; delta: number }> = [];
+				if (errors.length === 0) {
+					try {
+						deltas = buildGuidedRoundDeltaEntries({
+							players: activePlayers,
+							profile: activeGuidedProfile,
+							cardsByPlayerZone
+						});
+					} catch (error) {
+						errors.push(error instanceof Error ? error.message : 'Unable to score guided round.');
+					}
+				}
+				if (deltas.length === 0) {
+					errors.push('Add at least one guided card entry.');
+				}
+				event = buildAddDeltaEvent(deltas);
+				successMessage = 'Guided round added.';
+			} else if (addRoundMode === 'rows' || addRoundMode === 'text') {
 				let parsedEntries: { playerId: string; cards: CardInput[] }[] = [];
 
 				if (addRoundMode === 'rows') {
@@ -392,7 +562,7 @@
 					errors.push('Add at least one player score entry.');
 				}
 				event = buildAddRoundEvent(parsedEntries);
-			} else if (addRoundMode === 'delta') {
+			} else {
 				const deltaEntries = activePlayers
 					.map((player) => ({ playerId: player, raw: (manualDeltaById[player] ?? '').trim() }))
 					.filter((entry) => entry.raw.length > 0)
@@ -406,66 +576,6 @@
 				}
 				event = buildAddDeltaEvent(deltaEntries);
 				successMessage = 'Manual points added.';
-			} else if (addRoundMode === 'rummy-net') {
-				const rummyEntries: {
-					playerId: string;
-					tableCards: CardInput[];
-					handCards: CardInput[];
-				}[] = [];
-
-				for (const player of activePlayers) {
-					const tableParsed = parseCardsFromText(rummyTableCardsById[player] ?? '');
-					const handParsed = parseCardsFromText(rummyHandCardsById[player] ?? '');
-					if (tableParsed.errors.length > 0) {
-						errors.push(`${player} table: ${tableParsed.errors.join(' ')}`);
-					}
-					if (handParsed.errors.length > 0) {
-						errors.push(`${player} hand: ${handParsed.errors.join(' ')}`);
-					}
-					if (tableParsed.cards.length === 0 && handParsed.cards.length === 0) {
-						continue;
-					}
-					rummyEntries.push({
-						playerId: player,
-						tableCards: tableParsed.cards,
-						handCards: handParsed.cards
-					});
-				}
-
-				if (rummyEntries.length === 0) {
-					errors.push('Enter table cards or hand cards for at least one player.');
-				}
-				const deltas = buildRummy500NetDeltaEntries(rummyEntries);
-				event = buildAddDeltaEvent(deltas);
-				successMessage = '500 Rummy net round added.';
-			} else {
-				const golfEntries: { playerId: string; cardsInRowMajorOrder: CardInput[] }[] = [];
-				for (const player of activePlayers) {
-					const parsed = parseCardsFromText(golfCardsById[player] ?? '');
-					if (parsed.errors.length > 0) {
-						errors.push(`${player}: ${parsed.errors.join(' ')}`);
-						continue;
-					}
-					if (parsed.cards.length === 0) {
-						continue;
-					}
-					try {
-						calculateSixCardGolfHoleScore({ cardsInRowMajorOrder: parsed.cards });
-						golfEntries.push({
-							playerId: player,
-							cardsInRowMajorOrder: parsed.cards
-						});
-					} catch (error) {
-						errors.push(`${player}: ${error instanceof Error ? error.message : 'Invalid Six Card Golf hole cards.'}`);
-					}
-				}
-
-				if (golfEntries.length === 0) {
-					errors.push('Enter one 6-card hole layout for at least one player.');
-				}
-				const deltas = buildSixCardGolfHoleDeltaEntries(golfEntries);
-				event = buildAddDeltaEvent(deltas);
-				successMessage = 'Six Card Golf hole added.';
 			}
 
 			if (errors.length > 0) {
@@ -595,10 +705,8 @@
 		sessionRoster = [];
 		quickRoundText = '';
 		manualDeltaById = {};
-		rummyTableCardsById = {};
-		rummyHandCardsById = {};
-		golfCardsById = {};
 		playerCardsById = {};
+		guidedCardsByPlayerZone = {};
 		patternCardsText = '';
 		lastSynced = '';
 		clearIntervalIfNeeded();
@@ -783,7 +891,11 @@
 		</div>
 		<div class="session-summary">
 			<p><strong>Session:</strong> {activeSessionId || 'Not started'}</p>
-			<p><strong>Game mode:</strong> {getModeName()}</p>
+			<p><strong>Scoring mode:</strong> {activeModeSummary()}</p>
+			<p><strong>Leaderboard:</strong> {formatWinDirection(activeWinDirection())}</p>
+			{#if activeScoreInputMode() === 'guided' && activeRulesetName()}
+				<p><strong>Ruleset:</strong> {activeRulesetName()}</p>
+			{/if}
 			{#if sessionState}
 				<p><strong>Events:</strong> {sessionState.eventCount}</p>
 			{/if}
@@ -903,21 +1015,23 @@
 		<section class="panel">
 			<h2>Start a score session</h2>
 			<div class="field-group">
-				<label for="game-mode">Game mode</label>
+				<label for="score-input-mode">Scoring mode</label>
 				<Select.Root
 					type="single"
-					items={gameModeItems}
-					bind:value={selectedModeId}
-					onValueChange={(nextValue) => (selectedModeId = nextValue)}
+					items={scoringModeItems}
+					bind:value={selectedScoreInputMode}
+					onValueChange={(nextValue) => {
+						selectedScoreInputMode = nextValue as ScoreInputMode;
+					}}
 				>
-					<Select.Trigger id="game-mode" class="jc-control control select-trigger">
-						<span>{getSelectLabel(gameModeItems, selectedModeId)}</span>
+					<Select.Trigger id="score-input-mode" class="jc-control control select-trigger">
+						<span>{getSelectLabel(scoringModeItems, selectedScoreInputMode)}</span>
 						<span aria-hidden="true">▾</span>
 					</Select.Trigger>
 					<Select.Portal>
 						<Select.Content class="select-content" sideOffset={6}>
 							<Select.Viewport class="select-viewport">
-								{#each gameModeItems as mode (mode.value)}
+								{#each scoringModeItems as mode (mode.value)}
 									<Select.Item value={mode.value} class="select-item">
 										{mode.label}
 									</Select.Item>
@@ -926,8 +1040,64 @@
 						</Select.Content>
 					</Select.Portal>
 				</Select.Root>
-				<p class="hint">{getModeName()}</p>
+				<p class="hint">
+					{selectedScoreInputMode === 'guided'
+						? 'Guided mode uses a ruleset to render scoring zones and calculate deltas.'
+						: 'Raw mode acts as a quick score calculator with optional card rows.'}
+				</p>
 			</div>
+
+			{#if selectedScoreInputMode === 'guided'}
+				<div class="field-group">
+					<label for="guided-ruleset">Ruleset (guided)</label>
+					<Select.Root type="single" items={rulesetItems} bind:value={selectedRulesetId}>
+						<Select.Trigger id="guided-ruleset" class="jc-control control select-trigger">
+							<span>{getSelectLabel(rulesetItems, selectedRulesetId) || 'Select ruleset'}</span>
+							<span aria-hidden="true">▾</span>
+						</Select.Trigger>
+						<Select.Portal>
+							<Select.Content class="select-content" sideOffset={6}>
+								<Select.Viewport class="select-viewport">
+									{#each rulesetItems as option (option.value)}
+										<Select.Item value={option.value} class="select-item">
+											{option.label}
+										</Select.Item>
+									{/each}
+								</Select.Viewport>
+							</Select.Content>
+						</Select.Portal>
+					</Select.Root>
+					{#if setupGuidedProfile}
+						<p class="hint">
+							Win direction: {formatWinDirection(setupGuidedProfile.winDirection)}.
+							Zones: {guidedEntryZones.map((zone) => zone.label).join(', ') || 'None'}.
+						</p>
+					{:else}
+						<p class="hint">Generate or create a ruleset first in optional ruleset tools.</p>
+					{/if}
+				</div>
+			{:else}
+				<div class="field-group">
+					<label for="raw-win-direction">Leaderboard direction</label>
+					<Select.Root type="single" items={winDirectionItems} bind:value={selectedRawWinDirection}>
+						<Select.Trigger id="raw-win-direction" class="jc-control control select-trigger">
+							<span>{getSelectLabel(winDirectionItems, selectedRawWinDirection)}</span>
+							<span aria-hidden="true">▾</span>
+						</Select.Trigger>
+						<Select.Portal>
+							<Select.Content class="select-content" sideOffset={6}>
+								<Select.Viewport class="select-viewport">
+									{#each winDirectionItems as option (option.value)}
+										<Select.Item value={option.value} class="select-item">
+											{option.label}
+										</Select.Item>
+									{/each}
+								</Select.Viewport>
+							</Select.Content>
+						</Select.Portal>
+					</Select.Root>
+				</div>
+			{/if}
 
 			<div class="grid-two">
 				<div class="field-group">
@@ -1017,37 +1187,70 @@
 				<h2>Add round</h2>
 				<Tabs.Root bind:value={addRoundMode} class="segmented">
 					<Tabs.List>
-						<Tabs.Trigger
-						value="rows"
-						class={`mode-trigger ${addRoundMode === 'rows' ? 'active' : ''}`.trim()}
-					>
-						Player card rows
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="text"
-						class={`mode-trigger ${addRoundMode === 'text' ? 'active' : ''}`.trim()}
-						>
-							Quick text
-						</Tabs.Trigger>
+						{#if activeScoreInputMode() === 'guided'}
+							<Tabs.Trigger
+								value="guided"
+								class={`mode-trigger ${addRoundMode === 'guided' ? 'active' : ''}`.trim()}
+							>
+								Guided cards
+							</Tabs.Trigger>
+						{/if}
+						{#if activeScoreInputMode() === 'raw'}
+							<Tabs.Trigger
+								value="rows"
+								class={`mode-trigger ${addRoundMode === 'rows' ? 'active' : ''}`.trim()}
+							>
+								Player card rows
+							</Tabs.Trigger>
+							<Tabs.Trigger
+								value="text"
+								class={`mode-trigger ${addRoundMode === 'text' ? 'active' : ''}`.trim()}
+							>
+								Quick text
+							</Tabs.Trigger>
+						{/if}
 						<Tabs.Trigger
 							value="delta"
 							class={`mode-trigger ${addRoundMode === 'delta' ? 'active' : ''}`.trim()}
 						>
 							Manual points
 						</Tabs.Trigger>
-						<Tabs.Trigger
-							value="rummy-net"
-							class={`mode-trigger ${addRoundMode === 'rummy-net' ? 'active' : ''}`.trim()}
-						>
-							500 Rummy net
-						</Tabs.Trigger>
-						<Tabs.Trigger
-							value="golf-hole"
-							class={`mode-trigger ${addRoundMode === 'golf-hole' ? 'active' : ''}`.trim()}
-						>
-							Six Card Golf hole
-						</Tabs.Trigger>
 					</Tabs.List>
+
+					<Tabs.Content value="guided">
+						{#if guidedEntryZones.length === 0}
+							<p class="hint">No guided scoring zones configured for this ruleset.</p>
+						{:else}
+							<p class="hint">Tap cards by zone. Guided mode applies ruleset card values and zone roles.</p>
+							{#each activePlayers as player}
+								<div class="field-group assist-group">
+									<p class="input-label">{player}</p>
+									{#each guidedEntryZones as zone (zone.zoneId)}
+										<div class="field-group">
+											<p class="input-label">{zone.label}</p>
+											{#if zone.hint}
+												<p class="hint">{zone.hint}</p>
+											{/if}
+											<CardTapInput
+												labelPrefix={`${player}-${zone.label}`}
+												value={guidedCardsByPlayerZone[player]?.[zone.zoneId] ?? ''}
+												valueChanged={(value) => {
+													guidedCardsByPlayerZone = {
+														...guidedCardsByPlayerZone,
+														[player]: {
+															...(guidedCardsByPlayerZone[player] ?? {}),
+															[zone.zoneId]: value
+														}
+													};
+												}}
+											/>
+										</div>
+									{/each}
+								</div>
+							{/each}
+						{/if}
+					</Tabs.Content>
+
 					<Tabs.Content value="rows">
 						{#each activePlayers as player}
 							<div class="field-group">
@@ -1056,16 +1259,16 @@
 									labelPrefix={player}
 									value={playerCardsById[player] ?? ''}
 									valueChanged={(value) => {
-										const next = {
+										playerCardsById = {
 											...playerCardsById,
 											[player]: value
 										};
-										playerCardsById = next;
 									}}
 								/>
 							</div>
 						{/each}
 					</Tabs.Content>
+
 					<Tabs.Content value="text">
 						<label for="quick-round">Quick round text</label>
 						<ScoreInput
@@ -1078,6 +1281,7 @@ Bob: 2D 3D 4D"
 							onValueChange={(value) => (quickRoundText = value)}
 						/>
 					</Tabs.Content>
+
 					<Tabs.Content value="delta">
 						<p class="hint">Enter signed point changes directly (positive or negative).</p>
 						{#each activePlayers as player}
@@ -1098,70 +1302,16 @@ Bob: 2D 3D 4D"
 							</div>
 						{/each}
 					</Tabs.Content>
-					<Tabs.Content value="rummy-net">
-						<p class="hint">Enter each player's table cards and hand cards. Delta = table minus hand.</p>
-						{#each activePlayers as player}
-							<div class="field-group assist-group">
-								<p class="input-label">{player}</p>
-								<label for={playerFieldId('rummy-table', player)}>Table/meld cards</label>
-								<ScoreInput
-									id={playerFieldId('rummy-table', player)}
-									type="text"
-									placeholder="7C 7D 7S 3D 4D 5D"
-									value={rummyTableCardsById[player] ?? ''}
-									onValueChange={(value) => {
-										rummyTableCardsById = {
-											...rummyTableCardsById,
-											[player]: value
-										};
-									}}
-								/>
-								<label for={playerFieldId('rummy-hand', player)}>Hand cards</label>
-								<ScoreInput
-									id={playerFieldId('rummy-hand', player)}
-									type="text"
-									placeholder="KH 9C"
-									value={rummyHandCardsById[player] ?? ''}
-									onValueChange={(value) => {
-										rummyHandCardsById = {
-											...rummyHandCardsById,
-											[player]: value
-										};
-									}}
-								/>
-							</div>
-						{/each}
-					</Tabs.Content>
-					<Tabs.Content value="golf-hole">
-						<p class="hint">Enter 6 cards per player in row-major 2x3 order: r1c1 r1c2 r1c3 r2c1 r2c2 r2c3.</p>
-						{#each activePlayers as player}
-							<div class="field-group">
-								<label for={playerFieldId('golf-hole', player)}>{player}</label>
-								<ScoreInput
-									id={playerFieldId('golf-hole', player)}
-									type="text"
-									placeholder="2C 5S KD 2H 9C QC"
-									value={golfCardsById[player] ?? ''}
-									onValueChange={(value) => {
-										golfCardsById = {
-											...golfCardsById,
-											[player]: value
-										};
-									}}
-								/>
-							</div>
-						{/each}
-					</Tabs.Content>
 				</Tabs.Root>
 
 				<div class="button-row">
 					<ScoreButton variant="primary" type="button" onPress={() => void submitAddRound()} disabled={isPosting}>
 						Add round
 					</ScoreButton>
-				<ScoreButton type="button" onPress={() => void submitUndo()} disabled={isPosting}>Undo</ScoreButton>
-				<ScoreButton type="button" onPress={() => void submitRedo()} disabled={isPosting}>Redo</ScoreButton>
-			</div>
-		</section>
+					<ScoreButton type="button" onPress={() => void submitUndo()} disabled={isPosting}>Undo</ScoreButton>
+					<ScoreButton type="button" onPress={() => void submitRedo()} disabled={isPosting}>Redo</ScoreButton>
+				</div>
+			</section>
 
 		<section class="panel">
 			<h2>Pattern round (optional)</h2>

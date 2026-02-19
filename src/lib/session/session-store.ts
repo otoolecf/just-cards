@@ -3,11 +3,16 @@ import {
 	adaptGameplayScoringToScoreEvent,
 	type GameplayScoringCommand
 } from '$lib/session/score-event-adapter';
+import type { GuidedScoreProfile, ScoreInputMode, ScoreWinDirection } from '$lib/session/score-session-commands';
 
 export interface SessionConfig {
 	scoreRulePack?: unknown;
 	gameplayRulePack?: unknown;
 	scoreModeId?: string;
+	scoreInputMode?: ScoreInputMode;
+	scoreWinDirection?: ScoreWinDirection;
+	scoreRulesetId?: string;
+	scoreGuidedProfile?: GuidedScoreProfile;
 	trace?: boolean;
 }
 
@@ -54,6 +59,10 @@ export interface SessionStateView {
 	eventCount: number;
 	config: {
 		scoreModeId?: string;
+		scoreInputMode?: ScoreInputMode;
+		scoreWinDirection?: ScoreWinDirection;
+		scoreRulesetId?: string;
+		scoreGuidedProfile?: GuidedScoreProfile;
 		trace?: boolean;
 	};
 	state: ScoreState;
@@ -162,6 +171,12 @@ export function buildSessionStateView(sessionId: string): SessionStateView {
 		eventCount: session.events.length,
 		config: {
 			scoreModeId: session.config.scoreModeId,
+			scoreInputMode: session.config.scoreInputMode,
+			scoreWinDirection: session.config.scoreWinDirection,
+			scoreRulesetId: session.config.scoreRulesetId,
+			scoreGuidedProfile: session.config.scoreGuidedProfile
+				? structuredClone(session.config.scoreGuidedProfile)
+				: undefined,
 			trace: session.config.trace
 		},
 		state,

@@ -2,6 +2,7 @@ import {
 	createPatternDetectorRulePack,
 	type PatternRulePack
 } from '$lib/gameplay/pattern-detector';
+import type { RuntimeRulesetBundle } from '$lib/rulesets/types';
 import {
 	cardValue,
 	type CardInput,
@@ -160,6 +161,43 @@ export interface SixCardGolfHoleScore {
 }
 
 export type ScoreWinDirection = 'high_wins' | 'low_wins';
+export type ScoreInputMode = 'guided' | 'raw';
+export type GuidedScoreZoneRole = 'add' | 'subtract' | 'exclude';
+
+export interface GuidedScoreZoneProfile {
+	zoneId: string;
+	label: string;
+	hint?: string;
+	role: GuidedScoreZoneRole;
+	layout?: {
+		kind: 'row' | 'grid';
+		rows?: number;
+		columns?: number;
+	};
+}
+
+export interface GuidedScoreSpecialRuleColumnPairZero {
+	kind: 'column_pair_zero';
+	zoneId: string;
+	rows: number;
+	columns: number;
+}
+
+export type GuidedScoreSpecialRule = GuidedScoreSpecialRuleColumnPairZero;
+
+export interface GuidedScoreProfile {
+	rulesetId: string;
+	winDirection: ScoreWinDirection;
+	scoreRulePack: ReturnType<typeof createRulePack>;
+	zones: GuidedScoreZoneProfile[];
+	specialRules: GuidedScoreSpecialRule[];
+}
+
+export interface BuildGuidedRoundDeltaEntriesInput {
+	players: string[];
+	profile: GuidedScoreProfile;
+	cardsByPlayerZone: Record<string, Record<string, CardInput[]>>;
+}
 
 export interface ScoreModeOption {
 	id: string;
@@ -267,17 +305,204 @@ export function getModeWinDirection(modeId?: string): ScoreWinDirection {
 	return getModePreset(modeId ?? '')?.winDirection ?? 'high_wins';
 }
 
-export function sortStandingsByMode(
+export function sortStandingsByDirection(
 	totalsByPlayer: Record<string, number>,
-	modeId?: string
+	winDirection: ScoreWinDirection = 'high_wins'
 ): Array<[string, number]> {
-	const winDirection = getModeWinDirection(modeId);
 	return Object.entries(totalsByPlayer).sort((left, right) => {
 		if (left[1] !== right[1]) {
 			return winDirection === 'low_wins' ? left[1] - right[1] : right[1] - left[1];
 		}
 		return left[0].localeCompare(right[0]);
 	});
+}
+
+export function sortStandingsByMode(
+	totalsByPlayer: Record<string, number>,
+	modeId?: string
+): Array<[string, number]> {
+	const winDirection = getModeWinDirection(modeId);
+	return sortStandingsByDirection(totalsByPlayer, winDirection);
+}
+
+function normalizeScoreRulePack(input: unknown): ReturnType<typeof createRulePack> {
+	if (!input || typeof input !== 'object' || Array.isArray(input)) {
+		return createRulePack();
+	}
+	return structuredClone(input as ReturnType<typeof createRulePack>);
+}
+
+function zoneRoleFromContext(
+	zoneId: string,
+	handZoneId: string,
+	hasLikelyPositiveNonHandZone: boolean
+): GuidedScoreZoneRole {
+	const normalized = zoneId.trim().toLowerCase();
+	if (!normalized) {
+		return 'exclude';
+	}
+	if (normalized === handZoneId.toLowerCase()) {
+		return hasLikelyPositiveNonHandZone ? 'subtract' : 'add';
+	}
+	if (/(discard|stock|draw|talon|waste)/.test(normalized)) {
+		return 'exclude';
+	}
+	if (/(meld|table|board|crib|kitty|pot|house|pool|won|capture)/.test(normalized)) {
+		return 'add';
+	}
+	return 'add';
+}
+
+function hasGolfLikeRankOverrides(
+	scoreRulePack: ReturnType<typeof createRulePack>,
+	lowScoreWins: boolean
+): boolean {
+	if (!lowScoreWins || scoreRulePack.baseAceValue !== 1) {
+		return false;
+	}
+	const rankValues = scoreRulePack.rankValues ?? {};
+	return rankValues['2'] === -2 && rankValues.J === 10 && rankValues.Q === 10 && rankValues.K === 0;
+}
+
+function scoreColumnPairZero(
+	cards: CardInput[],
+	rulePack: ReturnType<typeof createRulePack>,
+	rows: number,
+	columns: number
+): number {
+	if (rows !== 2) {
+		throw new Error('column_pair_zero currently requires a 2-row grid.');
+	}
+	if (cards.length !== rows * columns) {
+		throw new Error(`column_pair_zero requires exactly ${rows * columns} cards.`);
+	}
+
+	let total = 0;
+	for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
+		const topCard = cards[columnIndex];
+		const bottomCard = cards[columnIndex + columns];
+		const columnValue =
+			topCard.rank === bottomCard.rank
+				? 0
+				: cardValue(topCard, rulePack) + cardValue(bottomCard, rulePack);
+		total += columnValue;
+	}
+	return total;
+}
+
+function zoneScore(
+	cards: CardInput[],
+	zoneId: string,
+	profile: GuidedScoreProfile
+): number {
+	const specialRule = profile.specialRules.find((rule) => rule.zoneId === zoneId);
+	if (!specialRule) {
+		return scoreCards(cards, profile.scoreRulePack);
+	}
+	if (specialRule.kind === 'column_pair_zero') {
+		return scoreColumnPairZero(cards, profile.scoreRulePack, specialRule.rows, specialRule.columns);
+	}
+	return scoreCards(cards, profile.scoreRulePack);
+}
+
+export function deriveGuidedScoreProfileFromBundle(
+	bundle: RuntimeRulesetBundle,
+	rulesetId: string
+): GuidedScoreProfile {
+	const handZoneId = bundle.uiProfile.hand.zoneId;
+	const explainZones = bundle.explain?.zones ?? [];
+	const tableZones = bundle.uiProfile.table.zones;
+	const zoneCandidates = new Map<string, { label: string; hint?: string }>();
+	zoneCandidates.set(handZoneId, {
+		label: bundle.uiProfile.hand.label,
+		hint: bundle.uiProfile.hand.hint
+	});
+	for (const zone of explainZones) {
+		zoneCandidates.set(zone.id, { label: zone.label, hint: zone.hint });
+	}
+	for (const zone of tableZones) {
+		zoneCandidates.set(zone.id, { label: zone.label, hint: zone.hint });
+	}
+
+	const nonHandZoneIds = [...zoneCandidates.keys()].filter((zoneId) => zoneId !== handZoneId);
+	const hasLikelyPositiveNonHandZone = nonHandZoneIds.some((zoneId) =>
+		/(meld|table|board|crib|kitty|pot|house|pool|won|capture)/.test(zoneId.toLowerCase())
+	);
+
+	const zones: GuidedScoreZoneProfile[] = [...zoneCandidates.entries()].map(([zoneId, details]) => {
+		const role = zoneRoleFromContext(zoneId, handZoneId, hasLikelyPositiveNonHandZone);
+		const layout =
+			zoneId === handZoneId && bundle.uiProfile.hand.layout
+				? {
+						kind: bundle.uiProfile.hand.layout.kind,
+						rows: bundle.uiProfile.hand.layout.rows,
+						columns: bundle.uiProfile.hand.layout.columns
+					}
+				: undefined;
+		return {
+			zoneId,
+			label: details.label,
+			hint: details.hint,
+			role,
+			...(layout ? { layout } : {})
+		};
+	});
+
+	const lowScoreWins = bundle.explain?.scoring.lowScoreWins === true;
+	const scoreRulePack = normalizeScoreRulePack(bundle.runtimeRulePack.scoreRulePack);
+	const specialRules: GuidedScoreSpecialRule[] = [];
+	const playerLayout = bundle.explain?.setup?.playerLayout;
+	if (
+		playerLayout?.kind === 'grid' &&
+		typeof playerLayout.rows === 'number' &&
+		typeof playerLayout.columns === 'number' &&
+		playerLayout.rows > 0 &&
+		playerLayout.columns > 0 &&
+		hasGolfLikeRankOverrides(scoreRulePack, lowScoreWins)
+	) {
+		specialRules.push({
+			kind: 'column_pair_zero',
+			zoneId: handZoneId,
+			rows: playerLayout.rows,
+			columns: playerLayout.columns
+		});
+	}
+
+	return {
+		rulesetId,
+		winDirection: lowScoreWins ? 'low_wins' : 'high_wins',
+		scoreRulePack,
+		zones,
+		specialRules
+	};
+}
+
+export function buildGuidedRoundDeltaEntries(input: BuildGuidedRoundDeltaEntriesInput): PlayerDeltaInput[] {
+	const zoneRoleById = new Map(input.profile.zones.map((zone) => [zone.zoneId, zone.role] as const));
+	const entries: PlayerDeltaInput[] = [];
+
+	for (const playerId of input.players) {
+		const cardsByZone = input.cardsByPlayerZone[playerId] ?? {};
+		let delta = 0;
+		let hasAnyEntry = false;
+
+		for (const [zoneId, cards] of Object.entries(cardsByZone)) {
+			const role = zoneRoleById.get(zoneId) ?? 'exclude';
+			if (role === 'exclude' || cards.length === 0) {
+				continue;
+			}
+
+			hasAnyEntry = true;
+			const value = zoneScore(cards, zoneId, input.profile);
+			delta += role === 'subtract' ? -value : value;
+		}
+
+		if (hasAnyEntry) {
+			entries.push({ playerId, delta });
+		}
+	}
+
+	return entries;
 }
 
 export function parseCardsFromText(input: string): ParsedCardsResult {

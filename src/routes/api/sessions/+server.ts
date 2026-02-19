@@ -1,12 +1,17 @@
 import { createSession } from '$lib/session/session-store';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { GuidedScoreProfile } from '$lib/session/score-session-commands';
 
 interface CreateSessionPayload {
 	config?: {
 		scoreRulePack?: unknown;
 		gameplayRulePack?: unknown;
 		scoreModeId?: string;
+		scoreInputMode?: 'guided' | 'raw';
+		scoreWinDirection?: 'high_wins' | 'low_wins';
+		scoreRulesetId?: string;
+		scoreGuidedProfile?: GuidedScoreProfile;
 		trace?: boolean;
 	};
 	sessionId?: string;

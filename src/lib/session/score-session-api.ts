@@ -1,9 +1,14 @@
 import type { ScoreEvent } from '$lib/scorekeeper/engine';
+import type { GuidedScoreProfile, ScoreInputMode, ScoreWinDirection } from '$lib/session/score-session-commands';
 
 export interface SessionConfigPayload {
 	scoreRulePack?: unknown;
 	gameplayRulePack?: unknown;
 	scoreModeId?: string;
+	scoreInputMode?: ScoreInputMode;
+	scoreWinDirection?: ScoreWinDirection;
+	scoreRulesetId?: string;
+	scoreGuidedProfile?: GuidedScoreProfile;
 	trace?: boolean;
 }
 
@@ -46,6 +51,10 @@ export interface SessionStateView {
 	eventCount: number;
 	config: {
 		scoreModeId?: string;
+		scoreInputMode?: ScoreInputMode;
+		scoreWinDirection?: ScoreWinDirection;
+		scoreRulesetId?: string;
+		scoreGuidedProfile?: GuidedScoreProfile;
 		trace?: boolean;
 	};
 	state: SessionState;

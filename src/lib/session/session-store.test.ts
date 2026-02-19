@@ -141,4 +141,40 @@ describe('session store', () => {
 
 		expect(view.config.scoreModeId).toBe('rummy');
 	});
+
+	it('persists_guided_raw_score_config_metadata_in_session_view', () => {
+		const session = createSession({
+			config: {
+				scoreRulePack: createRulePack(),
+				scoreInputMode: 'guided',
+				scoreWinDirection: 'low_wins',
+				scoreRulesetId: 'ruleset-six-card-golf',
+				scoreGuidedProfile: {
+					rulesetId: 'ruleset-six-card-golf',
+					winDirection: 'low_wins',
+					scoreRulePack: createRulePack(),
+					zones: [
+						{ zoneId: 'hand', label: 'Hand', role: 'add' },
+						{ zoneId: 'discard', label: 'Discard', role: 'exclude' }
+					],
+					specialRules: [{ kind: 'column_pair_zero', zoneId: 'hand', rows: 2, columns: 3 }]
+				}
+			}
+		});
+
+		const view = buildSessionStateView(session.id);
+
+		expect(view.config.scoreInputMode).toBe('guided');
+		expect(view.config.scoreWinDirection).toBe('low_wins');
+		expect(view.config.scoreRulesetId).toBe('ruleset-six-card-golf');
+		expect(view.config.scoreGuidedProfile).toMatchObject({
+			rulesetId: 'ruleset-six-card-golf',
+			winDirection: 'low_wins',
+			zones: [
+				{ zoneId: 'hand', label: 'Hand', role: 'add' },
+				{ zoneId: 'discard', label: 'Discard', role: 'exclude' }
+			],
+			specialRules: [{ kind: 'column_pair_zero', zoneId: 'hand', rows: 2, columns: 3 }]
+		});
+	});
 });

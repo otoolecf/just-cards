@@ -7,11 +7,14 @@ function scorePageSource(): string {
 }
 
 describe('score page contract', () => {
-	it('score_page_includes_variant_add_round_modes', () => {
+	it('score_page_uses_guided_raw_setup_and_no_variant_tabs', () => {
 		const source = scorePageSource();
+		expect(source).toContain('Scoring mode');
+		expect(source).toContain('Guided (ruleset)');
+		expect(source).toContain('Raw (calculator)');
 		expect(source).toContain('Manual points');
-		expect(source).toContain('500 Rummy net');
-		expect(source).toContain('Six Card Golf hole');
+		expect(source).not.toContain('500 Rummy net');
+		expect(source).not.toContain('Six Card Golf hole');
 	});
 
 	it('score_page_marks_ruleset_tools_as_optional', () => {
@@ -19,8 +22,8 @@ describe('score page contract', () => {
 		expect(source).toContain('Ruleset tools (optional)');
 	});
 
-	it('score_page_uses_mode_driven_standings_sort', () => {
+	it('score_page_uses_direction_driven_standings_sort', () => {
 		const source = scorePageSource();
-		expect(source).toContain('sortStandingsByMode');
+		expect(source).toContain('sortStandingsByDirection');
 	});
 });
