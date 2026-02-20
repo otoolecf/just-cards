@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createRulesetStore } from '$lib/rulesets/store';
 import { createRulesetService } from '$lib/rulesets/service';
+import { appendSessionEvent, createSession, resetInMemorySessionsForTests } from '$lib/session/session-store';
+import { createRulePack } from '$lib/scorekeeper/engine';
 import { createJustCardsMcpServer, type CreateJustCardsMcpServerOptions } from './server';
 import { InMemoryMcpAuditLog } from './audit-log';
 import type {
@@ -34,6 +36,7 @@ async function createServer(
 
 describe('mcp server scaffold', () => {
 	it('mcp_server_lists_required_tools_and_static_resources', async () => {
+		resetInMemorySessionsForTests();
 		const server = await createServer();
 		const tools = server.listTools().map((tool) => tool.name);
 		const resources = await server.listResources();
@@ -47,7 +50,9 @@ describe('mcp server scaffold', () => {
 				'start_game',
 				'get_game_state',
 				'submit_move',
-				'suggest_move'
+				'suggest_move',
+				'render_game_table',
+				'render_score_leaderboard'
 			])
 		);
 		expect(resources.map((resource) => resource.uri)).toEqual(
@@ -56,9 +61,83 @@ describe('mcp server scaffold', () => {
 				'just-cards://docs/ui-profile-v0',
 				'just-cards://schemas/rulepack-v0',
 				'just-cards://examples/ruleset/six-card-golf',
-				'just-cards://examples/ruleset/500-rum'
+				'just-cards://examples/ruleset/500-rum',
+				'ui://just-cards/apps/play-table/v1',
+				'ui://just-cards/apps/score-leaderboard/v1'
 			])
 		);
+	});
+
+	it('mcp_render_game_table_returns_ruleset_driven_surface_payload', async () => {
+		resetInMemorySessionsForTests();
+		const server = await createServer();
+		const generated = (await server.callTool('generate_ruleset', {
+			source: { type: 'text', text: RUMMY_TEXT },
+			model_source: 'server'
+		})) as McpGenerateRulesetResult;
+		const started = (await server.callTool('start_game', {
+			ruleset_id: generated.ruleset.id,
+			players: ['You', 'Riv', 'Mina']
+		})) as McpStartGameResult;
+
+		const rendered = (await server.callTool('render_game_table', {
+			game_id: started.gameId,
+			viewer_player_id: 'You'
+		})) as {
+			viewType: string;
+			gameId: string;
+			viewerPlayerId: string;
+			surface: {
+				hand: { cards: Array<{ label: string }> };
+				tableZones: Array<{ zoneId: string; cards: Array<{ label: string }> }>;
+				seats: Array<{ playerId: string }>;
+			};
+		};
+
+		expect(rendered.viewType).toBe('play_table/v1');
+		expect(rendered.gameId).toBe(started.gameId);
+		expect(rendered.viewerPlayerId).toBe('You');
+		expect(rendered.surface.hand.cards.length).toBeGreaterThan(0);
+		expect(rendered.surface.tableZones.length).toBeGreaterThan(0);
+		expect(rendered.surface.seats.map((seat) => seat.playerId)).toEqual(
+			expect.arrayContaining(['You', 'Riv', 'Mina'])
+		);
+	});
+
+	it('mcp_render_score_leaderboard_sorts_by_win_direction', async () => {
+		resetInMemorySessionsForTests();
+		const server = await createServer();
+		const lowWins = createSession({
+			sessionId: 'sess-low',
+			config: {
+				scoreWinDirection: 'low_wins',
+				scoreRulePack: createRulePack()
+			}
+		});
+		appendSessionEvent(lowWins.id, {
+			source: 'scorekeeper',
+			scoreEvent: {
+				type: 'add_delta',
+				entries: [
+					{ target: { kind: 'player', id: 'You' }, delta: 12 },
+					{ target: { kind: 'player', id: 'Riv' }, delta: 8 },
+					{ target: { kind: 'player', id: 'Mina' }, delta: 14 }
+				]
+			}
+		});
+
+		const rendered = (await server.callTool('render_score_leaderboard', {
+			session_id: lowWins.id
+		})) as {
+			viewType: string;
+			winDirection: string;
+			standings: Array<{ playerId: string; total: number; rank: number }>;
+		};
+
+		expect(rendered.viewType).toBe('score_leaderboard/v1');
+		expect(rendered.winDirection).toBe('low_wins');
+		expect(rendered.standings[0]).toMatchObject({ playerId: 'Riv', total: 8, rank: 1 });
+		expect(rendered.standings[2]).toMatchObject({ playerId: 'Mina', total: 14 });
 	});
 
 	it('mcp_generate_ruleset_prefers_session_sampling_by_default_and_falls_back_to_server', async () => {

@@ -145,6 +145,15 @@ Delivered endpoints:
 - generation budget controls: `maxSourceChars`, `maxServerRetries`, `maxToolCallsPerTrace`
 - trace IDs on tool/action execution, structured server logs, and `just-cards://audit/recent` audit resource
 
+6. MCP Apps render surfaces:
+- render tools:
+  - `render_game_table` (cards/hands/seats/table zones from live game state)
+  - `render_score_leaderboard` (ranked standings from score session state)
+- UI resources:
+  - `ui://just-cards/apps/play-table/v1`
+  - `ui://just-cards/apps/score-leaderboard/v1`
+- FastMCP edge bridge injects Apps metadata into `tools/list` for render tools (`_meta.ui.resourceUri`, `_meta["openai/outputTemplate"]`) while preserving existing query/explore tools.
+
 Environment controls:
 
 1. `JUST_CARDS_MCP_AUTH_TOKEN` (when set, MCP/action routes require bearer token)

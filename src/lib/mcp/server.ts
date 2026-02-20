@@ -6,7 +6,19 @@ import {
 	type GameplayRulePack,
 	type GameplayState
 } from '$lib/gameplay/engine';
-import { buildRulesetPlayEvents } from '$lib/gameplay/play-surface-model';
+import {
+	buildPlaySurfaceView,
+	buildRulesetPlayEvents
+} from '$lib/gameplay/play-surface-model';
+import {
+	drawTopAllowedZoneIdsFromUiProfile,
+	playSurfaceProfileFromUiProfile,
+	quickPlayZoneIdsFromUiProfile,
+	seatCardsProfileFromUiProfile,
+	visibleZones,
+	zoneHintMap,
+	zoneLabelMap
+} from '$lib/gameplay/play-surface-profiles';
 import {
 	compileRuleFactsToBundle,
 	extractRuleFacts,
@@ -23,6 +35,11 @@ import { evaluateRulesetBundleConfidence } from '$lib/rulesets/confidence';
 import type { RulesetService } from '$lib/rulesets/service';
 import type { RulesetRecord, RuntimeRulesetBundle } from '$lib/rulesets/types';
 import rulePackSchema from '$lib/scorekeeper/rulepack-schema.json';
+import { buildSessionStateView } from '$lib/session/session-store';
+import {
+	getModeWinDirection,
+	sortStandingsByDirection
+} from '$lib/session/score-session-commands';
 import { logServerEvent } from '$lib/server/log';
 import { InMemoryMcpAuditLog, type McpAuditLog } from './audit-log';
 import { InMemoryMcpGameStore, type McpGameStore } from './game-store';
@@ -37,7 +54,12 @@ import type {
 	McpModelSource,
 	McpResourceDefinition,
 	McpResourceReadResult,
+	McpRenderGameTableArgs,
+	McpRenderGameTableResult,
+	McpRenderScoreLeaderboardArgs,
+	McpRenderScoreLeaderboardResult,
 	McpSessionSampler,
+	ScoreWinDirection,
 	McpStartGameArgs,
 	McpStartGameResult,
 	McpSubmitMoveArgs,
@@ -59,7 +81,27 @@ const TOOLS: McpToolDefinition[] = [
 	{ name: 'start_game', description: 'Create a game snapshot from a ruleset.' },
 	{ name: 'get_game_state', description: 'Read one game snapshot and derived gameplay state.' },
 	{ name: 'submit_move', description: 'Append a gameplay event when valid for the game snapshot.' },
-	{ name: 'suggest_move', description: 'Return a legal candidate move with explanation.' }
+	{ name: 'suggest_move', description: 'Return a legal candidate move with explanation.' },
+	{
+		name: 'render_game_table',
+		description: 'Render cards/hands/table snapshot payload for MCP Apps clients.',
+		appUi: {
+			resourceUri: 'ui://just-cards/apps/play-table/v1',
+			outputTemplate: 'ui://just-cards/apps/play-table/v1',
+			invokingText: 'Rendering play table...',
+			invokedText: 'Play table ready.'
+		}
+	},
+	{
+		name: 'render_score_leaderboard',
+		description: 'Render ranked standings payload for MCP Apps clients.',
+		appUi: {
+			resourceUri: 'ui://just-cards/apps/score-leaderboard/v1',
+			outputTemplate: 'ui://just-cards/apps/score-leaderboard/v1',
+			invokingText: 'Rendering leaderboard...',
+			invokedText: 'Leaderboard ready.'
+		}
+	}
 ];
 
 const STATIC_RESOURCES: McpResourceDefinition[] = [
@@ -98,6 +140,18 @@ const STATIC_RESOURCES: McpResourceDefinition[] = [
 		name: 'Recent MCP Audit Events',
 		description: 'Recent MCP tool-call audit entries (sanitized).',
 		mimeType: 'application/json'
+	},
+	{
+		uri: 'ui://just-cards/apps/play-table/v1',
+		name: 'MCP App: Play Table',
+		description: 'Embedded chat UI template for play-table cards/hands/table rendering.',
+		mimeType: 'text/html'
+	},
+	{
+		uri: 'ui://just-cards/apps/score-leaderboard/v1',
+		name: 'MCP App: Score Leaderboard',
+		description: 'Embedded chat UI template for score standings rendering.',
+		mimeType: 'text/html'
 	}
 ];
 
@@ -136,6 +190,420 @@ Stock is face down and top card starts discard pile face up.
 Draw from stock or discard. Meld or discard after drawing.
 First player to 500 points wins.
 `;
+
+const PLAY_TABLE_APP_HTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Just Cards Play Table</title>
+  <style>
+    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0; padding: 12px; background: #f4faf9; color: #1e293b; }
+    .wrap { border: 1px solid #c9d7e8; border-radius: 12px; background: #fff; padding: 12px; box-shadow: 0 8px 20px rgba(20, 45, 84, .08); }
+    h1 { margin: 0 0 8px; font-size: 18px; line-height: 1.2; }
+    h2 { margin: 12px 0 8px; font-size: 14px; }
+    .section-title { margin: 12px 0 6px; font-size: 13px; font-weight: 700; }
+    .meta { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; font-size: 13px; }
+    .zone, .seat { border: 1px solid #dbe6f3; border-radius: 10px; padding: 8px; margin: 8px 0; }
+    .cards { display: flex; gap: 6px; flex-wrap: wrap; }
+    .card { border: 1px solid #cfdceb; border-radius: 8px; padding: 6px 8px; min-width: 32px; min-height: 44px; text-align: center; background: #f8fbff; font-weight: 700; }
+    .card-button { cursor: pointer; }
+    .card-button.active { border-color: #2e8b87; box-shadow: inset 0 0 0 1px #2e8b87; background: #ebfbf8; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+    .action { border: 1px solid #c9d7e8; border-radius: 999px; min-height: 44px; padding: 8px 12px; background: #f8fbff; color: #213247; font-weight: 600; cursor: pointer; }
+    .action:disabled { opacity: .55; cursor: default; }
+    .muted { color: #5b6b82; font-size: 12px; }
+    .empty { color: #66748a; font-size: 13px; }
+    .status { margin-top: 8px; font-size: 13px; color: #334a67; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="just-cards-mcp-app-play-table">
+    <h1>Play Table</h1>
+    <div class="empty">Waiting for render_game_table payload...</div>
+  </div>
+  <script>
+    const TOOL_RENDER = 'render_game_table';
+    const TOOL_SUBMIT = 'submit_move';
+    const state = {
+      payload: null,
+      selectedCardKey: '',
+      status: '',
+      pollId: null,
+      busy: false
+    };
+
+    function parseMaybeJson(value) {
+      if (typeof value !== 'string') return null;
+      try { return JSON.parse(value); } catch { return null; }
+    }
+    function payloadFromContentArray(content, viewType) {
+      if (!Array.isArray(content)) return null;
+      for (const entry of content) {
+        if (entry && entry.type === 'text') {
+          const parsed = parseMaybeJson(entry.text);
+          if (parsed && parsed.viewType === viewType) return parsed;
+        }
+      }
+      return null;
+    }
+
+    function payloadFromToolResult(result, viewType) {
+      if (!result) return null;
+      if (result.viewType === viewType) return result;
+      if (result.structuredContent && result.structuredContent.viewType === viewType) {
+        return result.structuredContent;
+      }
+      const fromDirectContent = payloadFromContentArray(result.content, viewType);
+      if (fromDirectContent) return fromDirectContent;
+      const fromWrappedContent = payloadFromContentArray(result.result && result.result.content, viewType);
+      if (fromWrappedContent) return fromWrappedContent;
+      return null;
+    }
+
+    function extractPayload() {
+      const globalAny = window;
+      const candidates = [
+        globalAny.__MCP_TOOL_RESULT__,
+        globalAny.openai?.toolResult,
+        globalAny.openai?.toolOutput,
+        globalAny.mcp?.toolResult
+      ];
+      for (const candidate of candidates) {
+        const payload = payloadFromToolResult(candidate, 'play_table/v1');
+        if (payload) return payload;
+      }
+      return null;
+    }
+
+    function zoneLabel(zoneId) {
+      const payload = state.payload;
+      if (!payload) return zoneId;
+      if (payload.zoneLabels && payload.zoneLabels[zoneId]) return payload.zoneLabels[zoneId];
+      const tableZones = Array.isArray(payload.surface && payload.surface.tableZones) ? payload.surface.tableZones : [];
+      const zone = tableZones.find((entry) => entry.zoneId === zoneId);
+      return zone && zone.label ? zone.label : zoneId;
+    }
+
+    function cardFromCidOrCard(card) {
+      const tags = Array.isArray(card && card.tags) ? card.tags : [];
+      const cidTag = tags.find((tag) => typeof tag === 'string' && tag.startsWith('cid:'));
+      if (cidTag) {
+        return { tags: [cidTag] };
+      }
+      const moveCard = {};
+      if (card && typeof card.rank === 'string') moveCard.rank = card.rank;
+      if (card && typeof card.suit === 'string') moveCard.suit = card.suit;
+      if (tags.length > 0) moveCard.tags = tags.slice();
+      return moveCard;
+    }
+
+    function handCardsMarkup(payload) {
+      const cards = Array.isArray(payload.surface && payload.surface.hand && payload.surface.hand.cards) ? payload.surface.hand.cards : [];
+      if (cards.length === 0) return '<div class="empty">No cards</div>';
+      return '<div class="cards">' + cards.map((card) => {
+        const key = String(card.key || '');
+        const active = state.selectedCardKey === key ? ' active' : '';
+        const label = String(card.label || '??');
+        return '<button class="card card-button' + active + '" data-hand-key="' + key + '">' + label + '</button>';
+      }).join('') + '</div>';
+    }
+
+    function quickTargetsMarkup(payload) {
+      const targets = Array.isArray(payload.quickPlayTargets) ? payload.quickPlayTargets : [];
+      if (targets.length === 0) return '';
+      return '<div class="section-title">Play selected card to:</div><div class="actions">' + targets.map((zoneId) => {
+        return '<button class="action" data-target-zone="' + zoneId + '"' + (state.busy ? ' disabled' : '') + '>' + zoneLabel(zoneId) + '</button>';
+      }).join('') + '</div>';
+    }
+
+    function drawActionsMarkup(payload) {
+      const zones = Array.isArray(payload.drawTopZones) ? payload.drawTopZones : [];
+      if (zones.length === 0) return '';
+      return '<div class="section-title">Draw top from:</div><div class="actions">' + zones.map((zoneId) => {
+        return '<button class="action" data-draw-zone="' + zoneId + '"' + (state.busy ? ' disabled' : '') + '>' + zoneLabel(zoneId) + '</button>';
+      }).join('') + '</div>';
+    }
+
+    function cardsMarkup(cards) {
+      if (!Array.isArray(cards) || cards.length === 0) return '<div class="empty">No cards</div>';
+      return '<div class="cards">' + cards.map((card) => '<div class="card">' + String(card.label || '??') + '</div>').join('') + '</div>';
+    }
+
+    async function callTool(name, args) {
+      if (!window.openai || typeof window.openai.callTool !== 'function') {
+        return null;
+      }
+      return window.openai.callTool(name, args);
+    }
+
+    async function refreshFromServer(silent) {
+      const payload = state.payload;
+      if (!payload) return;
+      const result = await callTool(TOOL_RENDER, {
+        game_id: payload.gameId,
+        viewer_player_id: payload.viewerPlayerId
+      });
+      const nextPayload = payloadFromToolResult(result, 'play_table/v1');
+      if (nextPayload) {
+        state.payload = nextPayload;
+        if (!silent) state.status = 'Updated.';
+        renderCurrent();
+      }
+    }
+
+    function selectedHandCard() {
+      const payload = state.payload;
+      if (!payload) return null;
+      const cards = Array.isArray(payload.surface && payload.surface.hand && payload.surface.hand.cards) ? payload.surface.hand.cards : [];
+      return cards.find((entry) => String(entry.key || '') === state.selectedCardKey) || null;
+    }
+
+    async function submitZoneMove(event) {
+      const payload = state.payload;
+      if (!payload) return;
+      state.busy = true;
+      state.status = 'Submitting move...';
+      renderCurrent();
+      await callTool(TOOL_SUBMIT, {
+        game_id: payload.gameId,
+        event: event
+      });
+      state.busy = false;
+      await refreshFromServer(true);
+    }
+
+    async function onTargetPlay(zoneId) {
+      const payload = state.payload;
+      if (!payload) return;
+      const selected = selectedHandCard();
+      if (!selected) {
+        state.status = 'Select a hand card first.';
+        renderCurrent();
+        return;
+      }
+      const handZoneId = String(payload.surface && payload.surface.hand && payload.surface.hand.zoneId || 'hand');
+      const moveCard = cardFromCidOrCard(selected);
+      await submitZoneMove({
+        type: 'zone_move',
+        actorId: payload.viewerPlayerId,
+        from: { kind: 'player', playerId: payload.viewerPlayerId, zone: handZoneId },
+        to: { kind: 'table', zone: zoneId },
+        cards: [moveCard]
+      });
+      state.selectedCardKey = '';
+      state.status = 'Moved card to ' + zoneLabel(zoneId) + '.';
+      renderCurrent();
+    }
+
+    async function onDrawTop(zoneId) {
+      const payload = state.payload;
+      if (!payload) return;
+      const tableZones = Array.isArray(payload.surface && payload.surface.tableZones) ? payload.surface.tableZones : [];
+      const zone = tableZones.find((entry) => entry.zoneId === zoneId);
+      const cards = Array.isArray(zone && zone.cards) ? zone.cards : [];
+      const topCard = cards.length > 0 ? cards[cards.length - 1] : null;
+      if (!topCard) {
+        state.status = 'No cards in ' + zoneLabel(zoneId) + '.';
+        renderCurrent();
+        return;
+      }
+      const handZoneId = String(payload.surface && payload.surface.hand && payload.surface.hand.zoneId || 'hand');
+      await submitZoneMove({
+        type: 'zone_move',
+        actorId: payload.viewerPlayerId,
+        from: { kind: 'table', zone: zoneId },
+        to: { kind: 'player', playerId: payload.viewerPlayerId, zone: handZoneId },
+        cards: [cardFromCidOrCard(topCard)]
+      });
+      state.status = 'Drew from ' + zoneLabel(zoneId) + '.';
+      renderCurrent();
+    }
+
+    function wireInteractions(host) {
+      const handButtons = host.querySelectorAll('[data-hand-key]');
+      for (const button of handButtons) {
+        button.addEventListener('click', function () {
+          const key = this.getAttribute('data-hand-key') || '';
+          state.selectedCardKey = state.selectedCardKey === key ? '' : key;
+          renderCurrent();
+        });
+      }
+      const targetButtons = host.querySelectorAll('[data-target-zone]');
+      for (const button of targetButtons) {
+        button.addEventListener('click', function () {
+          const zoneId = this.getAttribute('data-target-zone') || '';
+          if (!zoneId || state.busy) return;
+          onTargetPlay(zoneId).catch(function (error) {
+            state.busy = false;
+            state.status = error instanceof Error ? error.message : 'Move failed.';
+            renderCurrent();
+          });
+        });
+      }
+      const drawButtons = host.querySelectorAll('[data-draw-zone]');
+      for (const button of drawButtons) {
+        button.addEventListener('click', function () {
+          const zoneId = this.getAttribute('data-draw-zone') || '';
+          if (!zoneId || state.busy) return;
+          onDrawTop(zoneId).catch(function (error) {
+            state.busy = false;
+            state.status = error instanceof Error ? error.message : 'Draw failed.';
+            renderCurrent();
+          });
+        });
+      }
+    }
+
+    function render(payload) {
+      const host = document.getElementById('just-cards-mcp-app-play-table');
+      if (!host || !payload) return;
+      const zones = Array.isArray(payload.surface?.tableZones) ? payload.surface.tableZones : [];
+      const seats = Array.isArray(payload.surface?.seats) ? payload.surface.seats : [];
+      host.innerHTML = [
+        '<h1>' + (payload.rulesetName || 'Play Table') + '</h1>',
+        '<div class="meta">',
+          '<div><strong>Phase:</strong> ' + (payload.surface?.phase || 'play') + '</div>',
+          '<div><strong>Round:</strong> ' + String(payload.surface?.roundNumber ?? 1) + '</div>',
+          '<div><strong>Viewer:</strong> ' + (payload.viewerPlayerId || 'You') + '</div>',
+          '<div><strong>Players:</strong> ' + seats.length + '</div>',
+        '</div>',
+        '<h2>Your Hand</h2>',
+        handCardsMarkup(payload),
+        quickTargetsMarkup(payload),
+        drawActionsMarkup(payload),
+        '<div class="status">' + (state.status || 'Tap card + target to play, or draw from table zones.') + '</div>',
+        '<h2>Seats</h2>',
+        seats.length === 0 ? '<div class="empty">No seats</div>' : seats.map((seat) => '<div class="seat"><strong>' + seat.playerId + '</strong><div class="muted">' + seat.handCount + ' cards' + (seat.isCurrentTurn ? ' · turn' : '') + (seat.isDealer ? ' · dealer' : '') + '</div></div>').join(''),
+        '<h2>Table Zones</h2>',
+        zones.length === 0 ? '<div class="empty">No zones</div>' : zones.map((zone) => '<div class="zone"><strong>' + (zone.label || zone.zoneId) + '</strong><div class="muted">' + (zone.zoneId || '') + '</div>' + cardsMarkup(zone.cards) + '</div>').join('')
+      ].join('');
+      wireInteractions(host);
+    }
+
+    function renderCurrent() {
+      if (state.payload) {
+        render(state.payload);
+      }
+    }
+
+    state.payload = extractPayload();
+    renderCurrent();
+    if (state.payload && state.pollId === null) {
+      state.pollId = setInterval(function () {
+        refreshFromServer(true).catch(function () {
+          return;
+        });
+      }, 2500);
+    }
+  </script>
+</body>
+</html>`;
+
+const SCORE_LEADERBOARD_APP_HTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Just Cards Leaderboard</title>
+  <style>
+    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0; padding: 12px; background: #f4faf9; color: #1e293b; }
+    .wrap { border: 1px solid #c9d7e8; border-radius: 12px; background: #fff; padding: 12px; box-shadow: 0 8px 20px rgba(20,45,84,.08); }
+    h1 { margin: 0 0 8px; font-size: 18px; }
+    .muted { color: #5b6b82; font-size: 12px; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border-top: 1px solid #dbe6f3; padding: 8px 6px; text-align: left; }
+    th:last-child, td:last-child { text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="just-cards-mcp-app-score-leaderboard">
+    <h1>Leaderboard</h1>
+    <div class="muted">Waiting for render_score_leaderboard payload...</div>
+  </div>
+  <script>
+    const TOOL_RENDER_SCORE = 'render_score_leaderboard';
+    const state = { payload: null, pollId: null };
+
+    function parseMaybeJson(value) {
+      if (typeof value !== 'string') return null;
+      try { return JSON.parse(value); } catch { return null; }
+    }
+    function payloadFromContentArray(content, viewType) {
+      if (!Array.isArray(content)) return null;
+      for (const entry of content) {
+        if (entry && entry.type === 'text') {
+          const parsed = parseMaybeJson(entry.text);
+          if (parsed && parsed.viewType === viewType) return parsed;
+        }
+      }
+      return null;
+    }
+
+    function payloadFromToolResult(result, viewType) {
+      if (!result) return null;
+      if (result.viewType === viewType) return result;
+      if (result.structuredContent && result.structuredContent.viewType === viewType) return result.structuredContent;
+      const fromContent = payloadFromContentArray(result.content, viewType);
+      if (fromContent) return fromContent;
+      return payloadFromContentArray(result.result && result.result.content, viewType);
+    }
+
+    function extractPayload() {
+      const globalAny = window;
+      const candidates = [
+        globalAny.__MCP_TOOL_RESULT__,
+        globalAny.openai?.toolResult,
+        globalAny.openai?.toolOutput,
+        globalAny.mcp?.toolResult
+      ];
+      for (const candidate of candidates) {
+        const payload = payloadFromToolResult(candidate, 'score_leaderboard/v1');
+        if (payload) return payload;
+      }
+      return null;
+    }
+
+    async function refreshFromServer() {
+      if (!state.payload || !window.openai || typeof window.openai.callTool !== 'function') return;
+      const result = await window.openai.callTool(TOOL_RENDER_SCORE, {
+        session_id: state.payload.sessionId
+      });
+      const payload = payloadFromToolResult(result, 'score_leaderboard/v1');
+      if (payload) {
+        state.payload = payload;
+        render(payload);
+      }
+    }
+
+    function render(payload) {
+      const host = document.getElementById('just-cards-mcp-app-score-leaderboard');
+      if (!host || !payload) return;
+      const standings = Array.isArray(payload.standings) ? payload.standings : [];
+      host.innerHTML = [
+        '<h1>' + (payload.leaderboardLabel || 'Leaderboard') + '</h1>',
+        '<div class="muted">Direction: ' + (payload.winDirection === 'low_wins' ? 'Low score wins' : 'High score wins') + '</div>',
+        '<table><thead><tr><th>Rank</th><th>Player</th><th>Total</th></tr></thead><tbody>',
+        standings.map((entry) => '<tr><td>' + String(entry.rank ?? '-') + '</td><td>' + (entry.playerId || '-') + '</td><td>' + String(entry.total ?? 0) + '</td></tr>').join(''),
+        '</tbody></table>'
+      ].join('');
+    }
+    state.payload = extractPayload();
+    if (state.payload) {
+      render(state.payload);
+      if (state.pollId === null) {
+        state.pollId = setInterval(function () {
+          refreshFromServer().catch(function () {
+            return;
+          });
+        }, 3000);
+      }
+    }
+  </script>
+</body>
+</html>`;
 
 function uniquePlayers(players: string[] | undefined): string[] {
 	const normalized = (players ?? [])
@@ -260,7 +728,35 @@ function summarizeToolArgs(name: McpToolName, args: Record<string, unknown>): st
 		const eventType = typeof event?.type === 'string' ? event.type : 'unknown';
 		return `eventType=${eventType}`;
 	}
+	if (name === 'render_game_table') {
+		const gameId = typeof args.game_id === 'string' ? args.game_id.trim() : '';
+		return `gameId=${gameId || 'unknown'}`;
+	}
+	if (name === 'render_score_leaderboard') {
+		const sessionId = typeof args.session_id === 'string' ? args.session_id.trim() : '';
+		return `sessionId=${sessionId || 'unknown'}`;
+	}
 	return 'ok';
+}
+
+function normalizeViewerPlayerId(players: string[], viewerPlayerId: unknown): string {
+	const requested = typeof viewerPlayerId === 'string' ? viewerPlayerId.trim() : '';
+	if (requested && players.includes(requested)) {
+		return requested;
+	}
+	return players[0] ?? 'You';
+}
+
+function rankedStandings(
+	totalsByPlayer: Record<string, number>,
+	winDirection: ScoreWinDirection
+): Array<{ rank: number; playerId: string; total: number }> {
+	const sorted = sortStandingsByDirection(totalsByPlayer, winDirection);
+	return sorted.map(([playerId, total], index) => ({
+		rank: index + 1,
+		playerId,
+		total
+	}));
 }
 
 export interface CreateJustCardsMcpServerOptions {
@@ -373,6 +869,20 @@ export class JustCardsMcpServer {
 				}
 			};
 		}
+		if (uri === 'ui://just-cards/apps/play-table/v1') {
+			return {
+				uri,
+				mimeType: 'text/html',
+				text: PLAY_TABLE_APP_HTML
+			};
+		}
+		if (uri === 'ui://just-cards/apps/score-leaderboard/v1') {
+			return {
+				uri,
+				mimeType: 'text/html',
+				text: SCORE_LEADERBOARD_APP_HTML
+			};
+		}
 		if (uri.startsWith('just-cards://rulesets/')) {
 			const rulesetId = uri.slice('just-cards://rulesets/'.length).trim();
 			const ruleset = await this.rulesetService.getById(rulesetId);
@@ -442,6 +952,12 @@ export class JustCardsMcpServer {
 					break;
 				case 'suggest_move':
 					result = await this.suggestMove(args as unknown as McpSuggestMoveArgs);
+					break;
+				case 'render_game_table':
+					result = await this.renderGameTable(args as unknown as McpRenderGameTableArgs);
+					break;
+				case 'render_score_leaderboard':
+					result = await this.renderScoreLeaderboard(args as unknown as McpRenderScoreLeaderboardArgs);
 					break;
 				default:
 					throw new Error(`Unknown tool "${name}"`);
@@ -767,6 +1283,97 @@ export class JustCardsMcpServer {
 			gameId: updated.gameId,
 			eventCount: updated.events.length,
 			phase: candidateState.phase
+		};
+	}
+
+	private async renderGameTable(args: McpRenderGameTableArgs): Promise<McpRenderGameTableResult> {
+		const gameId = args.game_id?.trim();
+		if (!gameId) {
+			throw new Error('render_game_table requires game_id');
+		}
+		const snapshot = await this.gameStore.getById(gameId);
+		if (!snapshot) {
+			throw new Error(`Game "${gameId}" not found`);
+		}
+		const ruleset = await this.rulesetService.getById(snapshot.rulesetId);
+		if (!ruleset) {
+			throw new Error(`Ruleset "${snapshot.rulesetId}" not found`);
+		}
+
+		const gameplayRulePack = ruleset.bundle.runtimeRulePack.gameplayRulePack ?? createGameplayRulePack();
+		const state = deriveGameState(snapshot.events, gameplayRulePack, { strictValidation: true });
+		if ((state.validationIssues?.length ?? 0) > 0) {
+			throw new Error(
+				`render_game_table rejected invalid state: ${summarizeValidationIssues(
+					state.validationIssues?.map((issue) => issue.code) ?? []
+				)}`
+			);
+		}
+
+		const uiProfile = ruleset.bundle.uiProfile;
+		const surfaceProfile = playSurfaceProfileFromUiProfile(uiProfile);
+		const viewerPlayerId = normalizeViewerPlayerId(snapshot.players, args.viewer_player_id);
+		const tableZoneOrder = visibleZones(surfaceProfile).map((zone) => zone.id);
+		const labelsByZone = zoneLabelMap(surfaceProfile);
+		const hintsByZone = zoneHintMap(surfaceProfile);
+		const seatCards = seatCardsProfileFromUiProfile(uiProfile);
+		const tableCardVisibilityByZone = Object.fromEntries(
+			uiProfile.table.zones.map((zone) => [zone.id, zone.cardVisibility ?? 'public'])
+		);
+
+		const surface = buildPlaySurfaceView(state, {
+			selfPlayerId: viewerPlayerId,
+			handZoneName: gameplayRulePack.handZoneName,
+			tableZoneOrder,
+			includeDiscoveredTableZones: false,
+			zoneLabels: labelsByZone,
+			handCardVisibility: uiProfile.hand.cardVisibility ?? 'owner_only',
+			tableCardVisibilityByZone,
+			...(uiProfile.hand.layout ? { handLayout: uiProfile.hand.layout } : {}),
+			...(seatCards
+				? {
+						seatPublicCards: {
+							zoneId: seatCards.zoneId,
+							label: seatCards.label,
+							includeSelf: seatCards.includeSelf,
+							cardVisibility: seatCards.cardVisibility ?? 'public',
+							...(seatCards.layout ? { layout: seatCards.layout } : {})
+						}
+					}
+				: {})
+		});
+
+		return {
+			viewType: 'play_table/v1',
+			gameId: snapshot.gameId,
+			rulesetId: snapshot.rulesetId,
+			rulesetName: ruleset.name,
+			viewerPlayerId,
+			surface: structuredClone(surface),
+			zoneLabels: labelsByZone,
+			zoneHints: hintsByZone,
+			quickPlayTargets: quickPlayZoneIdsFromUiProfile(uiProfile),
+			drawTopZones: Array.from(drawTopAllowedZoneIdsFromUiProfile(uiProfile))
+		};
+	}
+
+	private async renderScoreLeaderboard(
+		args: McpRenderScoreLeaderboardArgs
+	): Promise<McpRenderScoreLeaderboardResult> {
+		const sessionId = args.session_id?.trim();
+		if (!sessionId) {
+			throw new Error('render_score_leaderboard requires session_id');
+		}
+		const sessionView = buildSessionStateView(sessionId);
+		const winDirection = sessionView.config.scoreWinDirection ?? getModeWinDirection(sessionView.config.scoreModeId);
+		return {
+			viewType: 'score_leaderboard/v1',
+			sessionId: sessionView.sessionId,
+			winDirection,
+			leaderboardLabel: winDirection === 'low_wins' ? 'Low score wins' : 'High score wins',
+			standings: rankedStandings(sessionView.state.totalsByPlayer, winDirection),
+			eventCount: sessionView.eventCount,
+			updatedAt: sessionView.updatedAt
 		};
 	}
 

@@ -11,6 +11,7 @@ This folder holds project planning and architecture docs.
 - [`ui-profile-v0.md`](./ui-profile-v0.md): Canonical ruleset-driven UI profile primitive contract.
 - [`ui-primitives-v0.md`](./ui-primitives-v0.md): Canonical UI token and accessibility primitive catalog.
 - [`chatgpt-mcp-roadmap-v0.md`](./chatgpt-mcp-roadmap-v0.md): Roadmap for ChatGPT app integration, MCP tools/resources, and skill-guided MCP sampling.
+- [`mcp-apps-v0.md`](./mcp-apps-v0.md): MCP Apps render-surface contracts (`render_game_table`, `render_score_leaderboard`) and coexistence model with data/query tools.
 - [`mcp-oauth-setup.md`](./mcp-oauth-setup.md): Practical setup guide for shared-token mode and OAuth JWT mode (issuer/JWKS/audience/scope) for MCP endpoints.
 - [`ruleset-generation-v0.md`](./ruleset-generation-v0.md): End-to-end generation scaffold (`url|text` -> `RuleFacts` -> `runtime-bundle/v1`).
 - [`ruleset-explainability-v0.md`](./ruleset-explainability-v0.md): Human-readable/auditable rules payload contract for layman guide UX.
@@ -57,6 +58,8 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-02-19-mcp-sse-oauth-resource-server.md`](./specs/2026-02-19-mcp-sse-oauth-resource-server.md): TDD spec for standards-aligned MCP SSE transport and OAuth bearer-token resource-server auth.
 - [`specs/2026-02-19-scorekeeper-guided-raw-ruleset-scoring.md`](./specs/2026-02-19-scorekeeper-guided-raw-ruleset-scoring.md): TDD spec for guided-vs-raw score setup, ruleset-driven zone scoring inputs, and win-direction session metadata.
 - [`specs/2026-02-20-fastmcp-migration.md`](./specs/2026-02-20-fastmcp-migration.md): TDD spec for migrating MCP transport/protocol handling to FastMCP (EdgeFastMCP) while preserving domain tool/resource contracts.
+- [`specs/2026-02-20-mcp-apps-render-surfaces.md`](./specs/2026-02-20-mcp-apps-render-surfaces.md): TDD spec for MCP Apps-compatible play-table and leaderboard render tools/resources.
+- [`specs/2026-02-20-mcp-apps-widget-interactions.md`](./specs/2026-02-20-mcp-apps-widget-interactions.md): TDD spec for in-widget move submission wiring and polling refresh loops.
 - [`templates/tdd-spec-template.md`](./templates/tdd-spec-template.md): Default spec-first template for TDD work.
 - [`specs/README.md`](./specs/README.md): Feature spec workflow and naming conventions for TDD.
 

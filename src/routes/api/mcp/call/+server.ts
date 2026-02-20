@@ -23,7 +23,9 @@ function isMcpToolName(name: string): name is McpToolName {
 		name === 'start_game' ||
 		name === 'get_game_state' ||
 		name === 'submit_move' ||
-		name === 'suggest_move'
+		name === 'suggest_move' ||
+		name === 'render_game_table' ||
+		name === 'render_score_leaderboard'
 	);
 }
 

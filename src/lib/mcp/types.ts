@@ -1,4 +1,5 @@
 import type { GameEvent, GameplayState } from '$lib/gameplay/engine';
+import type { PlaySurfaceView } from '$lib/gameplay/play-surface-model';
 import type { RuleFactsV0, GenerateRulesetInput } from '$lib/rulesets/generator';
 import type { RulesetGenerationPipelineReport } from '$lib/rulesets/llm-agent';
 import type { RulesetRecord, RuntimeRulesetBundle } from '$lib/rulesets/types';
@@ -11,11 +12,21 @@ export type McpToolName =
 	| 'start_game'
 	| 'get_game_state'
 	| 'submit_move'
-	| 'suggest_move';
+	| 'suggest_move'
+	| 'render_game_table'
+	| 'render_score_leaderboard';
+
+export interface McpAppToolUi {
+	resourceUri: string;
+	outputTemplate?: string;
+	invokingText?: string;
+	invokedText?: string;
+}
 
 export interface McpToolDefinition {
 	name: McpToolName;
 	description: string;
+	appUi?: McpAppToolUi;
 }
 
 export interface McpResourceDefinition {
@@ -136,6 +147,44 @@ export interface McpSuggestMoveResult {
 	reason: string;
 	mode: McpAiMode;
 	actorId?: string;
+}
+
+export interface McpRenderGameTableArgs {
+	game_id: string;
+	viewer_player_id?: string;
+}
+
+export interface McpRenderGameTableResult {
+	viewType: 'play_table/v1';
+	gameId: string;
+	rulesetId: string;
+	rulesetName: string;
+	viewerPlayerId: string;
+	surface: PlaySurfaceView;
+	zoneLabels: Record<string, string>;
+	zoneHints: Record<string, string>;
+	quickPlayTargets: string[];
+	drawTopZones: string[];
+}
+
+export type ScoreWinDirection = 'high_wins' | 'low_wins';
+
+export interface McpRenderScoreLeaderboardArgs {
+	session_id: string;
+}
+
+export interface McpRenderScoreLeaderboardResult {
+	viewType: 'score_leaderboard/v1';
+	sessionId: string;
+	winDirection: ScoreWinDirection;
+	leaderboardLabel: string;
+	standings: Array<{
+		rank: number;
+		playerId: string;
+		total: number;
+	}>;
+	eventCount: number;
+	updatedAt: string;
 }
 
 export interface McpGameSessionSnapshot {

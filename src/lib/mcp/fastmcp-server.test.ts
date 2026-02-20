@@ -82,6 +82,7 @@ describe('fastmcp edge server bridge', () => {
 		expect(resourcesList.status).toBe(200);
 		const listText = await resourcesList.text();
 		expect(listText).toContain('just-cards://docs/primitives-kb-v0');
+		expect(listText).toContain('ui://just-cards/apps/play-table/v1');
 
 		const resourcesRead = await server.fetch(
 			request({
@@ -94,5 +95,73 @@ describe('fastmcp edge server bridge', () => {
 		expect(resourcesRead.status).toBe(200);
 		const readText = await resourcesRead.text();
 		expect(readText).toContain('Primitives KB v0');
+
+		const uiResourcesRead = await server.fetch(
+			request({
+				jsonrpc: '2.0',
+				id: 'resource-read-ui',
+				method: 'resources/read',
+				params: { uri: 'ui://just-cards/apps/play-table/v1' }
+			})
+		);
+		expect(uiResourcesRead.status).toBe(200);
+		const uiReadText = await uiResourcesRead.text();
+		expect(uiReadText).toContain('just-cards-mcp-app-play-table');
+		expect(uiReadText).toContain("TOOL_SUBMIT = 'submit_move'");
+		expect(uiReadText).toContain("TOOL_RENDER = 'render_game_table'");
+		expect(uiReadText).toContain('window.openai.callTool');
+		expect(uiReadText).toContain('setInterval(');
+
+		const uiLeaderboardRead = await server.fetch(
+			request({
+				jsonrpc: '2.0',
+				id: 'resource-read-ui-score',
+				method: 'resources/read',
+				params: { uri: 'ui://just-cards/apps/score-leaderboard/v1' }
+			})
+		);
+		expect(uiLeaderboardRead.status).toBe(200);
+		const leaderboardText = await uiLeaderboardRead.text();
+		expect(leaderboardText).toContain("TOOL_RENDER_SCORE = 'render_score_leaderboard'");
+		expect(leaderboardText).toContain('window.openai.callTool');
+		expect(leaderboardText).toContain('setInterval(');
+	});
+
+	it('fastmcp_bridge_exposes_mcp_apps_render_tool_metadata', async () => {
+		const server = await createFastMcpEdgeServer();
+		const init = await server.fetch(
+			request({
+				jsonrpc: '2.0',
+				id: 'init3',
+				method: 'initialize',
+				params: {
+					protocolVersion: '2025-03-26',
+					capabilities: {},
+					clientInfo: { name: 'vitest', version: '1.0.0' }
+				}
+			})
+		);
+		expect(init.status).toBe(200);
+
+		const tools = await server.fetch(
+			request({
+				jsonrpc: '2.0',
+				id: 'tools3',
+				method: 'tools/list',
+				params: {}
+			})
+		);
+		expect(tools.status).toBe(200);
+		const payload = (await tools.json()) as {
+			result?: { tools?: Array<{ name?: string; _meta?: Record<string, unknown> }> };
+		};
+		const renderGameTool = payload.result?.tools?.find((tool) => tool.name === 'render_game_table');
+		const renderScoreTool = payload.result?.tools?.find((tool) => tool.name === 'render_score_leaderboard');
+
+		expect(renderGameTool?._meta?.['openai/outputTemplate']).toBe('ui://just-cards/apps/play-table/v1');
+		expect(renderScoreTool?._meta?.['openai/outputTemplate']).toBe(
+			'ui://just-cards/apps/score-leaderboard/v1'
+		);
+		expect(renderGameTool?._meta?.ui).toMatchObject({ resourceUri: 'ui://just-cards/apps/play-table/v1' });
 	});
 });
