@@ -2,6 +2,7 @@ export { createJustCardsMcpServer, JustCardsMcpServer, type CreateJustCardsMcpSe
 export { InMemoryMcpGameStore, type McpGameStore } from './game-store';
 export { InMemoryMcpAuditLog, type McpAuditLog, type McpAuditEntry } from './audit-log';
 export { getDefaultMcpServer, getDefaultMcpAuditLog, resetDefaultMcpServerStateForTests } from './default-server';
+export { createFastMcpEdgeServer, type CreateFastMcpEdgeServerOptions } from './fastmcp-server';
 export {
 	authorizeMcpRequest,
 	getMcpAuthMode,
@@ -11,11 +12,4 @@ export {
 	type McpAuthPrincipal,
 	type McpAuthSuccess
 } from './auth';
-export { handleMcpJsonRpc } from './jsonrpc';
-export {
-	openMcpSseSession,
-	sendMcpSseMessage,
-	hasMcpSseSession,
-	closeMcpSseSession
-} from './sse-transport';
 export * from './types';

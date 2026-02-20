@@ -29,11 +29,12 @@ Do you need an external provider?
 
 MCP endpoints:
 
-1. `GET /api/mcp/tools`
-2. `GET /api/mcp/resources`
-3. `POST /api/mcp/call`
-4. `GET /api/mcp/sse`
-5. `POST /api/mcp/messages?sessionId=...`
+1. `POST /api/mcp` (primary MCP streamable HTTP endpoint)
+2. `GET /api/mcp` and `DELETE /api/mcp` (transport lifecycle behavior)
+3. Compatibility endpoints:
+- `GET /api/mcp/sse` (redirects to `/api/mcp`)
+- `POST /api/mcp/messages?sessionId=...`
+- `GET /api/mcp/tools`, `GET /api/mcp/resources`, `POST /api/mcp/call`
 
 OAuth discovery endpoint:
 
@@ -131,4 +132,3 @@ Examples: Auth0, WorkOS/AuthKit, Clerk, Okta, Keycloak, Zitadel, or your own OID
 3. For SSE transport:
 - open `GET /api/mcp/sse`
 - post JSON-RPC messages to emitted endpoint with `sessionId`
-

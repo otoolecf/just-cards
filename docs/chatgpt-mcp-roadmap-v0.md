@@ -112,18 +112,19 @@ Enable users to:
 2. ChatGPT can generate and open playable rulesets from URL/prose with explainable diagnostics.
 3. AI-assisted move suggestions are always validated by server gameplay rules before state mutation.
 
-## Current Implementation Snapshot (2026-02-19)
+## Current Implementation Snapshot (2026-02-20)
 
 Delivered endpoints:
 
-1. MCP HTTP endpoints (auth-aware):
-- `GET /api/mcp/tools`
-- `GET /api/mcp/resources` (`?uri=...` for read)
-- `POST /api/mcp/call` (`{ tool, args, trace_id? }`)
+1. FastMCP transport endpoints (auth-aware):
+- `POST /api/mcp` (MCP streamable HTTP / JSON-RPC ingress)
+- `DELETE /api/mcp` (session lifecycle support)
+- `GET /api/mcp` (transport-managed behavior)
 
-2. MCP SSE transport endpoints (auth-aware):
-- `GET /api/mcp/sse` (legacy SSE session stream with endpoint event)
-- `POST /api/mcp/messages?sessionId=...` (JSON-RPC request ingress, SSE response egress)
+2. Compatibility MCP endpoints (auth-aware):
+- `GET /api/mcp/sse` (compatibility redirect to `/api/mcp`)
+- `POST /api/mcp/messages?sessionId=...` (legacy path passthrough)
+- `GET /api/mcp/tools`, `GET /api/mcp/resources`, `POST /api/mcp/call` remain available for custom client workflows.
 
 3. OAuth protected resource metadata:
 - `GET /.well-known/oauth-protected-resource`

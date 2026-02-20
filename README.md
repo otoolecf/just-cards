@@ -13,6 +13,7 @@ Mobile-first web app for casual, in-person card gaming.
 
 - `SvelteKit` (TypeScript)
 - Cloudflare Workers runtime via `@sveltejs/adapter-cloudflare`
+- `fastmcp` (`EdgeFastMCP`) for MCP transport/tool/resource wiring
 - `Wrangler` for local Cloudflare dev and deploy
 
 ## Local Development
