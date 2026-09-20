@@ -4,6 +4,21 @@ This folder holds project planning and architecture docs.
 
 ## Documents
 
+- [`specs/2026-09-20-more-built-in-games.md`](./specs/2026-09-20-more-built-in-games.md): Playable Klondike, rubber Bridge and standard/family Palace, with physical result scoring.
+
+- [`specs/2026-09-17-rummy-action-copy.md`](./specs/2026-09-17-rummy-action-copy.md): Explain starting hand counts and distinguish playing from extending melds.
+
+- [`specs/2026-09-17-rummy-hand-arrangement.md`](./specs/2026-09-17-rummy-hand-arrangement.md): Manual private-hand order and clear layoff guidance.
+
+- [`specs/2026-09-17-pattern-scoring-capability.md`](./specs/2026-09-17-pattern-scoring-capability.md): Ruleset schema controls separate pattern entry; Golf hides it.
+
+- [`specs/2026-09-17-end-room.md`](./specs/2026-09-17-end-room.md): Host closes a game and players return to create a new room.
+
+- [`specs/2026-09-17-family-first-draft.md`](./specs/2026-09-17-family-first-draft.md): Completion of live transport, durable imports, and family workflows.
+
+- [`shared-table-v1.md`](./shared-table-v1.md): Playable family rooms, executable policies, score entry, persistence, and current limits.
+- [`specs/2026-09-17-family-card-play.md`](./specs/2026-09-17-family-card-play.md): Review findings and spec-first implementation evidence.
+
 - [`inspiration.md`](./inspiration.md): Problem statement, user scenarios, and product intent.
 - [`architecture.md`](./architecture.md): Technical architecture plan, stack decisions, and phased roadmap.
 - [`rulepack-v0.md`](./rulepack-v0.md): Canonical Rule IR schema, pipeline stages, capabilities, and boundaries.
@@ -13,7 +28,7 @@ This folder holds project planning and architecture docs.
 - [`chatgpt-mcp-roadmap-v0.md`](./chatgpt-mcp-roadmap-v0.md): Roadmap for ChatGPT app integration, MCP tools/resources, and skill-guided MCP sampling.
 - [`mcp-apps-v0.md`](./mcp-apps-v0.md): MCP Apps render-surface contracts (`render_game_table`, `render_score_leaderboard`) and coexistence model with data/query tools.
 - [`mcp-oauth-setup.md`](./mcp-oauth-setup.md): Practical setup guide for shared-token mode and OAuth JWT mode (issuer/JWKS/audience/scope) for MCP endpoints.
-- [`ruleset-generation-v0.md`](./ruleset-generation-v0.md): End-to-end generation scaffold (`url|text` -> `RuleFacts` -> `runtime-bundle/v1`).
+- [`ruleset-generation-v0.md`](./ruleset-generation-v0.md): Shared structured extraction, source review, behavioral validation and import readiness.
 - [`ruleset-explainability-v0.md`](./ruleset-explainability-v0.md): Human-readable/auditable rules payload contract for layman guide UX.
 - [`ruleset-golden-evals-v0.md`](./ruleset-golden-evals-v0.md): Offline confidence suite for source-link extraction and compile quality gates.
 - [`ruleset-confidence-v0.md`](./ruleset-confidence-v0.md): Bundle-level runtime/UI confidence checks and smoke simulation gate.
@@ -70,3 +85,11 @@ This folder holds project planning and architecture docs.
 - Update `ui-profile-v0.md` whenever the generated play-surface profile contract changes.
 - Update `ui-primitives-v0.md` whenever UI token contracts, accessibility guarantees, or styling workflow rules change.
 - Keep docs lightweight and decision-focused; avoid implementation detail that belongs in code comments or ADRs.
+
+- [`specs/2026-09-17-structured-rule-extraction.md`](./specs/2026-09-17-structured-rule-extraction.md): Structured rule extraction and behavioral review gate.
+- [`specs/2026-09-17-offline-and-house-rules.md`](./specs/2026-09-17-offline-and-house-rules.md): Offline physical score outbox, safe reconnect and editable family rule variants.
+
+- [`specs/2026-09-20-library-and-interruptions.md`](./specs/2026-09-20-library-and-interruptions.md): Game library management, pause/resume, roster boundaries, private seat recovery and host undo.
+- [`specs/2026-09-20-game-list-cleanup.md`](./specs/2026-09-20-game-list-cleanup.md): Discoverable rename/removal controls and reversible test-game cleanup.
+- [`specs/2026-09-20-delete-archived-games.md`](./specs/2026-09-20-delete-archived-games.md): Confirmed permanent deletion of archived custom games and cache reconciliation.
+- [`specs/2026-09-20-plain-language-guides.md`](./specs/2026-09-20-plain-language-guides.md): Plain-language, house-rule-aware instructions and full browser playthroughs.

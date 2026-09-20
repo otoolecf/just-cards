@@ -7,9 +7,15 @@
 		{ id: 'S', code: 'spades', symbol: '♠' }
 	] as const;
 
+	export let columnPairs = false;
 	export let value = '';
 	export let labelPrefix = 'cards';
 	export let valueChanged: ((nextValue: string) => void) | null = null;
+	export let suitsRequired = true;
+	export let layout: { kind: 'row' | 'grid'; rows?: number; columns?: number } | undefined =
+		undefined;
+	let activeSlot = 0;
+	$: slotCount = layout?.kind === 'grid' ? (layout.rows ?? 2) * (layout.columns ?? 3) : 0;
 
 	let selectedSuit: (typeof SUITS)[number]['id'] | '' = '';
 	let tokens: string[] = [];
@@ -32,6 +38,7 @@
 
 	$: if (value !== syncedValue) {
 		tokens = parseTokens(value);
+		if (!tokens.length) activeSlot = 0;
 		syncedValue = value;
 	}
 
@@ -43,10 +50,15 @@
 	}
 
 	function addRank(rank: string): void {
-		if (!selectedSuit) {
+		if (suitsRequired && !selectedSuit) {
 			return;
 		}
-		tokens = [...tokens, `${rank}${selectedSuit}`];
+		if (slotCount) {
+			const next = Array.from({ length: slotCount }, (_, i) => tokens[i] ?? '_');
+			next[activeSlot] = `${rank}${suitsRequired ? selectedSuit : ''}`;
+			tokens = next;
+			activeSlot = next.indexOf('_') >= 0 ? next.indexOf('_') : (activeSlot + 1) % slotCount;
+		} else tokens = [...tokens, `${rank}${suitsRequired ? selectedSuit : ''}`];
 		emit();
 	}
 
@@ -57,6 +69,7 @@
 
 	function clearAll(): void {
 		tokens = [];
+		activeSlot = 0;
 		emit();
 	}
 
@@ -74,19 +87,39 @@
 </script>
 
 <div class="card-tap-input">
-	<div class="suit-row" role="radiogroup" aria-label={`${labelPrefix} suit picker`}>
-		{#each SUITS as suit}
-			<button
-				type="button"
-				class={`tap-btn suit-btn suit-${suit.code} ${selectedSuit === suit.id ? 'selected' : ''}`.trim()}
-				on:click={() => (selectedSuit = suit.id)}
-				aria-label={`${labelPrefix}: suit ${suit.code}`}
-			>
-				<span class="suit-symbol" aria-hidden="true">{suit.symbol}</span>
-				<span class="suit-code">{suit.id}</span>
-			</button>
-		{/each}
-	</div>
+	{#if slotCount}
+		<p class="suit-hint">Tap a position, then its rank.{#if columnPairs} Matching cards in a column cancel.{/if}</p>
+		<div class="slot-grid" style={`--slot-columns: ${layout?.columns ?? 3}`}>
+			{#each Array(slotCount) as _, index}
+				<button
+					type="button"
+					class="tap-btn"
+					class:selected={activeSlot === index}
+					aria-pressed={activeSlot === index}
+					aria-label={`${labelPrefix}: row ${Math.floor(index / (layout?.columns ?? 3)) + 1} column ${(index % (layout?.columns ?? 3)) + 1}`}
+					on:click={() => (activeSlot = index)}
+					>{tokens[index] && tokens[index] !== '_' ? tokens[index] : '?'}</button
+				>
+			{/each}
+		</div>
+	{/if}
+	{#if suitsRequired}
+		<div class="suit-row" role="radiogroup" aria-label={`${labelPrefix} suit picker`}>
+			{#each SUITS as suit}
+				<button
+					type="button"
+					class={`tap-btn suit-btn suit-${suit.code} ${selectedSuit === suit.id ? 'selected' : ''}`.trim()}
+					on:click={() => (selectedSuit = suit.id)}
+					aria-label={`${labelPrefix}: suit ${suit.code}`}
+					role="radio"
+					aria-checked={selectedSuit === suit.id}
+				>
+					<span class="suit-symbol" aria-hidden="true">{suit.symbol}</span>
+					<span class="suit-code">{suit.id}</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	<div class="rank-grid">
 		{#each RANKS as rank}
@@ -94,43 +127,54 @@
 				type="button"
 				class="tap-btn rank-btn"
 				on:click={() => addRank(rank)}
-				aria-label={`${labelPrefix}: add ${rank}${selectedSuit ? selectedSuit : ''}`}
-				disabled={!selectedSuit}
+				aria-label={`${labelPrefix}: add ${rank}${suitsRequired && selectedSuit ? selectedSuit : ''}`}
+				disabled={suitsRequired && !selectedSuit}
 			>
 				{rank}
 			</button>
 		{/each}
 	</div>
 
-	{#if !selectedSuit}
+	{#if suitsRequired && !selectedSuit}
 		<p class="suit-hint">Pick a suit first, then tap rank cards.</p>
 	{/if}
 
-	<div class="token-row">
-		{#if tokens.length === 0}
-			<p class="token-empty">No cards added</p>
-		{:else}
-			{#each tokens as token, index}
-				{@const described = describeToken(token)}
-				<button
-					type="button"
-					class={`token-chip ${described.suitClass}`.trim()}
-					on:click={() => removeToken(index)}
-					aria-label={`${labelPrefix}: remove ${token}`}
-				>
-					{described.label}
-				</button>
-			{/each}
-		{/if}
-	</div>
+	{#if !slotCount}<div class="token-row">
+			{#if tokens.length === 0}
+				<p class="token-empty">No cards added</p>
+			{:else}
+				{#each tokens as token, index}
+					{@const described = describeToken(token)}
+					<button
+						type="button"
+						class={`token-chip ${described.suitClass}`.trim()}
+						on:click={() => removeToken(index)}
+						aria-label={`${labelPrefix}: remove ${token}`}
+					>
+						{described.label}
+					</button>
+				{/each}
+			{/if}
+		</div>{/if}
 
 	<div class="meta-row">
 		<p class="token-preview">{value || 'Tap cards to build this hand'}</p>
-		<button type="button" class="clear-btn" on:click={clearAll} disabled={tokens.length === 0}>Clear</button>
+		<button type="button" class="clear-btn" on:click={clearAll} disabled={tokens.length === 0}
+			>Clear</button
+		>
 	</div>
 </div>
 
 <style>
+	.slot-grid {
+		display: grid;
+		grid-template-columns: repeat(var(--slot-columns), minmax(0, 1fr));
+		gap: 8px;
+	}
+	.slot-grid .selected {
+		outline: 2px solid var(--jc-brand);
+		background: var(--jc-brand-soft);
+	}
 	.card-tap-input {
 		display: grid;
 		gap: 8px;

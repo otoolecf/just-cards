@@ -1,3 +1,5 @@
+import { extractionFromBundle } from './extraction-contract';
+import { familyRulesets } from './family-presets';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetDefaultRulesetServiceForTests } from './default-service';
@@ -22,7 +24,7 @@ describe('rulesets generate api', () => {
 	beforeEach(() => {
 		resetDefaultRulesetServiceForTests();
 		process.env.RULESET_STORE_DRIVER = 'memory';
-		delete process.env.OPENAI_API_KEY;
+		Reflect.deleteProperty(process.env, 'OPENAI_API_KEY');
 	});
 
 	it('ruleset_generate_api_creates_ruleset_from_text_input', async () => {
@@ -30,7 +32,7 @@ describe('rulesets generate api', () => {
 			const url = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
 			if (url === 'https://api.openai.com/v1/chat/completions') {
 				const payload = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
-				expect(payload.model).toBe('gpt-5-nano');
+				expect(payload.model).toBe('gpt-5-mini');
 				return new Response(
 					JSON.stringify({
 						choices: [
@@ -63,13 +65,16 @@ describe('rulesets generate api', () => {
 		};
 
 		const response = await generateRuleset(
-			eventForPost({
-				source: {
-					type: 'text',
-					text: 'We play with 2 to 4 players, draw from stock or discard, then place one card to meld.'
+			eventForPost(
+				{
+					source: {
+						type: 'text',
+						text: 'We play with 2 to 4 players, draw from stock or discard, then place one card to meld.'
+					},
+					name: 'Generated from prose'
 				},
-				name: 'Generated from prose'
-			}, fetchImpl)
+				fetchImpl
+			)
 		);
 
 		expect(response.status).toBe(200);
@@ -111,35 +116,21 @@ describe('rulesets generate api', () => {
 			}
 
 			if (url === 'https://api.openai.com/v1/chat/completions') {
-				const payload = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
-				expect(payload.model).toBe('gpt-5-nano');
-				return new Response(
-					JSON.stringify({
-						choices: [
-							{
-								message: {
-									content: JSON.stringify({
-										gameName: '500 Rum',
-										players: { min: 2, max: 8 },
-										handZoneName: 'hand',
-										zones: ['stock', 'discard', 'meld'],
-										turn: {
-											drawSources: ['stock', 'discard'],
-											playTargets: ['meld', 'discard']
-										},
-										scoring: {
-											lowScoreWins: false,
-											aceValue: 15,
-											rankOverrides: { J: 10, Q: 10, K: 10 }
-										},
-										diagnostics: []
-									})
-								}
+				const payload = JSON.parse(String(init?.body ?? '{}'));
+				expect(payload.model).toBe('gpt-5-mini');
+				return Response.json({
+					choices: [
+						{
+							message: {
+								content: JSON.stringify(
+									payload.response_format.json_schema.name === 'rules_source_review'
+										? { verdict: 'consistent', issues: [], summary: 'Reviewed.' }
+										: extractionFromBundle(familyRulesets()[1].bundle)
+								)
 							}
-						]
-					}),
-					{ status: 200, headers: { 'content-type': 'application/json' } }
-				);
+						}
+					]
+				});
 			}
 
 			return new Response('not found', { status: 404 });
@@ -164,6 +155,6 @@ describe('rulesets generate api', () => {
 		};
 		expect(payload.ruleset.bundle.displayName).toBe('500 Rum');
 		expect(payload.pipeline.strategy).toBe('llm');
-		expect(payload.pipeline.model).toBe('gpt-5-nano');
+		expect(payload.pipeline.model).toBe('gpt-5-mini');
 	});
 });

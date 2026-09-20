@@ -1,7 +1,9 @@
+import { createOfflineScoreClient } from './offline-scoring';
 import type { ScoreEvent } from '$lib/scorekeeper/engine';
 import type { GuidedScoreProfile, ScoreInputMode, ScoreWinDirection } from '$lib/session/score-session-commands';
 
 export interface SessionConfigPayload {
+	players?: string[];
 	scoreRulePack?: unknown;
 	gameplayRulePack?: unknown;
 	scoreModeId?: string;
@@ -24,6 +26,7 @@ export interface SessionStateValidationIssue {
 }
 
 export interface SessionEventRecord {
+	requestId?: string;
 	id: string;
 	source: 'scorekeeper' | 'gameplay';
 	createdAt: string;
@@ -33,6 +36,7 @@ export interface SessionEventRecord {
 }
 
 export interface SessionState {
+ rubber?:import('../gameplay/contract-scoring').RubberState;
 	totalsByTarget: Record<string, number>;
 	totalsByPlayer: Record<string, number>;
 	validationIssues?: SessionStateValidationIssue[];
@@ -45,11 +49,14 @@ export interface SessionState {
 }
 
 export interface SessionStateView {
+	sync?: { status: 'synced' | 'offline' | 'conflict' | 'error'; pending: number; message?: string };
 	sessionId: string;
 	createdAt: string;
 	updatedAt: string;
 	eventCount: number;
 	config: {
+		scoreRulePack?: unknown;
+		players?: string[];
 		scoreModeId?: string;
 		scoreInputMode?: ScoreInputMode;
 		scoreWinDirection?: ScoreWinDirection;
@@ -89,6 +96,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function createSession(payload: SessionConfigPayload = {}): Promise<SessionCreateResponse> {
+	if (typeof window !== 'undefined') return withDeviceLock('create', () => deviceClient().create(payload));
 	return parseJson<SessionCreateResponse>(
 		await fetch('/api/sessions', {
 			method: 'POST',
@@ -99,6 +107,7 @@ export async function createSession(payload: SessionConfigPayload = {}): Promise
 }
 
 export async function getSessionState(sessionId: string): Promise<SessionStateView> {
+	if (typeof window !== 'undefined') return withDeviceLock(sessionId, () => deviceClient().get(sessionId));
 	return parseJson<SessionStateView>(
 		await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
 			method: 'GET'
@@ -107,6 +116,7 @@ export async function getSessionState(sessionId: string): Promise<SessionStateVi
 }
 
 export async function postSessionEvent(sessionId: string, scoreEvent: ScoreEvent): Promise<SessionStateView> {
+	if (typeof window !== 'undefined') return withDeviceLock(sessionId, () => deviceClient().post(sessionId, scoreEvent));
 	return parseJson<SessionStateView>(
 		await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
 			method: 'POST',
@@ -122,4 +132,15 @@ export async function safePollSessionState(sessionId: string): Promise<SessionSt
 	} catch {
 		return null;
 	}
+}
+
+function deviceClient() { return createOfflineScoreClient(localStorage); }
+// Web Locks serialize read/modify/write across browser tabs, including network retries.
+async function withDeviceLock<T>(id: string, action: () => Promise<T>): Promise<T> {
+ if (!navigator.locks) throw new Error('Offline scoring needs a current browser on HTTPS or localhost.');
+ return navigator.locks.request(`jc-score-${id}`, action);
+}
+export function savedDeviceSessions(): SessionStateView[] { return deviceClient().list(); }
+export async function forkOfflineSession(id: string): Promise<SessionStateView> {
+ return withDeviceLock(id, () => deviceClient().fork(id));
 }

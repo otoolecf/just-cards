@@ -63,7 +63,7 @@ describe('chat actions api', () => {
 		};
 		expect(createPayload.result.rulesetId).toContain('ruleset-');
 		expect(createPayload.result.playUrl).toContain(`/play/${createPayload.result.rulesetId}`);
-		expect(createPayload.result.validation.pass).toBe(true);
+		expect(createPayload.result.validation.pass).toBe(false); // Incomplete prose remains an unreviewed draft.
 
 		const explainResponse = await chatActionPost(
 			actionEvent({

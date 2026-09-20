@@ -3,12 +3,14 @@
 	export let variant: 'primary' | 'default' = 'default';
 	export let type: 'button' | 'submit' | 'reset' = 'button';
 	export let disabled = false;
+	export let describedBy: string | undefined = undefined;
 	export let onPress: ((event: MouseEvent) => void) | null = null;
 
-	const buttonClass = `score-button ${variant === 'primary' ? 'score-button--primary' : ''} ${className}`.trim();
+	$: buttonClass =
+		`score-button ${variant === 'primary' ? 'score-button--primary' : ''} ${className}`.trim();
 </script>
 
-<button class={buttonClass} {type} {disabled} onclick={onPress}>
+<button class={buttonClass} {type} {disabled} aria-describedby={describedBy} onclick={onPress}>
 	<slot />
 </button>
 

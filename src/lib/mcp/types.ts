@@ -85,6 +85,9 @@ export interface McpValidateRulesetArgs {
 }
 
 export interface McpValidateRulesetResult {
+	behavior?: import('$lib/rulesets/behavioral-validation').BehaviorReport;
+	playable?: boolean;
+	report?: import('$lib/rulesets/generation-report').GenerationReport;
 	pass: boolean;
 	checks: Array<{ id: string; pass: boolean; details: string }>;
 	issues: string[];
@@ -197,16 +200,8 @@ export interface McpGameSessionSnapshot {
 	updatedAt: string;
 }
 
-export interface McpSessionSamplerInput {
-	sourceText: string;
-	sourceType: 'url' | 'text';
-	sourceUrl?: string;
-	baselineFacts: RuleFactsV0;
-}
-
-export type McpSessionSampler = (
-	input: McpSessionSamplerInput
-) => Promise<RuleFactsV0 | undefined>;
+export type McpSessionSamplerInput = import('$lib/rulesets/llm-agent').ModelRequest;
+export type McpSessionSampler = import('$lib/rulesets/llm-agent').RulesetModel;
 
 export interface McpToolCallContext {
 	callTool: (name: McpToolName, args: Record<string, unknown>) => Promise<unknown>;

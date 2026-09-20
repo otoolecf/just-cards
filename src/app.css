@@ -90,6 +90,9 @@ a {
 }
 
 .jc-mode-link {
+	min-height: 44px;
+	display: inline-flex;
+	align-items: center;
 	padding: 7px 12px;
 	border-radius: 999px;
 	text-decoration: none;
@@ -147,6 +150,23 @@ a {
 	color: var(--jc-error);
 	font-weight: 700;
 }
+
+/* Shared card primitive: visible faces, unknown backs, and selection are distinct. */
+.jc-card {
+	min-width: 48px;
+	min-height: 68px;
+	padding: 8px;
+	border: 1px solid var(--jc-line);
+	border-radius: 10px;
+	background: var(--jc-surface);
+	color: var(--jc-text);
+	font-size: var(--jc-type-lg);
+	font-weight: 700;
+}
+.jc-card:not(:disabled) { cursor: pointer; }
+.jc-card-red { color: var(--jc-error); }
+.jc-card-back { background: var(--jc-brand); color: var(--jc-text-on-brand); }
+.jc-card-selected { outline: 3px solid var(--jc-brand); outline-offset: 1px; background: var(--jc-brand-soft); }
 
 @media (prefers-reduced-motion: reduce) {
 	*,

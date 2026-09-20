@@ -1,3 +1,4 @@
+import { scoreCardCollection } from '../scorekeeper/collection-scoring';
 import {
 	createPatternDetectorRulePack,
 	type PatternRulePack
@@ -186,7 +187,10 @@ export interface GuidedScoreSpecialRuleColumnPairZero {
 export type GuidedScoreSpecialRule = GuidedScoreSpecialRuleColumnPairZero;
 
 export interface GuidedScoreProfile {
+ roundScoring?:'contract'|'outcome'|'solo_outcome';
 	rulesetId: string;
+	/** Separate pattern-round entry; absent in legacy sessions means disabled. */
+	patternRound?: boolean;
 	winDirection: ScoreWinDirection;
 	scoreRulePack: ReturnType<typeof createRulePack>;
 	zones: GuidedScoreZoneProfile[];
@@ -377,17 +381,7 @@ function scoreColumnPairZero(
 		throw new Error(`column_pair_zero requires exactly ${rows * columns} cards.`);
 	}
 
-	let total = 0;
-	for (let columnIndex = 0; columnIndex < columns; columnIndex += 1) {
-		const topCard = cards[columnIndex];
-		const bottomCard = cards[columnIndex + columns];
-		const columnValue =
-			topCard.rank === bottomCard.rank
-				? 0
-				: cardValue(topCard, rulePack) + cardValue(bottomCard, rulePack);
-		total += columnValue;
-	}
-	return total;
+	return scoreCardCollection(cards, rulePack, columns);
 }
 
 function zoneScore(
@@ -409,6 +403,19 @@ export function deriveGuidedScoreProfileFromBundle(
 	bundle: RuntimeRulesetBundle,
 	rulesetId: string
 ): GuidedScoreProfile {
+	const table = bundle.runtimeRulePack.tableRules;
+	if (table) return {
+ ...(table.contract?{roundScoring:'contract' as const}:table.patience?{roundScoring:'solo_outcome' as const}:table.shedding?{roundScoring:'outcome' as const}:{}),
+		patternRound: bundle.uiProfile.scorekeeper?.patternRound === true,
+		rulesetId, winDirection: table.scoring.lowWins ? 'low_wins' : 'high_wins',
+		scoreRulePack: normalizeScoreRulePack(bundle.runtimeRulePack.scoreRulePack),
+		zones: table.scoring.zones.map(zone => ({
+			zoneId: zone.zone, label: zone.zone === 'meld' ? 'Cards on the table' : table.layout ? 'Your six cards' : 'Cards left in hand',
+			role: zone.multiplier === 1 ? 'add' : 'subtract',
+			...(zone.zone === 'hand' && table.layout ? { layout: { kind: 'grid' as const, rows: table.layout.rows, columns: table.layout.columns } } : {})
+		})),
+		specialRules: table.scoring.columnPairs ? [{ kind: 'column_pair_zero', zoneId: 'hand', rows: 2, columns: table.scoring.columnPairs }] : []
+	};
 	const handZoneId = bundle.uiProfile.hand.zoneId;
 	const explainZones = bundle.explain?.zones ?? [];
 	const tableZones = bundle.uiProfile.table.zones;
@@ -471,6 +478,7 @@ export function deriveGuidedScoreProfileFromBundle(
 	return {
 		rulesetId,
 		winDirection: lowScoreWins ? 'low_wins' : 'high_wins',
+		patternRound: bundle.uiProfile.scorekeeper?.patternRound === true,
 		scoreRulePack,
 		zones,
 		specialRules

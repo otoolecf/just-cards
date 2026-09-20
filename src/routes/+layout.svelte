@@ -1,15 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import favicon from '$lib/assets/favicon.svg';
 	import '../app.css';
 
 	let { children } = $props();
 
-	onMount(() => {
-		if ('serviceWorker' in navigator) {
-			void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
-		}
-	});
+
 </script>
 
 <svelte:head>

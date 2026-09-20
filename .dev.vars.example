@@ -3,7 +3,7 @@
 
 # Example:
 # OPENAI_API_KEY=your-key-here
-# RULESET_LLM_PRIMARY_MODEL=gpt-5-nano
+# RULESET_LLM_PRIMARY_MODEL=gpt-5-mini
 # RULESET_LLM_FALLBACK_MODEL=gpt-5-mini
 #
 # MCP auth (choose one mode):

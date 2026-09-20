@@ -1,5 +1,7 @@
+import { reviewedSource } from './reviewed-sources';
 import { createGameplayRulePack, type GameplayRulePack } from '$lib/gameplay/engine';
 import type { RuntimeRulePack } from '$lib/runtime/game-runtime';
+import type { TableRules } from '$lib/gameplay/table-rules';
 import { createRulePack } from '$lib/scorekeeper/engine';
 import { createUiProfile, generateUiProfileFromRuntime, type UiProfileV0 } from '$lib/ui/ui-profile';
 import type { CreateRulesetDraftInput } from './service';
@@ -105,6 +107,7 @@ const NUMBER_WORD_TO_VALUE: Record<string, number> = {
 };
 
 export interface RuleFactsV0 {
+	tableRules?: TableRules;
 	schemaVersion: 'rule-facts/v0';
 	gameName: string;
 	gameSlug: string;
@@ -182,6 +185,7 @@ interface ExtractRuleFactsInput {
 }
 
 export interface IngestedSource {
+	diagnostics?: string[];
 	text: string;
 	type: 'url' | 'text';
 	url?: string;
@@ -249,10 +253,16 @@ function decodeHtmlEntities(value: string): string {
 }
 
 function htmlToText(html: string): string {
-	const withoutScripts = html
+	let article = html
 		.replace(/<script[\s\S]*?<\/script>/gi, ' ')
 		.replace(/<style[\s\S]*?<\/style>/gi, ' ')
 		.replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ');
+	// Bound extraction to the rule article; navigation and related games are not rules.
+	const heading = article.search(/<h1\b/i);
+	if (heading >= 0) article = article.slice(heading);
+	const related = article.search(/(?:<(?:h[1-6]|div)\b[^>]*>\s*Related games|<footer\b)/i);
+	if (related >= 0) article = article.slice(0, related);
+	const withoutScripts = article;
 	const withBreaks = withoutScripts
 		.replace(/<\s*br\s*\/?\s*>/gi, '\n')
 		.replace(/<\s*\/p\s*>/gi, '\n')
@@ -321,6 +331,11 @@ function detectGameName(text: string, sourceUrl?: string): string {
 }
 
 function detectPlayers(text: string): { min: number; max: number } {
+	const metadata = text.match(/\bPlayers\s+((?:\d+\s*,\s*)+\d+)(\+)?/i);
+	if (metadata) {
+		const counts = metadata[1].split(',').map(Number);
+		return { min: Math.min(...counts), max: metadata[2] ? 7 : Math.max(...counts) };
+	}
 	const rangeMatch = text.match(/(\d{1,2})\s*(?:to|\-|–)\s*(\d{1,2})\s*players?/i);
 	if (rangeMatch) {
 		const min = Number.parseInt(rangeMatch[1], 10);
@@ -869,6 +884,41 @@ function detectDiagnostics(
 	return diagnostics;
 }
 
+function detectTableRules(text: string, setup: {
+	players: { min: number; max: number }; cardsPerPlayer?: number;
+	playerLayout?: { rows: number; columns: number }; initialFaceUpCards?: number; rounds?: number;
+}): TableRules | undefined {
+	const t = text.toLowerCase().replace(/-/g, ' ');
+	const grid = setup.playerLayout;
+	const columnPairs = /(?:equal|same).{0,35}(?:same column|column).{0,35}(?:zero|0)/.test(t);
+	const gridSwap = grid && /\bswapp?(?:ed|ing)?\b|\breplac(?:e|ed|ing)\b/.test(t) && columnPairs;
+	// A matching meld shape alone is insufficient evidence for an executable game.
+	// Keep partial/other variants in preview until pickup, ending and scoring are known.
+	const meld = /sets?\s+of\s+3\s+or\s+4/.test(t)
+		&& /(?:sequences?|runs?).{0,60}same suit/.test(t)
+		&& /all.{0,30}cards.{0,40}above/.test(t)
+		&& /immediately.{0,60}(?:used|meld|set|lay)/.test(t)
+		&& /subtract|minus/.test(t)
+		&& /empty hand|gets? rid of all/.test(t)
+		&& /ace.{0,35}high.{0,15}low/.test(t);
+	if (!setup.cardsPerPlayer || !gridSwap && !meld) return undefined;
+	const twoPlayer = t.match(/two player.{0,60}(?:receives?|dealt)\s*(\d+|thirteen)\s*cards/);
+	const target = t.match(/(?:reach(?:es)?|obtain)\s*\+?(\d+)\s*(?:total|net|points|wins)/);
+	return {
+		schemaVersion: 'table-rules/v1', players: setup.players,
+		deal: { cardsPerPlayer: setup.cardsPerPlayer, ...(twoPlayer ? { byPlayerCount: { 2: parseNumericToken(twoPlayer[1])! } } : {}) },
+		...(gridSwap ? { layout: { rows: grid.rows, columns: grid.columns, initialReveals: setup.initialFaceUpCards ?? 0 } } : {}),
+		discard: { pickup: meld ? 'suffix' : 'top', immediateUse: Boolean(meld) },
+		...(meld ? { meld: { minSet: 3, maxSet: 4, minRun: 3, ace: 'both' as const } } : {}),
+		roundEnd: gridSwap ? 'all_revealed' : 'empty_hand', stockExhaustion: 'end_round',
+		scoring: {
+			zones: gridSwap ? [{ zone: 'hand', multiplier: 1 }] : [{ zone: 'meld', multiplier: 1 }, { zone: 'hand', multiplier: -1 }],
+			...(gridSwap ? { columnPairs: grid.columns } : {}), lowWins: Boolean(gridSwap),
+			...(setup.rounds ? { rounds: setup.rounds } : {}), ...(target ? { target: Number(target[1]) } : {})
+		}
+	};
+}
+
 export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 	const normalizedText = normalizeWhitespace(input.sourceText);
 	if (!normalizedText) {
@@ -887,7 +937,7 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 	const cardsPerPlayer = detectCardsPerPlayer(normalizedText);
 	const initialFaceUpCards = detectInitialFaceUpCards(normalizedText, cardsPerPlayer);
 	const playerLayout = detectPlayerGridLayout(normalizedText, cardsPerPlayer);
-	const drawVisibility = detectDrawVisibility(normalizedText, zones);
+	const drawVisibility = playerLayout ? { stock: 'reveal' as const } : detectDrawVisibility(normalizedText, zones);
 	const handFaceDownSetup = detectHandFaceDownSetup(normalizedText);
 	const setup: RuleFactsV0['setup'] =
 		cardsPerPlayer || initialFaceUpCards !== undefined || playerLayout || drawVisibility
@@ -900,7 +950,15 @@ export function extractRuleFacts(input: ExtractRuleFactsInput): RuleFactsV0 {
 			: undefined;
 	const diagnostics = detectDiagnostics(normalizedText, zones, setup, sourceDrawRules, handFaceDownSetup);
 
+	const tableRules = detectTableRules(normalizedText, { players, cardsPerPlayer, playerLayout, initialFaceUpCards, rounds });
+	if (tableRules?.meld && !Object.keys(scoringOverrides.rankOverrides).length) {
+		scoringOverrides.aceValue = 15;
+		scoringOverrides.rankOverrides = { A: 15, J: 10, Q: 10, K: 10 };
+		diagnostics.push('Scoring default (not specified in source): A=15, J/Q/K=10, numeral cards face value.');
+	}
+	if (tableRules) diagnostics.push('App convention: an exhausted stock ends the round after the current turn.');
 	return {
+		...(tableRules ? { tableRules } : {}),
 		schemaVersion: 'rule-facts/v0',
 		gameName,
 		gameSlug: slugify(gameName),
@@ -1027,6 +1085,14 @@ function scoreRulePackFromFacts(facts: RuleFactsV0) {
 }
 
 function scoringTriggersFromFacts(facts: RuleFactsV0) {
+	if (facts.tableRules) return facts.tableRules.scoring.zones.map(zone => ({
+		id: `end-round-${zone.zone}-score`,
+		when: { eventType: 'end_round' as const },
+		source: { kind: 'player_zone' as const, zone: zone.zone, players: 'all' as const },
+		scorer: { kind: 'card_values' as const, multiplier: zone.multiplier,
+			...(zone.zone === 'hand' && facts.tableRules!.scoring.columnPairs ? { columnPairs: facts.tableRules!.scoring.columnPairs } : {}) },
+		target: { kind: 'source_player' as const }
+	}));
 	return [
 		{
 			id: 'end-round-hand-score',
@@ -1151,6 +1217,7 @@ export function compileRuleFactsToBundle(facts: RuleFactsV0): RuntimeRulesetBund
 	const gameplayRulePack = gameplayRulePackFromFacts(facts);
 	const scoreRulePack = scoreRulePackFromFacts(facts);
 	const runtimeRulePack: RuntimeRulePack = {
+		...(facts.tableRules ? { tableRules: structuredClone(facts.tableRules) } : {}),
 		gameplayRulePack,
 		scoreRulePack,
 		scoringTriggers: scoringTriggersFromFacts(facts)
@@ -1183,7 +1250,7 @@ export async function ingestSource(
 	const maxSourceChars =
 		typeof options.maxSourceChars === 'number' && options.maxSourceChars > 0
 			? Math.trunc(options.maxSourceChars)
-			: undefined;
+			: 24000;
 
 	if (input.type === 'text') {
 		const text = normalizeWhitespace(input.text ?? '');
@@ -1203,6 +1270,9 @@ export async function ingestSource(
 	if (!/^https?:\/\//i.test(url)) {
 		throw new Error('url source must use http or https');
 	}
+	if (/^\/how-to-play\/?$/.test(new URL(url).pathname)) {
+		throw new Error('Choose a specific game rules page, such as /how-to-play/six-card-golf or /how-to-play/500-rum.');
+	}
 
 	const fetchImpl = options.fetchImpl ?? globalThis.fetch;
 	if (!fetchImpl) {
@@ -1210,15 +1280,36 @@ export async function ingestSource(
 	}
 
 	const response = await fetchImpl(url, {
+		signal: AbortSignal.timeout(15000),
 		headers: {
 			accept: 'text/html, text/plain;q=0.9, */*;q=0.8'
 		}
 	});
 	if (!response.ok) {
-		throw new Error(`unable to fetch source url (${response.status})`);
+		const snapshot = reviewedSource(url);
+		if (snapshot && [403, 429, 500, 502, 503, 504].includes(response.status)) {
+			return { text: snapshot.text, type: 'url', url, diagnostics: [
+				`Source fetch returned ${response.status}; using the reviewed rules snapshot from 2026-09-17, not a fresh page fetch.`
+			] };
+		}
+		throw new Error(`Unable to fetch source URL (${response.status}). Paste the game rules instead.`);
 	}
 
-	const raw = await response.text();
+	const reader = response.body?.getReader();
+	const decoder = new TextDecoder();
+	let raw = '', bytes = 0;
+	if (reader) {
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				bytes += value.byteLength;
+				if (bytes > 2_000_000) { await reader.cancel(); throw new Error('Rules source is too large. Paste the relevant rules instead.'); }
+				raw += decoder.decode(value, { stream: true });
+			}
+			raw += decoder.decode();
+		} finally { reader.releaseLock(); }
+	}
 	const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
 	const text = contentType.includes('html') || /<html|<body|<main/i.test(raw) ? htmlToText(raw) : normalizeWhitespace(raw);
 	if (!text) {
@@ -1249,6 +1340,7 @@ export async function generateRulesetDraftFromInput(
 		sourceUrl: source.url,
 		sourceType: source.type
 	});
+	facts.diagnostics.push(...source.diagnostics ?? []);
 	const bundle = compileRuleFactsToBundle(facts);
 
 	const name = input.name?.trim() || facts.gameName;
@@ -1263,7 +1355,7 @@ export async function generateRulesetDraftFromInput(
 	return {
 		draft: {
 			name,
-			origin: 'llm',
+			origin: 'import',
 			...(source.url ? { sourceUrl: source.url } : {}),
 			...(notes ? { notes } : {}),
 			bundle

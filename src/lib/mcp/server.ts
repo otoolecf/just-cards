@@ -1,3 +1,6 @@
+import { extractionResource } from '$lib/rulesets/extraction-contract';
+import { evaluateTableBehavior } from '$lib/rulesets/behavioral-validation';
+import { canPlayRuleset } from '$lib/rulesets/generation-report';
 import type { CardInput } from '$lib/scorekeeper/engine';
 import {
 	deriveGameState,
@@ -22,10 +25,7 @@ import {
 import {
 	compileRuleFactsToBundle,
 	extractRuleFacts,
-	generateRulesetDraftFromInput,
-	ingestSource,
-	type GenerateRulesetInput,
-	type RuleFactsV0
+	type GenerateRulesetInput
 } from '$lib/rulesets/generator';
 import {
 	generateRulesetDraftWithAgent,
@@ -105,6 +105,7 @@ const TOOLS: McpToolDefinition[] = [
 ];
 
 const STATIC_RESOURCES: McpResourceDefinition[] = [
+	{uri:'just-cards://schemas/rule-extraction-v1', name:'Executable rule extraction v1', description:'Shared strict schema and primitive descriptions used by website, MCP and runtime validation.',mimeType:'application/json'},
 	{
 		uri: 'just-cards://docs/primitives-kb-v0',
 		name: 'Primitives KB',
@@ -660,15 +661,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function fallbackSessionFacts(
-candidate: RuleFactsV0 | undefined,
-baseline: RuleFactsV0
-): RuleFactsV0 {
-	if (!candidate || candidate.schemaVersion !== 'rule-facts/v0') {
-		return baseline;
-	}
-	return candidate;
-}
 
 function summarizeValidationIssues(issues: string[]): string {
 	return issues.length === 0 ? 'none' : issues.join(', ');
@@ -760,6 +752,7 @@ function rankedStandings(
 }
 
 export interface CreateJustCardsMcpServerOptions {
+	scoreSessionReader?: (id: string) => Promise<ReturnType<typeof buildSessionStateView>>;
 	rulesetService: RulesetService;
 	gameStore?: McpGameStore;
 	auditLog?: McpAuditLog;
@@ -773,6 +766,7 @@ export interface CreateJustCardsMcpServerOptions {
 }
 
 export class JustCardsMcpServer {
+	private readonly scoreSessionReader: (id: string) => Promise<ReturnType<typeof buildSessionStateView>>;
 	private readonly rulesetService: RulesetService;
 	private readonly gameStore: McpGameStore;
 	private readonly auditLog: McpAuditLog;
@@ -786,6 +780,7 @@ export class JustCardsMcpServer {
 	private readonly traceToolCounts = new Map<string, number>();
 
 	constructor(options: CreateJustCardsMcpServerOptions) {
+		this.scoreSessionReader = options.scoreSessionReader ?? (async id => buildSessionStateView(id));
 		this.rulesetService = options.rulesetService;
 		this.gameStore = options.gameStore ?? new InMemoryMcpGameStore();
 		this.auditLog = options.auditLog ?? new InMemoryMcpAuditLog();
@@ -825,6 +820,7 @@ export class JustCardsMcpServer {
 	}
 
 	async readResource(uri: string): Promise<McpResourceReadResult> {
+		if(uri==='just-cards://schemas/rule-extraction-v1') return {uri,mimeType:'application/json',json:extractionResource()};
 		if (uri === 'just-cards://docs/primitives-kb-v0') {
 			return { uri, mimeType: 'text/markdown', text: PRIMITIVES_KB_SNAPSHOT };
 		}
@@ -989,108 +985,26 @@ export class JustCardsMcpServer {
 	}
 
 	private async generateRuleset(args: McpGenerateRulesetArgs): Promise<McpGenerateRulesetResult> {
-		const requestedModelSource: McpModelSource = args.model_source ?? 'session';
-		const baseInput: GenerateRulesetInput = {
-			source: args.source,
-			...(args.name ? { name: args.name } : {}),
-			...(args.notes ? { notes: args.notes } : {})
-		};
-		this.assertGenerateSourceBudget(baseInput.source);
-
-		let fallbackReason: string | undefined;
-		if (requestedModelSource === 'session') {
-			try {
-				const generated = await this.generateWithSessionSampler(baseInput);
-				const ruleset = await this.rulesetService.createDraft(generated.draft);
-				return {
-					ruleset,
-					facts: generated.facts,
-					diagnostics: generated.diagnostics,
-					generation: {
-						requestedModelSource,
-						usedModelSource: 'session',
-						deterministicFallback: false
-					}
-				};
-			} catch (error) {
-				const message = error instanceof Error ? error.message : 'session sampler failed';
-				fallbackReason = `session:${message}`;
-			}
-		}
-
-		const maxServerRetries = Math.max(0, this.generationBudget.maxServerRetries ?? 0);
-		for (let attempt = 0; attempt <= maxServerRetries; attempt += 1) {
-			try {
-				const generated = await generateRulesetDraftWithAgent(baseInput, {
-					fetchImpl: this.fetchImpl,
-					maxSourceChars: this.generationBudget.maxSourceChars,
-					...this.serverAgent
-				});
-				const shouldRetryDeterministic =
-					generated.pipeline.strategy === 'deterministic' &&
-					(this.serverAgent.apiKey?.trim().length ?? 0) > 0 &&
-					attempt < maxServerRetries;
-				if (shouldRetryDeterministic) {
-					continue;
-				}
-				const ruleset = await this.rulesetService.createDraft(generated.draft);
-				return {
-					ruleset,
-					facts: generated.facts,
-					diagnostics: generated.diagnostics,
-					generation: {
-						requestedModelSource,
-						usedModelSource: 'server',
-						deterministicFallback: generated.pipeline.strategy === 'deterministic',
-						...(fallbackReason ? { fallbackReason } : {}),
-						pipeline: generated.pipeline
-					}
-				};
-			} catch (error) {
-				const canRetry = attempt < maxServerRetries;
-				if (canRetry) {
-					continue;
-				}
-				const message = error instanceof Error ? error.message : 'server model generation failed';
-				const deterministic = await generateRulesetDraftFromInput(baseInput, {
-					fetchImpl: this.fetchImpl,
-					maxSourceChars: this.generationBudget.maxSourceChars
-				});
-				const ruleset = await this.rulesetService.createDraft(deterministic.draft);
-				return {
-					ruleset,
-					facts: deterministic.facts,
-					diagnostics: deterministic.diagnostics,
-					generation: {
-						requestedModelSource,
-						usedModelSource: 'server',
-						deterministicFallback: true,
-						fallbackReason: fallbackReason
-							? `${fallbackReason}; server:${message}`
-							: `server:${message}`
-					}
-				};
-			}
-		}
-
-		// Defensive fallback; control flow above should always return.
-		const deterministic = await generateRulesetDraftFromInput(baseInput, {
-			fetchImpl: this.fetchImpl,
-			maxSourceChars: this.generationBudget.maxSourceChars
-		});
-		const ruleset = await this.rulesetService.createDraft(deterministic.draft);
-		return {
-			ruleset,
-			facts: deterministic.facts,
-			diagnostics: deterministic.diagnostics,
-			generation: {
-				requestedModelSource,
-				usedModelSource: 'server',
-				deterministicFallback: true,
-				...(fallbackReason ? { fallbackReason } : {})
-			}
-		};
-	}
+  const requestedModelSource: McpModelSource=args.model_source ?? 'session';
+  const baseInput:GenerateRulesetInput={source:args.source,name:args.name,notes:args.notes};
+  this.assertGenerateSourceBudget(baseInput.source);
+  const useSession=requestedModelSource==='session' && !!this.sessionSampler;
+  let generated=await generateRulesetDraftWithAgent(baseInput,{
+   fetchImpl:this.fetchImpl,maxSourceChars:this.generationBudget.maxSourceChars,
+   ...this.serverAgent,...(useSession?{model:this.sessionSampler}:{})
+  });
+  let fallbackReason=requestedModelSource==='session'&&!useSession?'Session sampler is not configured; used the shared server pipeline.':undefined;
+  if(useSession && generated.pipeline.strategy==='deterministic') {
+   fallbackReason='session extraction failed; used the shared server pipeline.';
+   generated=await generateRulesetDraftWithAgent(baseInput,{fetchImpl:this.fetchImpl,maxSourceChars:this.generationBudget.maxSourceChars,...this.serverAgent});
+  }
+  const ruleset=await this.rulesetService.createDraft(generated.draft);
+  return {ruleset,facts:generated.facts,diagnostics:generated.diagnostics,generation:{
+   requestedModelSource,usedModelSource:useSession&&!fallbackReason?'session':'server',
+   deterministicFallback:generated.pipeline.strategy==='deterministic',pipeline:generated.pipeline,
+   ...(fallbackReason?{fallbackReason}:{})
+  }};
+ }
 
 	private assertGenerateSourceBudget(source: GenerateRulesetInput['source']): void {
 		const maxSourceChars = this.generationBudget.maxSourceChars;
@@ -1106,43 +1020,6 @@ export class JustCardsMcpServer {
 		}
 	}
 
-	private async generateWithSessionSampler(baseInput: GenerateRulesetInput) {
-		if (!this.sessionSampler) {
-			throw new Error('session sampler is not configured');
-		}
-		const source = await ingestSource(baseInput.source, {
-			fetchImpl: this.fetchImpl,
-			maxSourceChars: this.generationBudget.maxSourceChars
-		});
-		const baselineFacts = extractRuleFacts({
-			sourceText: source.text,
-			sourceType: source.type,
-			sourceUrl: source.url
-		});
-		const sampledFacts = await this.sessionSampler({
-			sourceText: source.text,
-			sourceType: source.type,
-			sourceUrl: source.url,
-			baselineFacts
-		});
-		const facts = fallbackSessionFacts(sampledFacts, baselineFacts);
-		const bundle = compileRuleFactsToBundle(facts);
-		const notes = [
-			...(baseInput.notes?.trim() ? [baseInput.notes.trim()] : []),
-			'Generation strategy: session sampling.'
-		].join(' ');
-		return {
-			facts,
-			diagnostics: [...facts.diagnostics],
-			draft: {
-				name: baseInput.name?.trim() || facts.gameName,
-				origin: 'llm' as const,
-				...(source.url ? { sourceUrl: source.url } : {}),
-				...(notes.trim().length > 0 ? { notes: notes.trim() } : {}),
-				bundle
-			}
-		};
-	}
 
 	private async validateRuleset(args: McpValidateRulesetArgs): Promise<McpValidateRulesetResult> {
 		let bundle: RuntimeRulesetBundle | undefined = args.bundle;
@@ -1157,6 +1034,10 @@ export class JustCardsMcpServer {
 			throw new Error('validate_ruleset requires ruleset_id or bundle');
 		}
 
+  if (bundle.runtimeRulePack.tableRules || bundle.generationReport) {
+   const behavior=evaluateTableBehavior(bundle), playable=canPlayRuleset(bundle);
+   return {pass:behavior.pass && playable,checks:[...behavior.checks,{id:'play-review',pass:playable,details:playable?'Rules ready for play':'Rules need review or corrections before play'}],issues:[...behavior.checks.filter(c=>!c.pass).map(c=>`${c.id}: ${c.details}`),...(!playable?['Rules need review or corrections before play']:[])],behavior,playable,report:bundle.generationReport};
+  }
 		const confidence = evaluateRulesetBundleConfidence(bundle);
 		const issues = confidence.checks
 			.filter((check) => !check.pass)
@@ -1364,7 +1245,7 @@ export class JustCardsMcpServer {
 		if (!sessionId) {
 			throw new Error('render_score_leaderboard requires session_id');
 		}
-		const sessionView = buildSessionStateView(sessionId);
+		const sessionView = await this.scoreSessionReader(sessionId);
 		const winDirection = sessionView.config.scoreWinDirection ?? getModeWinDirection(sessionView.config.scoreModeId);
 		return {
 			viewType: 'score_leaderboard/v1',

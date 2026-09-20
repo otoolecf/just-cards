@@ -48,7 +48,7 @@ function asString(value: unknown): string {
 	return typeof value === 'string' ? value.trim() : '';
 }
 
-export const POST: RequestHandler = async ({ request, fetch }) => {
+export const POST: RequestHandler = async ({ request, fetch, platform }) => {
 	const auth = await authorizeMcpRequest(request, { fetchImpl: fetch });
 	if (!auth.ok) {
 		return json(
@@ -64,7 +64,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 	const action = payload.action;
 	const input = payload.input ?? {};
 	const traceId = payload.trace_id?.trim() || randomTraceId();
-	const server = await getDefaultMcpServer({ fetchImpl: fetch });
+	const server = await getDefaultMcpServer({ fetchImpl: fetch, platform });
 
 	if (!action) {
 		return json({ traceId, error: 'action is required' }, { status: 400 });

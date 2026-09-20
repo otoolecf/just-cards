@@ -118,3 +118,26 @@ When enabled, `turnActionPolicy` allows rulesets to enforce turn flow such as:
 - Runtime schema checks: [`specs/2026-02-16-rulepack-runtime-schema-validation.md`](./specs/2026-02-16-rulepack-runtime-schema-validation.md)
 - Validator behavior: [`specs/2026-02-16-gameplay-v0-validator.md`](./specs/2026-02-16-gameplay-v0-validator.md)
 - Canonical primitive catalog: [`primitives-kb-v0.md`](./primitives-kb-v0.md)
+
+## Authoritative shared play
+
+The legacy event engine described above remains available for draft previews and
+MCP scaffolding. Supported family games use the explicit [shared-table/v1
+policies and commands](./shared-table-v1.md), implemented in `table-rules.ts` and
+`table-engine.ts`. These add atomic positional replacement, turn-preserving melds,
+validated suffix pickup, private server projections, and automatic round endings.
+Both paths consume `runtime-bundle/v1`; shared play never treats client state as truth.
+
+### Player instructions
+
+`gameplay/play-guide.ts` builds the plain-language play guide from the room's
+`TableRules` and actual card values. `components/play-guide.svelte` shares it
+between the lobby's selected game and each room's How to play panel. Guides
+explain unfamiliar terms alongside button instructions, and only describe enabled
+house-rule effects. Existing rooms use their saved rules with the current guide;
+extraction diagnostics are not beginner instructions.
+
+For full mobile-browser walkthroughs against an isolated server, see
+`tests/browser/play_walkthrough.py --help`. It creates rooms through the UI and
+plays through UI controls, using only each player's public/private projected view
+to choose cards. It does not inspect the hidden deck or modify existing rooms.

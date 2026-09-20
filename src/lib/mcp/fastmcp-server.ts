@@ -127,12 +127,13 @@ async function injectToolsListAppMetadata(
 
 export interface CreateFastMcpEdgeServerOptions {
 	fetchImpl?: typeof fetch;
+	platform?: App.Platform;
 }
 
 export async function createFastMcpEdgeServer(
 	options: CreateFastMcpEdgeServerOptions = {}
 ): Promise<EdgeFastMCP> {
-	const domainServer = await getDefaultMcpServer({ fetchImpl: options.fetchImpl });
+	const domainServer = await getDefaultMcpServer({ fetchImpl: options.fetchImpl, platform: options.platform });
 	const domainTools = domainServer.listTools();
 	const toolMapByName = new Map(domainTools.map((tool) => [tool.name, tool]));
 	const edgeServer = new EdgeFastMCP({

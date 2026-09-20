@@ -33,20 +33,26 @@ function readGenerationBudgetFromEnv(): McpGenerationBudget {
 
 export interface GetDefaultMcpServerOptions {
 	fetchImpl?: typeof fetch;
+	platform?: App.Platform;
 }
 
 export async function getDefaultMcpServer(
 	options: GetDefaultMcpServerOptions = {}
 ): Promise<JustCardsMcpServer> {
-	const rulesetService = await getDefaultRulesetService();
+	const rulesetService = await getDefaultRulesetService(options.platform);
 	return createJustCardsMcpServer({
+		...(options.fetchImpl ? { scoreSessionReader: async (id: string) => {
+			const response = await options.fetchImpl!(`/api/sessions/${encodeURIComponent(id)}`);
+			if (!response.ok) throw new Error('Score session not found');
+			return await response.json() as import('$lib/session/session-store').SessionStateView;
+		} } : {}),
 		rulesetService,
 		gameStore: sharedGameStore,
 		auditLog: sharedAuditLog,
 		fetchImpl: options.fetchImpl,
 		generationBudget: readGenerationBudgetFromEnv(),
 		serverAgent: {
-			apiKey: env.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
+			apiKey: options.platform?.env?.OPENAI_API_KEY ?? env.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
 			primaryModel: env.RULESET_LLM_PRIMARY_MODEL ?? process.env.RULESET_LLM_PRIMARY_MODEL,
 			fallbackModel: env.RULESET_LLM_FALLBACK_MODEL ?? process.env.RULESET_LLM_FALLBACK_MODEL
 		}

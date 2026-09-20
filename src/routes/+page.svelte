@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import { Select, Tabs } from 'bits-ui';
 	import {
@@ -22,12 +22,19 @@
 	} from '$lib/session/score-session-commands';
 	import ScoreInput from '$lib/components/score-input.svelte';
 	import ScoreButton from '$lib/components/score-button.svelte';
+	import RulesetLibrary from '$lib/components/ruleset-library.svelte';
+ import { catalogSelection, readFavorites, reconcileCatalog } from '$lib/rulesets/catalog';
+ import HouseRulesEditor from '$lib/components/house-rules-editor.svelte';
+ import CapabilityScoreInput from '$lib/components/capability-score-input.svelte';
+	import { canPlayRuleset } from '$lib/rulesets/generation-report';
 	import CardTapInput from '$lib/components/card-tap-input.svelte';
 	import { createRulePack, type CardInput, type ScoreEvent } from '$lib/scorekeeper/engine';
 	import { createStarterRulesetDraft } from '$lib/rulesets/picker';
 	import type { RulesetRecord } from '$lib/rulesets/types';
 	import {
 		createSession,
+		savedDeviceSessions,
+		forkOfflineSession,
 		getSessionState,
 		postSessionEvent,
 		type SessionStateView
@@ -58,7 +65,16 @@
 		message: string;
 	};
 
+	let offlineReady=false;
+	let deviceSessions: SessionStateView[] = [];
 	let activeSessionId = '';
+	function refreshDeviceSessions() { try { deviceSessions=savedDeviceSessions(); } catch(e) { setFeedback('error',e instanceof Error?e.message:'Unable to read saved sessions'); } }
+	async function keepOfflineCopy() {
+		if(isPosting) return; isPosting=true;
+		try { const copy=await forkOfflineSession(activeSessionId); activeSessionId=copy.sessionId; localStorage.setItem('jc-score-session',activeSessionId); sessionState=copy; refreshDeviceSessions(); }
+		catch(e) {setFeedback('error',e instanceof Error?e.message:'Unable to save copy');}
+		finally {isPosting=false;}
+	}
 	let joinSessionId = '';
 	let sessionState: SessionStateView | null = null;
 	let lastSynced = '';
@@ -70,6 +86,8 @@
 	let setupPlayers = ['Player 1', 'Player 2'];
 	let sessionRoster: string[] = [];
 	let setupPlayerCount = 2;
+ let scoringPresetId='';
+ $: if(!activeSessionId && selectedScoreInputMode==='guided' && selectedRulesetRecord && scoringPresetId!==selectedRulesetRecord.id){scoringPresetId=selectedRulesetRecord.id;const r=selectedRulesetRecord.bundle.runtimeRulePack.tableRules;if(r?.patience)setupPlayerCount=1;else if(r?.contract)setupPlayerCount=4;else if(setupPlayerCount<2)setupPlayerCount=2;syncSetupPlayers();}
 	let selectedScoreInputMode: ScoreInputMode = 'guided';
 	let selectedRawWinDirection: ScoreWinDirection = 'high_wins';
 	let selectedRulesetId = '';
@@ -92,7 +110,14 @@
 	let patternTargetItems: SelectOption[] = [];
 
 	let rulesets: RulesetRecord[] = data.rulesets ?? [];
-	let rulesetItems: SelectOption[] = [];
+	let library: RulesetLibrary;
+ let favorites:string[]=[];
+ let rulesetItems: SelectOption[] = [];
+ function updateLibrary(record:RulesetRecord) {
+ rulesets=[record,...rulesets.filter(r=>r.id!==record.id)];
+ if(record.archived && selectedRulesetId===record.id) selectedRulesetId=catalogSelection(rulesets,favorites)[0]?.id ?? '';
+ try {localStorage.setItem('jc-score-rulesets-v1',JSON.stringify(rulesets));}catch {setFeedback('error','Library updated online; this device could not cache it.');}
+ }
 	let isRulesetBusy = false;
 	let rulesetFeedback: Feedback =
 		data.rulesetLoadError && data.rulesetLoadError.length > 0
@@ -141,7 +166,7 @@
 	}
 
 	function syncSetupPlayers(): void {
-		const target = Math.max(2, setupPlayerCount);
+		const target = Math.max(1, setupPlayerCount);
 		setupPlayerCount = target;
 		if (setupPlayers.length < target) {
 			const next = [...setupPlayers];
@@ -155,14 +180,14 @@
 		}
 	}
 
-	function getActivePlayers(): string[] {
-		const preferredRoster = activeSessionId ? sessionRoster : setupPlayers;
-		if (!sessionState) {
-			return dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setupPlayers);
+	function getActivePlayers(roster = sessionRoster, state = sessionState, setup = setupPlayers, sessionId = activeSessionId): string[] {
+		const preferredRoster = sessionId ? roster : setup;
+		if (!state) {
+			return dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setup);
 		}
 		return dedupePlayers([
-			...dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setupPlayers),
-			...Object.keys(sessionState.state.totalsByPlayer)
+			...dedupePlayers(preferredRoster.length > 0 ? preferredRoster : setup),
+			...Object.keys(state.state.totalsByPlayer)
 		]);
 	}
 
@@ -198,16 +223,16 @@
 		return 'Raw (calculator)';
 	}
 
-	function resolveActiveGuidedProfile(): GuidedScoreProfile | null {
-		const persisted = sessionState?.config?.scoreGuidedProfile;
+	function resolveActiveGuidedProfile(state = sessionState, mode = selectedScoreInputMode, record = selectedRulesetRecord): GuidedScoreProfile | null {
+		const persisted = state?.config?.scoreGuidedProfile;
 		if (persisted) {
 			return persisted;
 		}
-		if (selectedScoreInputMode !== 'guided' || !selectedRulesetRecord) {
+		if (mode !== 'guided' || !record) {
 			return null;
 		}
 		try {
-			return deriveGuidedScoreProfileFromBundle(selectedRulesetRecord.bundle, selectedRulesetRecord.id);
+			return deriveGuidedScoreProfileFromBundle(record.bundle, record.id);
 		} catch {
 			return null;
 		}
@@ -250,15 +275,19 @@
 		syncGuidedInputsForRoster(players, guidedEntryZones);
 	}
 
-	$: activePlayers = getActivePlayers();
+	$: activePlayers = getActivePlayers(sessionRoster, sessionState, setupPlayers, activeSessionId);
 	$: if (data.rulesets) {
 		rulesets = data.rulesets;
 	}
-	$: rulesetItems = rulesets.map((ruleset) => ({ value: ruleset.id, label: ruleset.name }));
+	$: rulesetItems = catalogSelection(rulesets,favorites).map((ruleset) => ({ value: ruleset.id, label: ruleset.name }));
 	$: if (rulesets.length > 0 && !selectedRulesetId) {
-		selectedRulesetId = rulesets[0].id;
+		selectedRulesetId = catalogSelection(rulesets,favorites)[0]?.id ?? '';
 	}
 	$: selectedRulesetRecord = rulesets.find((ruleset) => ruleset.id === selectedRulesetId);
+ $: summaryInputMode=sessionState?.config.scoreInputMode??selectedScoreInputMode;
+ $: summaryName=rulesets.find(r=>r.id===(sessionState?.config.scoreRulesetId??selectedRulesetId))?.name??sessionState?.config.scoreRulesetId??'';
+ $: summaryWin=sessionState?.config.scoreWinDirection??(summaryInputMode==='guided'?activeGuidedProfile?.winDirection:selectedRawWinDirection)??'high_wins';
+ $: summaryMode=summaryInputMode==='guided'?`Guided (${summaryName})`:'Raw (calculator)';
 	$: {
 		try {
 			setupGuidedProfile = selectedRulesetRecord
@@ -268,10 +297,12 @@
 			setupGuidedProfile = null;
 		}
 	}
-	$: activeGuidedProfile = resolveActiveGuidedProfile();
+	$: activeGuidedProfile = resolveActiveGuidedProfile(sessionState, selectedScoreInputMode, selectedRulesetRecord);
 	$: guidedEntryZones = scoreEntryZones(activeGuidedProfile);
+	$: rawScoring = (sessionState?.config.scoreInputMode ?? selectedScoreInputMode) === 'raw';
+	$: showPatternRound = rawScoring || activeGuidedProfile?.patternRound === true;
 	$: {
-		const mode = activeScoreInputMode();
+		const mode = sessionState?.config.scoreInputMode ?? selectedScoreInputMode;
 		const allowed = allowedAddRoundModes(mode);
 		if (!allowed.includes(addRoundMode)) {
 			addRoundMode = allowed[0];
@@ -295,19 +326,11 @@
 		startPolling();
 	}
 
-	const recentEvents = (): SessionStateView['events'] => {
-		if (!sessionState) {
-			return [];
-		}
-		return [...sessionState.events].slice(-5).reverse();
-	};
-
-	const sortedStandings = (): Array<[string, number]> => {
-		if (!sessionState) {
-			return [];
-		}
-		return sortStandingsByDirection(sessionState.state.totalsByPlayer, activeWinDirection());
-	};
+	$: displayedEvents = sessionState ? [...sessionState.events].slice(-5).reverse() : [];
+	$: standings = sortStandingsByDirection(
+		sessionState?.state.totalsByPlayer ?? {},
+		sessionState?.config.scoreWinDirection ?? activeGuidedProfile?.winDirection ?? selectedRawWinDirection
+	);
 
 	function clearIntervalIfNeeded(): void {
 		if (pollTimer) {
@@ -325,8 +348,11 @@
 			isBusy = true;
 		}
 		try {
-			const state = await getSessionState(activeSessionId);
+			const requestedId=activeSessionId;
+			const state = await getSessionState(requestedId);
+			if (requestedId !== activeSessionId) return;
 			sessionState = state;
+			if (state.config.players?.length) sessionRoster = state.config.players;
 			if (state.config.scoreInputMode) {
 				selectedScoreInputMode = state.config.scoreInputMode;
 			}
@@ -351,7 +377,7 @@
 				patternTargetId = activePlayers[0];
 			}
 			if (!sessionState.state.validationIssues || sessionState.state.validationIssues.length === 0) {
-				setFeedback('success', 'Session synced.');
+				setFeedback('success', state.sync?.status === 'synced' ? 'Session synced.' : 'Scores saved on this device.');
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unable to sync session.';
@@ -378,8 +404,8 @@
 			return;
 		}
 		const names = dedupePlayers(setupPlayers);
-		if (names.length < 2) {
-			setFeedback('error', 'At least two players are required.');
+		if (names.length < 1 || (selectedScoreInputMode==='guided' && setupGuidedProfile?.roundScoring==='contract' && names.length!==4) || (selectedScoreInputMode==='guided' && setupGuidedProfile?.roundScoring==='solo_outcome' && names.length!==1)) {
+			setFeedback('error', 'Enter one player for Solitaire, exactly four for Bridge, and at least one for other score sheets.');
 			return;
 		}
 
@@ -406,6 +432,7 @@
 		setFeedback('loading', `Creating ${summaryLabel} session...`);
 		try {
 			const created = await createSession({
+				players: names,
 				scoreRulePack,
 				scoreInputMode,
 				scoreWinDirection,
@@ -414,6 +441,8 @@
 				trace: false
 			});
 			activeSessionId = created.sessionId;
+			localStorage.setItem('jc-score-session', activeSessionId);
+ const url=new URL(location.href);url.searchParams.delete('ruleset');history.replaceState(history.state,'',url.pathname+url.search+url.hash);
 			joinSessionId = created.sessionId;
 			sessionState = null;
 			sessionRoster = names;
@@ -442,12 +471,13 @@
 		}
 
 		activeSessionId = sessionId;
+		localStorage.setItem('jc-score-session', activeSessionId);
 		isPosting = true;
 		setFeedback('loading', 'Loading session...');
 		try {
 			await loadSession(true);
 			const knownPlayers = dedupePlayers(Object.keys(sessionState?.state.totalsByPlayer ?? {}));
-			sessionRoster = knownPlayers.length > 0 ? knownPlayers : dedupePlayers(setupPlayers);
+			sessionRoster = sessionState?.config.players?.length ? sessionState.config.players : knownPlayers.length > 0 ? knownPlayers : dedupePlayers(setupPlayers);
 			setupPlayers = [...sessionRoster];
 			if (setupPlayers.length === 0) {
 				setupPlayers = ['Player 1', 'Player 2'];
@@ -485,6 +515,10 @@
 		patternCardsText = '';
 	}
 
+ async function submitCapabilityScore(event:ScoreEvent):Promise<void> {
+  if(!activeSessionId||isPosting)return;isPosting=true;
+  try{sessionState=await postSessionEvent(activeSessionId,event);setFeedback('success','Result saved.');}catch(e){setFeedback('error',e instanceof Error?e.message:'Unable to save result');}finally{isPosting=false;}
+ }
 	async function submitAddRound(): Promise<void> {
 		if (!activeSessionId || isPosting) {
 			return;
@@ -599,7 +633,7 @@
 	}
 
 	async function submitPatternRound(): Promise<void> {
-		if (!activeSessionId || isPosting) {
+		if (!activeSessionId || isPosting || !showPatternRound) {
 			return;
 		}
 		if (!patternTargetId || !patternTargetId.trim()) {
@@ -639,6 +673,7 @@
 				})
 			);
 			sessionState = state;
+			if (state.config.players?.length) sessionRoster = state.config.players;
 			patternCardsText = '';
 			lastSynced = new Date().toLocaleTimeString();
 			setFeedback('success', 'Pattern round submitted.');
@@ -699,7 +734,9 @@
 	}
 
 	function resetSession(): void {
+		refreshDeviceSessions();
 		activeSessionId = '';
+		localStorage.removeItem('jc-score-session');
 		joinSessionId = '';
 		sessionState = null;
 		sessionRoster = [];
@@ -727,6 +764,7 @@
 		if (scoreEvent.type === 'add_pattern_round') {
 			return `add_pattern_round (player targets: ${scoreEvent.entries.length})`;
 		}
+		if(scoreEvent.type==='add_contract')return `Contract: ${scoreEvent.result.level} ${scoreEvent.result.strain}, ${scoreEvent.result.tricks} tricks`;
 		if (scoreEvent.type === 'add_delta') {
 			return `add_delta (entries: ${scoreEvent.entries.length})`;
 		}
@@ -858,6 +896,34 @@
 		}
 	}
 
+	onMount(() => {
+  favorites=readFavorites(localStorage);
+		try {
+			const cached=JSON.parse(localStorage.getItem('jc-score-rulesets-v1') ?? '[]') as RulesetRecord[];
+			if(Array.isArray(cached)) rulesets=reconcileCatalog(rulesets,cached,navigator.onLine && !data.rulesetLoadError);
+			localStorage.setItem('jc-score-rulesets-v1',JSON.stringify(rulesets));
+		} catch { setFeedback('error','Unable to cache rules on this device.'); }
+		const checkOfflineReady=()=>{offlineReady=!!navigator.serviceWorker?.controller?.scriptURL.endsWith('/service-worker.js');};
+		if ('serviceWorker' in navigator) {
+			checkOfflineReady();
+			navigator.serviceWorker.addEventListener('controllerchange',checkOfflineReady);
+			void navigator.serviceWorker.ready.then(checkOfflineReady);
+		}
+		refreshDeviceSessions();
+		const reconnect=()=>{ void loadSession(); };
+		window.addEventListener('online',reconnect);
+		window.addEventListener('offline',reconnect);
+		window.addEventListener('storage',reconnect);
+		const cleanup=()=>{navigator.serviceWorker?.removeEventListener('controllerchange',checkOfflineReady);window.removeEventListener('online',reconnect);window.removeEventListener('offline',reconnect);window.removeEventListener('storage',reconnect);};
+		const requested = new URL(location.href).searchParams.get('ruleset');
+		if (requested && rulesets.some(r => r.id === requested && !r.archived)) {
+			selectedRulesetId = requested; selectedScoreInputMode = 'guided'; return cleanup;
+		}
+		const saved = localStorage.getItem('jc-score-session');
+		if (saved) { joinSessionId = saved; void joinSession(); }
+		return cleanup;
+	});
+
 	onDestroy(() => {
 		clearIntervalIfNeeded();
 	});
@@ -872,6 +938,7 @@
 		<div>
 			<h1>Scorekeeper</h1>
 			<p class="subtitle">Fast one-device scoring for live card games.</p>
+			{#if offlineReady}<p class="jc-subtle">Available offline on this device</p>{/if}
 		</div>
 		<nav class="jc-mode-links" aria-label="Mode links">
 			<a href="/" class="jc-mode-link" aria-current="page">Score</a>
@@ -889,17 +956,28 @@
 				<p class="status-success">{feedback.message}</p>
 			{/if}
 		</div>
+		{#if sessionState?.sync}
+			<div class="jc-panel" role="status" aria-label="Score sync status" style="padding: 12px; margin-bottom: 12px">
+				{#if sessionState.sync.status === 'synced'}<strong>Saved and synced</strong>
+				{:else if sessionState.sync.status === 'conflict'}<strong>Another device changed this session</strong><p>Your offline scores are safe here. Save them as a separate session to keep both versions.</p>
+				{:else if sessionState.sync.status === 'error'}<strong>Sync needs attention</strong><p>{sessionState.sync.message}</p>
+				{:else}<strong>Saved on this device · offline</strong>{/if}
+				{#if sessionState.sync.pending}<p>{sessionState.sync.pending} score changes waiting to sync.</p>{/if}
+				{#if sessionState.sync.status === 'conflict' || sessionState.sync.status === 'error'}<ScoreButton onPress={()=>void keepOfflineCopy()} disabled={isPosting}>Save my scores as a separate session</ScoreButton>{/if}
+				{#if sessionState.sync.status !== 'synced'}<p class="jc-subtle">Keep this browser’s data until scores are synced. Reconnection retries automatically while this page is open.</p>{/if}
+			</div>
+		{/if}
 		<div class="session-summary">
 			<p><strong>Session:</strong> {activeSessionId || 'Not started'}</p>
-			<p><strong>Scoring mode:</strong> {activeModeSummary()}</p>
-			<p><strong>Leaderboard:</strong> {formatWinDirection(activeWinDirection())}</p>
-			{#if activeScoreInputMode() === 'guided' && activeRulesetName()}
-				<p><strong>Ruleset:</strong> {activeRulesetName()}</p>
+			<p><strong>Scoring mode:</strong> {summaryMode}</p>
+			<p><strong>Leaderboard:</strong> {formatWinDirection(summaryWin)}</p>
+			{#if summaryInputMode === 'guided' && summaryName}
+				<p><strong>Ruleset:</strong> {summaryName}</p>
 			{/if}
 			{#if sessionState}
 				<p><strong>Events:</strong> {sessionState.eventCount}</p>
 			{/if}
-			<p><strong>Last synced:</strong> {lastSynced || 'never'}</p>
+			<p><strong>Last updated:</strong> {lastSynced || 'never'}</p>
 		</div>
 	</section>
 
@@ -1014,6 +1092,10 @@
 		{#if !activeSessionId}
 		<section class="panel">
 			<h2>Start a score session</h2>
+			<p class="jc-subtle">Once this app is available offline, you can create sessions and enter scores without a connection. They sync when you reconnect.</p>
+			{#if deviceSessions.length}<details><summary>Saved on this device</summary>
+				{#each deviceSessions as saved}<p><ScoreButton onPress={()=>{joinSessionId=saved.sessionId;void joinSession();}}>{saved.config.players?.join(', ') || 'Score session'} · {new Date(saved.createdAt).toLocaleDateString()} · {saved.eventCount} events{saved.sync?.pending ? ` · ${saved.sync.pending} pending` : ''}</ScoreButton></p>{/each}
+			</details>{/if}
 			<div class="field-group">
 				<label for="score-input-mode">Scoring mode</label>
 				<Select.Root
@@ -1047,6 +1129,7 @@
 				</p>
 			</div>
 
+			<RulesetLibrary bind:this={library} {rulesets} {favorites} onDeleted={(id)=>{rulesets=rulesets.filter(r=>r.id!==id);if(selectedRulesetId===id) selectedRulesetId=catalogSelection(rulesets,favorites)[0]?.id ?? '';}} onChanged={updateLibrary} onFavorites={(ids)=>favorites=ids} />
 			{#if selectedScoreInputMode === 'guided'}
 				<div class="field-group">
 					<label for="guided-ruleset">Ruleset (guided)</label>
@@ -1067,10 +1150,16 @@
 							</Select.Content>
 						</Select.Portal>
 					</Select.Root>
+					<ScoreButton onPress={() => library.reveal()}>Rename or remove games</ScoreButton>
+					{#each rulesets.filter(r=>r.id===selectedRulesetId && canPlayRuleset(r.bundle) && (r.bundle.runtimeRulePack.tableRules?.layout || r.bundle.runtimeRulePack.tableRules?.meld || r.bundle.runtimeRulePack.tableRules?.shedding)) as original (original.id)}
+						<HouseRulesEditor {original} onSaved={(record)=>{rulesets=[record,...rulesets];selectedRulesetId=record.id;setFeedback('success',`Saved ${record.name} for your next session.`);try { localStorage.setItem('jc-score-rulesets-v1',JSON.stringify(rulesets)); } catch { setFeedback('error','Family rules saved online; device storage could not cache them.'); }}} />
+					{/each}
 					{#if setupGuidedProfile}
 						<p class="hint">
-							Win direction: {formatWinDirection(setupGuidedProfile.winDirection)}.
-							Zones: {guidedEntryZones.map((zone) => zone.label).join(', ') || 'None'}.
+							{#if setupGuidedProfile.roundScoring==='contract'}Rubber Bridge: enter the contract and tricks; partners are players 1 &amp; 3 and 2 &amp; 4.
+ {:else if setupGuidedProfile.roundScoring}Record completed deals or the first player out. One point per win.
+ {:else}Win direction: {formatWinDirection(setupGuidedProfile.winDirection)}.
+							Zones: {guidedEntryZones.map((zone) => zone.label).join(', ') || 'None'}.{/if}
 						</p>
 					{:else}
 						<p class="hint">Generate or create a ruleset first in optional ruleset tools.</p>
@@ -1105,11 +1194,11 @@
 					<ScoreInput
 						id="player-count"
 						type="number"
-						min="2"
+						min="1"
 						value={`${setupPlayerCount}`}
 						onValueChange={(nextValue) => {
 							const value = Number.parseInt(nextValue || '2', 10);
-							setupPlayerCount = Number.isNaN(value) ? 2 : Math.max(2, value);
+							setupPlayerCount = Number.isNaN(value) ? 2 : Math.max(1, value);
 							syncSetupPlayers();
 						}}
 					/>
@@ -1156,9 +1245,9 @@
 
 		<section class="panel score-spotlight">
 			<h2>Current score</h2>
-			{#if sortedStandings().length > 0}
+			{#if standings.length > 0}
 				<ol class="score-leaderboard">
-					{#each sortedStandings() as [player, total], index}
+					{#each standings as [player, total], index}
 						<li class={`score-row ${index === 0 ? 'leader' : ''}`.trim()}>
 							<div class="score-player">{player}</div>
 							<div class="score-total">{total}</div>
@@ -1192,7 +1281,7 @@
 								value="guided"
 								class={`mode-trigger ${addRoundMode === 'guided' ? 'active' : ''}`.trim()}
 							>
-								Guided cards
+								{activeGuidedProfile?.roundScoring?'Guided result':'Guided cards'}
 							</Tabs.Trigger>
 						{/if}
 						{#if activeScoreInputMode() === 'raw'}
@@ -1209,16 +1298,16 @@
 								Quick text
 							</Tabs.Trigger>
 						{/if}
-						<Tabs.Trigger
+						{#if activeGuidedProfile?.roundScoring!=='contract'}<Tabs.Trigger
 							value="delta"
 							class={`mode-trigger ${addRoundMode === 'delta' ? 'active' : ''}`.trim()}
 						>
 							Manual points
-						</Tabs.Trigger>
+						</Tabs.Trigger>{/if}
 					</Tabs.List>
 
 					<Tabs.Content value="guided">
-						{#if guidedEntryZones.length === 0}
+						{#if activeGuidedProfile?.roundScoring}<CapabilityScoreInput kind={activeGuidedProfile.roundScoring} players={activePlayers} rubber={sessionState?.state.rubber} busy={isPosting} onSubmit={submitCapabilityScore}/>{:else if guidedEntryZones.length === 0}
 							<p class="hint">No guided scoring zones configured for this ruleset.</p>
 						{:else}
 							<p class="hint">Tap cards by zone. Guided mode applies ruleset card values and zone roles.</p>
@@ -1232,6 +1321,9 @@
 												<p class="hint">{zone.hint}</p>
 											{/if}
 											<CardTapInput
+												suitsRequired={false}
+												layout={zone.layout}
+												columnPairs={activeGuidedProfile?.specialRules.some(rule=>rule.kind==='column_pair_zero' && rule.zoneId===zone.zoneId) ?? false}
 												labelPrefix={`${player}-${zone.label}`}
 												value={guidedCardsByPlayerZone[player]?.[zone.zoneId] ?? ''}
 												valueChanged={(value) => {
@@ -1305,15 +1397,17 @@ Bob: 2D 3D 4D"
 				</Tabs.Root>
 
 				<div class="button-row">
-					<ScoreButton variant="primary" type="button" onPress={() => void submitAddRound()} disabled={isPosting}>
+					{#if !(addRoundMode==='guided' && activeGuidedProfile?.roundScoring)}<ScoreButton variant="primary" type="button" onPress={() => void submitAddRound()} disabled={isPosting}>
 						Add round
-					</ScoreButton>
+					</ScoreButton>{/if}
 					<ScoreButton type="button" onPress={() => void submitUndo()} disabled={isPosting}>Undo</ScoreButton>
 					<ScoreButton type="button" onPress={() => void submitRedo()} disabled={isPosting}>Redo</ScoreButton>
 				</div>
 			</section>
 
-		<section class="panel">
+		{#if showPatternRound}
+		<details class="panel pattern-panel" open={!rawScoring}>
+			<summary>{rawScoring ? 'Advanced/custom scoring' : 'Pattern scoring'}</summary>
 			<h2>Pattern round (optional)</h2>
 			<div class="field-group">
 				<label for="pattern-player">Target player</label>
@@ -1386,13 +1480,14 @@ run: 5"
 					Add pattern round
 				</ScoreButton>
 			</div>
-		</section>
+		</details>
+		{/if}
 
 		<section class="panel">
 			<h2>Recent events ({sessionState?.eventCount ?? 0})</h2>
 			{#if sessionState && sessionState.events.length > 0}
 				<ul>
-					{#each recentEvents() as event}
+					{#each displayedEvents as event}
 						<li>
 							<div>{describeEventType(event)}</div>
 							<div class="small">source: {event.source} @ {event.createdAt}</div>
@@ -1407,6 +1502,12 @@ run: 5"
 </main>
 
 <style>
+	.pattern-panel summary {
+		min-height: 44px;
+		padding: 12px 0;
+		cursor: pointer;
+		font-weight: 700;
+	}
 	.score-page {
 		max-width: 760px;
 		margin: 0 auto;

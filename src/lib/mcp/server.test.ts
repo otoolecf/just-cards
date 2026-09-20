@@ -1,3 +1,5 @@
+import { extractionFromBundle } from '$lib/rulesets/extraction-contract';
+import { familyRulesets } from '$lib/rulesets/family-presets';
 import { describe, expect, it } from 'vitest';
 import { createRulesetStore } from '$lib/rulesets/store';
 import { createRulesetService } from '$lib/rulesets/service';
@@ -142,11 +144,9 @@ describe('mcp server scaffold', () => {
 
 	it('mcp_generate_ruleset_prefers_session_sampling_by_default_and_falls_back_to_server', async () => {
 		const sessionPreferredServer = await createServer({
-			sessionSampler: async ({ baselineFacts }) => ({
-				...baselineFacts,
-				gameName: 'Session Sampler Game',
-				gameSlug: 'session-sampler-game'
-			})
+			sessionSampler: async ({ stage }) => stage==='review' ? {verdict:'consistent',issues:[],summary:'Reviewed source.'} : ({
+    ...extractionFromBundle(familyRulesets()[1].bundle),gameName:'Session Sampler Game'
+   })
 		});
 		const sessionResult = await sessionPreferredServer.callTool('generate_ruleset', {
 			source: { type: 'text', text: RUMMY_TEXT }

@@ -401,7 +401,7 @@ LLM/SLM should generate one runtime bundle with this top-level shape:
 
 - Six-Card Golf:
   - card values via `scoreRulePack`
-  - set/pair style bonuses/penalties via `pattern` scorer triggers
+  - positional equal-rank column cancellation via `columnPairs` (not optional pattern rounds)
   - round-end hand scoring via `player_zone` source on `end_round`
 - Cribbage:
   - fifteens/runs/pairs as pattern rules
@@ -419,3 +419,21 @@ LLM/SLM should generate one runtime bundle with this top-level shape:
 - No percentage/split settlement primitive yet (only direct pool transfer).
 - Runtime trigger conditions are finite (event type, phase, optional zone filters).
 - Poker betting rounds, side pots, and showdown resolution are not yet first-class primitives.
+
+## Optional executable table policy (2026-09-17)
+
+`RuntimeRulePack.tableRules?: TableRules` is the shared-room contract, validated by
+`src/lib/gameplay/table-rules.ts`. Its `table-rules/v1` schema expresses player
+counts, count-specific deals, layouts/reveals, discard pickup, meld constraints,
+round ending, and signed zone scoring. Do not invent this field for unsupported
+games. Extraction uses the shared described schema in `policy-schema.ts`; it never falls back to a smaller descriptive model schema. See
+[Shared table v1](./shared-table-v1.md) for semantics and safe projection rules.
+
+Runtime `card_values` scorers may specify `multiplier: 1 | -1` and `columnPairs`.
+Column pairs refer to equal-rank positions across exactly two ordered rows; they
+cancel both values, including negative twos. Guided scoring and shared play reuse
+`scoreCardCollection` for these calculations.
+
+## Structured extraction contract
+
+The authoritative machine-readable extraction catalog is `GET /api/rulesets/schema` and MCP `just-cards://schemas/rule-extraction-v1`. Both return the exact schema and instructions used by the importer. See [ruleset generation](./ruleset-generation-v0.md) for evidence, assumptions, unsupported mechanics and behavioral validation. Runtime policy validation consumes the same schema, with compatibility checks for layouts, deck capacity and scoring zones.

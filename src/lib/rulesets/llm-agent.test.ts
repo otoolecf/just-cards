@@ -1,317 +1,153 @@
 import { describe, expect, it } from 'vitest';
-
 import { generateRulesetDraftWithAgent } from './llm-agent';
-
-function createUrlSourceFetch(sourceUrl: string, sourceDocument: string): typeof fetch {
-	let openAiCalls = 0;
-
-	const fetchImpl: typeof fetch = async (input, init) => {
-		const url = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
-		if (url === sourceUrl) {
-			return new Response(sourceDocument, {
-				status: 200,
-				headers: {
-					'content-type': 'text/html; charset=utf-8'
+import { extractionFromBundle } from './extraction-contract';
+import { familyRulesets } from './family-presets';
+import { canPlayRuleset } from './generation-report';
+const sourceUrl = 'https://bicyclecards.com/how-to-play/500-rum';
+const sourceHtml =
+	'<html><body><h1>500 Rum</h1><p>Draw from stock or discard and play melds.</p></body></html>';
+const candidate = () => extractionFromBundle(familyRulesets()[1].bundle);
+const consistent = {
+	verdict: 'consistent',
+	issues: [],
+	summary: 'No additional contradictions detected.'
+};
+describe('structured extraction transport', () => {
+	it('uses strict output and performs a separate source review', async () => {
+		const calls: string[] = [];
+		const result = await generateRulesetDraftWithAgent(
+			{ source: { type: 'url', url: sourceUrl } },
+			{
+				apiKey: 'test-key',
+				fetchImpl: async (input, init) => {
+					if (String(input) === sourceUrl)
+						return new Response(sourceHtml, { headers: { 'content-type': 'text/html' } });
+					const payload = JSON.parse(String(init?.body));
+					calls.push(payload.response_format.json_schema.name);
+					expect(payload.response_format.json_schema.strict).toBe(true);
+					expect(payload.reasoning_effort).toBe('low');
+					expect(payload.max_completion_tokens).toBeGreaterThan(0);
+					expect(init?.signal).toBeDefined();
+					return Response.json({
+						choices: [
+							{
+								finish_reason: 'stop',
+								message: { content: JSON.stringify(calls.length === 1 ? candidate() : consistent) }
+							}
+						]
+					});
 				}
-			});
-		}
-
-		if (url === 'https://api.openai.com/v1/chat/completions') {
-			openAiCalls += 1;
-			const payload = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
-			if (payload.model === 'gpt-5-nano') {
-				return new Response(
-					JSON.stringify({
+			}
+		);
+		expect(calls).toEqual(['rule_extraction', 'rules_source_review']);
+		expect(result.pipeline.strategy).toBe('llm');
+		expect(result.pipeline.model).toBe('gpt-5-mini');
+		expect(result.facts.setup?.initialFaceUpCards).toBeUndefined();
+		expect(result.facts.tableRules?.meld).toBeDefined();
+	});
+	it('escalates malformed extraction to fallback model with bounded attempts', async () => {
+		const models: string[] = [];
+		const result = await generateRulesetDraftWithAgent(
+			{ source: { type: 'text', text: 'Play a private-hand melding game.' } },
+			{
+				apiKey: 'test',
+				primaryModel: 'gpt-5-nano',
+				fallbackModel: 'gpt-5-mini',
+				fetchImpl: async (_input, init) => {
+					const p = JSON.parse(String(init?.body));
+					models.push(p.model);
+					return Response.json({
 						choices: [
 							{
 								message: {
-									content: JSON.stringify({
-										gameName: 'Six Card Golf',
-										players: { min: 2, max: 6 },
-										rounds: 9,
-										handZoneName: 'hand',
-										zones: ['stock', 'discard', 'board'],
-										turn: {
-											drawSources: ['stock', 'discard'],
-											playTargets: ['board', 'discard']
-										},
-										scoring: {
-											lowScoreWins: true,
-											aceValue: 1,
-											rankOverrides: {
-												K: 0,
-												Q: 10,
-												J: 10
-											}
-										},
-										diagnostics: []
-									})
+									content:
+										p.model === 'gpt-5-nano'
+											? 'not JSON'
+											: JSON.stringify(
+													p.response_format.json_schema.name === 'rules_source_review'
+														? consistent
+														: candidate()
+												)
 								}
 							}
 						]
-					}),
-					{ status: 200, headers: { 'content-type': 'application/json' } }
-				);
+					});
+				}
 			}
-
-			if (payload.model === 'gpt-5-mini') {
-				return new Response(
-					JSON.stringify({
-						choices: [
-							{
-								message: {
-									content: JSON.stringify({
-										gameName: '500 Rum',
-										players: { min: 2, max: 8 },
-										handZoneName: 'hand',
-										zones: ['stock', 'discard', 'meld'],
-										turn: {
-											drawSources: ['stock', 'discard'],
-											playTargets: ['meld', 'discard']
-										},
-										scoring: {
-											lowScoreWins: false,
-											aceValue: 15,
-											rankOverrides: {
-												J: 10,
-												Q: 10,
-												K: 10
-											}
-										},
-										diagnostics: []
-									})
-								}
-							}
-						]
-					}),
-					{ status: 200, headers: { 'content-type': 'application/json' } }
-				);
-			}
+		);
+		expect(models).toEqual(['gpt-5-nano', 'gpt-5-nano', 'gpt-5-mini', 'gpt-5-mini']);
+		expect(result.pipeline.model).toBe('gpt-5-mini');
+	});
+	it('makes refusal and truncation unreviewed fallbacks without exposing provider content', async () => {
+		for (const message of [
+			{ refusal: 'sensitive provider text' },
+			{ content: JSON.stringify(candidate()) }
+		]) {
+			const result = await generateRulesetDraftWithAgent(
+				{ source: { type: 'text', text: 'Unknown game.' } },
+				{
+					apiKey: 'test',
+					primaryModel: 'single',
+					fallbackModel: 'single',
+					fetchImpl: async () => Response.json({ choices: [{ finish_reason: 'length', message }] })
+				}
+			);
+			expect(result.pipeline.strategy).toBe('deterministic');
+			expect(result.pipeline.attempts.length).toBe(2);
+			expect(JSON.stringify(result)).not.toContain('sensitive provider text');
+			expect(
+				canPlayRuleset(result.draft.bundle as ReturnType<typeof familyRulesets>[0]['bundle'])
+			).toBe(false);
 		}
-
-		return new Response('not found', { status: 404 });
-	};
-
-	Object.defineProperty(fetchImpl, 'openAiCalls', {
-		value: () => openAiCalls
 	});
-
-	return fetchImpl;
-}
-
-describe('llm ruleset generation agent', () => {
-	it('llm_agent_uses_primary_model_when_output_is_valid', async () => {
-		const sourceUrl = 'https://bicyclecards.com/how-to-play/six-card-golf';
-		const sourceHtml = `<html><body><h1>Six Card Golf</h1><p>2 to 6 players. The goal is the lowest score after 9 rounds.</p><p>Draw from stock or discard and play on table layout.</p></body></html>`;
-		const fetchImpl = createUrlSourceFetch(sourceUrl, sourceHtml);
-
-		const generated = await generateRulesetDraftWithAgent(
+	it('does not call a model without credentials', async () => {
+		const result = await generateRulesetDraftWithAgent(
+			{ source: { type: 'url', url: sourceUrl } },
 			{
-				source: { type: 'url', url: sourceUrl }
-			},
-			{
-				apiKey: 'test-key',
-				fetchImpl,
-				primaryModel: 'gpt-5-nano',
-				fallbackModel: 'gpt-5-mini'
-			}
-		);
-
-		expect(generated.facts.gameName).toBe('Six Card Golf');
-		expect(generated.pipeline.strategy).toBe('llm');
-		expect(generated.pipeline.model).toBe('gpt-5-nano');
-		expect(generated.pipeline.attempts.some((attempt) => attempt.model === 'gpt-5-nano')).toBe(true);
-	});
-
-	it('llm_agent_escalates_to_fallback_model_when_primary_output_is_unusable', async () => {
-		const sourceUrl = 'https://bicyclecards.com/how-to-play/500-rum';
-		const sourceHtml = `<html><body><h1>500 Rum</h1><p>2 to 8 players. Draw from stock or discard and lay down melds.</p><p>First to 500 points wins.</p></body></html>`;
-
-		let callCount = 0;
-		const fetchImpl: typeof fetch = async (input, init) => {
-			const url = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
-			if (url === sourceUrl) {
-				return new Response(sourceHtml, {
-					status: 200,
-					headers: { 'content-type': 'text/html; charset=utf-8' }
-				});
-			}
-
-			if (url === 'https://api.openai.com/v1/chat/completions') {
-				callCount += 1;
-				const payload = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
-				if (payload.model === 'gpt-5-nano') {
-					return new Response(
-						JSON.stringify({
-							choices: [
-								{
-									message: {
-										content: 'I cannot provide JSON right now.'
-									}
-								}
-							]
-						}),
-						{ status: 200, headers: { 'content-type': 'application/json' } }
-					);
-				}
-				if (payload.model === 'gpt-5-mini') {
-					return new Response(
-						JSON.stringify({
-							choices: [
-								{
-									message: {
-										content: JSON.stringify({
-											gameName: '500 Rum',
-											players: { min: 2, max: 8 },
-											handZoneName: 'hand',
-											zones: ['stock', 'discard', 'meld'],
-											turn: {
-												drawSources: ['stock', 'discard'],
-												playTargets: ['meld', 'discard']
-											},
-											scoring: {
-												lowScoreWins: false,
-												aceValue: 15,
-												rankOverrides: { J: 10, Q: 10, K: 10 }
-											},
-											diagnostics: []
-										})
-									}
-								}
-							]
-						}),
-						{ status: 200, headers: { 'content-type': 'application/json' } }
-					);
+				fetchImpl: async (input) => {
+					expect(String(input)).toBe(sourceUrl);
+					return new Response(sourceHtml, { headers: { 'content-type': 'text/html' } });
 				}
 			}
-
-			return new Response('not found', { status: 404 });
-		};
-
-		const generated = await generateRulesetDraftWithAgent(
-			{
-				source: { type: 'url', url: sourceUrl }
-			},
-			{
-				apiKey: 'test-key',
-				fetchImpl,
-				primaryModel: 'gpt-5-nano',
-				fallbackModel: 'gpt-5-mini'
-			}
 		);
-
-		expect(callCount).toBeGreaterThanOrEqual(2);
-		expect(generated.facts.gameName).toBe('500 Rum');
-		expect(generated.pipeline.strategy).toBe('llm');
-		expect(generated.pipeline.model).toBe('gpt-5-mini');
-		expect(generated.pipeline.attempts.some((attempt) => attempt.model === 'gpt-5-mini')).toBe(true);
+		expect(result.pipeline.strategy).toBe('deterministic');
+		expect(result.pipeline.attempts).toEqual([]);
+		expect(result.diagnostics.join(' ')).toContain('unreviewed heuristic draft');
 	});
-
-	it('llm_agent_falls_back_to_deterministic_when_no_api_key', async () => {
-		const sourceUrl = 'https://bicyclecards.com/how-to-play/500-rum';
-		const sourceHtml = `<html><body><h1>500 Rum</h1><p>2 to 8 players. Draw from stock or discard and lay down melds.</p><p>First to 500 points wins.</p></body></html>`;
-
-		let openAiCalls = 0;
-		const fetchImpl: typeof fetch = async (input) => {
-			const url = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
-			if (url === sourceUrl) {
-				return new Response(sourceHtml, {
-					status: 200,
-					headers: { 'content-type': 'text/html; charset=utf-8' }
-				});
-			}
-			if (url === 'https://api.openai.com/v1/chat/completions') {
-				openAiCalls += 1;
-			}
-			return new Response('not found', { status: 404 });
-		};
-
-		const generated = await generateRulesetDraftWithAgent(
+	it('repairs a source contradiction then reviews the new candidate separately', async () => {
+		const stages: string[] = [];
+		const result = await generateRulesetDraftWithAgent(
+			{ source: { type: 'text', text: 'A family melding game.' } },
 			{
-				source: { type: 'url', url: sourceUrl }
-			},
-			{
-				fetchImpl
-			}
-		);
-
-		expect(generated.facts.gameName).toBe('500 Rum');
-		expect(generated.pipeline.strategy).toBe('deterministic');
-		expect(openAiCalls).toBe(0);
-		expect(generated.diagnostics.some((line) => line.toLowerCase().includes('deterministic'))).toBe(true);
-	});
-
-	it('llm_agent_ignores_spurious_initial_face_up_setup_for_500_rum', async () => {
-		const sourceUrl = 'https://bicyclecards.com/how-to-play/500-rum';
-		const sourceHtml = `
-		<html><body>
-			<h1>500 Rum</h1>
-			<p>Deal seven cards to each player.</p>
-			<p>Place undealt cards face down in the center of the table, forming the stock.</p>
-			<p>The top card is turned face up and placed beside the stock to start discard pile.</p>
-			<p>Players draw from stock or discard and meld sets.</p>
-		</body></html>`;
-
-		const fetchImpl: typeof fetch = async (input, init) => {
-			const url = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
-			if (url === sourceUrl) {
-				return new Response(sourceHtml, {
-					status: 200,
-					headers: { 'content-type': 'text/html; charset=utf-8' }
-				});
-			}
-			if (url === 'https://api.openai.com/v1/chat/completions') {
-				const payload = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
-				if (payload.model === 'gpt-5-nano') {
-					return new Response(
-						JSON.stringify({
-							choices: [
-								{
-									message: {
-										content: JSON.stringify({
-											gameName: '500 Rum',
-											players: { min: 2, max: 8 },
-											handZoneName: 'hand',
-											zones: ['stock', 'discard', 'meld'],
-											turn: {
-												drawSources: ['stock', 'discard'],
-												playTargets: ['meld', 'discard']
-											},
-											scoring: {
-												lowScoreWins: false,
-												aceValue: 1,
-												rankOverrides: { J: 10, Q: 10, K: 10 }
-											},
-											setup: {
-												cardsPerPlayer: 7,
-												initialFaceUpCards: 1
-											},
-											diagnostics: []
-										})
-									}
+				model: async (request) => {
+					stages.push(request.stage);
+					if (request.stage === 'review')
+						return stages.length === 2
+							? {
+									verdict: 'contradiction',
+									issues: ['Deal should be ten cards.'],
+									summary: 'Wrong deal.'
 								}
-							]
-						}),
-						{ status: 200, headers: { 'content-type': 'application/json' } }
-					);
+							: consistent;
+					const e = candidate();
+					if (request.stage === 'repair') {
+						e.tableRules!.deal.cardsPerPlayer = 10;
+						e.tableRules!.players.max = 4;
+						e.tableRules!.deal.byPlayerCount = {};
+					}
+					return request.stage === 'repair'
+						? {
+								...e,
+								tableRules: {
+									...e.tableRules,
+									deal: { ...e.tableRules!.deal, byPlayerCount: null }
+								}
+							}
+						: e;
 				}
 			}
-			return new Response('not found', { status: 404 });
-		};
-
-		const generated = await generateRulesetDraftWithAgent(
-			{
-				source: { type: 'url', url: sourceUrl }
-			},
-			{
-				apiKey: 'test-key',
-				fetchImpl,
-				primaryModel: 'gpt-5-nano',
-				fallbackModel: 'gpt-5-mini'
-			}
 		);
-
-		expect(generated.facts.setup?.cardsPerPlayer).toBe(7);
-		expect(generated.facts.setup?.initialFaceUpCards).toBeUndefined();
+		expect(stages).toEqual(['extract', 'review', 'repair', 'review']);
+		expect(result.facts.tableRules?.deal.cardsPerPlayer).toBe(10);
 	});
 });

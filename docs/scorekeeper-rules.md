@@ -204,3 +204,78 @@ const events = [
 - Runtime trigger conditions are finite (event type, phase, optional zone filters), not arbitrary expression trees.
 
 These are good next extensions after scorekeeper MVP if needed.
+
+## Family entry and persistence (2026-09-17)
+
+Guided profiles derive from explicit `tableRules` when available. Golf preserves
+six grid positions and cancels equal vertical pairs. Rummy sums contributed table
+cards and subtracts remaining hand cards; only ranks are required for these scoring
+profiles. Physical-game users still decide which cards are legal melds. Raw entry
+continues to support quick values and other game variants.
+
+Player names are stored in session config before the first event. SessionRepository
+persists config and event logs in local SQLite or Worker Durable Object SQLite.
+Reload restores the saved session; standings and undo/redo remain event-derived.
+The UI never stores mutable totals as its source of truth. See
+[Shared table v1](./shared-table-v1.md) for the storage boundary and conventions.
+
+## Pattern-round entry capability
+
+Stored rulesets may set `uiProfile.scorekeeper.patternRound` to explicitly enable
+or disable the separate guided pattern editor. The boolean is validated as part of
+the UI schema and copied into saved `GuidedScoreProfile` data. Missing metadata
+defaults to hidden, including in previously saved sessions. Golf column cancellation
+and Rummy card totals remain in normal guided entry. Raw calculator sessions retain
+the generic pattern editor under **Advanced/custom scoring**.
+
+## Offline physical scoring (2026-09-17)
+
+After loading the built app once online, the score page displays **Available offline
+on this device**. You can start a session, enter guided cards/manual values, undo,
+redo and reload without a connection. Cached family rules are available at setup.
+Joining a session that has never been opened on that device still needs a connection.
+
+Each browser keeps a versioned snapshot and pending score events in local storage.
+Totals replay the same score engine with the original rule pack; they are not saved
+as authoritative mutable numbers. The UI saves pending events before acknowledging
+entry, shows pending counts, and retries when the active session is refreshed or
+connectivity returns. Keep the score page open to sync; background sync while the
+app is closed is not implemented. Closed sessions remain in **Saved on this device**
+and can be reopened to sync. Clearing browser data removes unsynced work.
+
+Session creation uses a stable UUID; append requests carry a stable requestId and
+expectedEventCount. Server retries return the existing event, conflicting payloads
+or stale prefixes return 409, and Durable Object transactions serialize writes.
+Browser Web Locks serialize tabs sharing an outbox. Current browsers on HTTPS or
+localhost are required. The API retains compatibility with older callers omitting
+these optional fields. GET includes the original scoreRulePack for offline replay.
+
+If another device advances the log while offline events are pending, sync pauses.
+**Save my scores as a separate session** copies the locally seen event history to a
+new session; it does not apply an offline undo to someone else's newer round. Both
+versions remain stored. Storage failures are surfaced instead of claiming a save.
+
+The SvelteKit service worker precaches build assets and the scorekeeper shell. It
+never caches APIs or private room HTML. This provides offline physical scoring only;
+shared virtual games still require connectivity. A first visit cannot work offline.
+
+## Outcome and contract entry (2026-09-20)
+
+Guided profiles can specify `roundScoring: 'outcome' | 'solo_outcome' | 'contract'`.
+These replace rank-entry zones with result controls and hide unrelated pattern entry.
+Palace selects the first player out (one point); Solitaire records a win or concede
+(one or zero points), with a one-player score sheet.
+
+Bridge selects four players in partnership order (1 & 3, 2 & 4). Enter declaring
+partnership, contract level/strain, doubling, total tricks taken, and optional honors
+held in a single hand. `add_contract` score events contain those facts and fixed
+player order; the shared rubber scorer derives points, games, below-line progress,
+vulnerability, and rubber completion. Events cannot change partnerships mid-rubber.
+Undo/redo replays both scoring and vulnerability, including offline and after reload.
+Contract entry stops when the rubber finishes; create a new session for another.
+Manual-delta entry is hidden in guided Bridge to avoid silently changing totals
+without updating game/vulnerability progress. Passed-out hands need no score entry.
+
+These are rubber scores, including honors, not duplicate scores. There is no bonus
+settlement for an unfinished rubber. The virtual table and physical contract inputs
+call the same arithmetic function; score state remains derived from immutable events.

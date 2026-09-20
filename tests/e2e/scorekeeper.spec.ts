@@ -72,6 +72,9 @@ async function postScoreEventViaApi(page: Page, sessionId: string, scoreEvent: R
 
 test('scorekeeper session flow', async ({ page }) => {
 	await page.goto('/');
+ await page.waitForLoadState('networkidle');
+	await page.locator('#score-input-mode').click();
+	await page.getByRole('option', { name: 'Raw (calculator)' }).click();
 
 	await page.getByRole('spinbutton', { name: 'Players' }).fill('2');
 	await page.getByPlaceholder('Player 1').fill('Alice');
@@ -91,7 +94,8 @@ test('scorekeeper session flow', async ({ page }) => {
 	await expect(page.locator('p:has-text("Events:")')).toContainText('1');
 	await expect(page.locator('section:has(h2:has-text("Recent events")) li')).toHaveCount(1);
 
-	await page.getByRole('button', { name: 'pattern: suit hearts' }).click();
+	await page.getByText('Advanced/custom scoring', { exact: true }).click();
+	await page.getByRole('radio', { name: 'pattern: suit hearts' }).click();
 	await page.getByRole('button', { name: 'pattern: add AH' }).click();
 	await page.getByRole('button', { name: 'pattern: add AH' }).click();
 	await page.getByRole('button', { name: 'Add pattern round' }).click();
@@ -106,6 +110,9 @@ test('scorekeeper session flow', async ({ page }) => {
 
 test('scorekeeper row entry flow', async ({ page }) => {
 	await page.goto('/');
+ await page.waitForLoadState('networkidle');
+	await page.locator('#score-input-mode').click();
+	await page.getByRole('option', { name: 'Raw (calculator)' }).click();
 
 	await page.getByRole('spinbutton', { name: 'Players' }).fill('2');
 	await page.getByPlaceholder('Player 1').fill('Alice');
@@ -119,12 +126,12 @@ test('scorekeeper row entry flow', async ({ page }) => {
 	}
 	await expect(page.locator('section:has(h2:has-text("Current score"))').first()).toBeVisible();
 
-	await page.getByRole('button', { name: 'Player 1: suit clubs' }).click();
-	await page.getByRole('button', { name: 'Player 1: add AC' }).click();
-	await page.getByRole('button', { name: 'Player 1: add 10C' }).click();
-	await page.getByRole('button', { name: 'Player 2: suit diamonds' }).click();
-	await page.getByRole('button', { name: 'Player 2: add 2D' }).click();
-	await page.getByRole('button', { name: 'Player 2: add 3D' }).click();
+	await page.getByRole('radio', { name: 'Alice: suit clubs' }).click();
+	await page.getByRole('button', { name: 'Alice: add AC' }).click();
+	await page.getByRole('button', { name: 'Alice: add 10C' }).click();
+	await page.getByRole('radio', { name: 'Bob: suit diamonds' }).click();
+	await page.getByRole('button', { name: 'Bob: add 2D' }).click();
+	await page.getByRole('button', { name: 'Bob: add 3D' }).click();
 	await page.getByRole('button', { name: 'Add round' }).click();
 
 	await expect(page.locator('.status-success')).toHaveText('Round added.');
@@ -171,6 +178,7 @@ test('mode persistence syncs across browser contexts', async ({ browser }) => {
 
 test('active session prioritizes current score panel', async ({ page }) => {
 	await page.goto('/');
+ await page.waitForLoadState('networkidle');
 
 	await page.getByRole('spinbutton', { name: 'Players' }).fill('2');
 	await page.getByPlaceholder('Player 1').fill('Alice');

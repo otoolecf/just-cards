@@ -27,12 +27,12 @@ export async function runRulesetRepairSkill(
 
 	const validation = (await context.callTool('validate_ruleset', {
 		ruleset_id: existing.ruleset.id
-	})) as { pass: boolean };
-	if (validation.pass) {
+	})) as { pass: boolean; report?: {status:string} };
+	if (validation.pass || validation.report?.status === 'needs_review') {
 		return {
 			repaired: false,
 			rulesetId: existing.ruleset.id,
-			validationPass: true
+			validationPass: validation.pass
 		};
 	}
 
@@ -52,7 +52,7 @@ export async function runRulesetRepairSkill(
 	})) as { ruleset: { id: string } };
 	const regeneratedValidation = (await context.callTool('validate_ruleset', {
 		ruleset_id: regenerated.ruleset.id
-	})) as { pass: boolean };
+	})) as { pass: boolean; report?: {status:string} };
 
 	return {
 		repaired: true,

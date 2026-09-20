@@ -85,3 +85,53 @@ Keep visual decisions conservative and consistent with this tone.
 3. Preserve touch targets (`min-height: 44px`) for controls and buttons.
 4. Add contrast pairs/tests before introducing new semantic colors.
 5. Reuse shared motion and typography tokens for transitions/headings/body text.
+
+## Card and entry primitives (2026-09-17)
+
+- `CardTile` uses `jc-card`, `jc-card-back`, `jc-card-red`, and `jc-card-selected`
+  from the shared stylesheet. Existing semantic tokens supply all colors. Cards
+  retain a minimum 48×68px target, visible focus, and descriptive accessible labels.
+- Public cards are readable when noninteractive; disabled controls cannot submit
+  actions. Selection uses `aria-pressed`; suit pickers use radio semantics.
+- `CardTapInput` supports optional suits and fixed grid slots. Rank-only guided
+  entry avoids unnecessary suit taps. Editing a slot must never shift columns;
+  clearing a round resets the active slot.
+- Shared rooms use wrapped private hands, horizontal discard scrolling, explicit
+  turn/pickup instructions, live errors, and round totals on narrow screens.
+- Button variants are reactive so selection and enabled-state changes remain visible.
+
+No new color tokens are introduced; existing contrast guarantees remain applicable.
+
+`CardTile` supports opt-in dragging in hand-arrangement mode, with equivalent tap
+and keyboard-operated left/right controls. Arrangement selection is separate from
+play selection and stays local to the viewer. `ScoreButton.describedBy` associates
+layoff buttons with visible explanatory text; disabled actions must explain whether
+the player must wait, draw, select cards or choose a compatible meld.
+
+## Complete family workflows
+
+The lobby shares `jc-panel`/`jc-control` primitives for import, recent-room resume and
+seat management. Private hand sorting only changes presentation; fixed grid positions
+and card identity remain authoritative. Suggested/selected melds use the server's
+pure meld predicate to gate actions. Round history scrolls within its panel on small
+screens, and the rules guide reads card values from the room bundle. Connection status
+distinguishes live socket updates from fallback/reconnection.
+
+The separate pattern editor follows the ruleset's `scorekeeper.patternRound`
+capability in guided scoring. Raw scoring places the editor in a collapsed
+Advanced/custom scoring disclosure with a minimum 44px summary target.
+
+House-rule forms reuse `jc-panel`, `jc-control` and ScoreButton, with responsive rank
+value fields and labelled native inputs. Checkbox labels and disclosure summaries
+retain 44px targets. Score sync status announces device saves, pending changes and
+conflicts; recovery is an explicit action. CardTapInput's `columnPairs` hint follows
+the active scoring policy rather than assuming every grid cancels matching columns.
+
+### Capability boards (2026-09-20)
+
+Patience, shedding and contract boards reuse `CardTile`, `ScoreButton`, `jc-panel`,
+`jc-control` and semantic colors. Solitaire keeps at least 44px of each selectable
+card exposed in a column; its seven-column layout scrolls inside the board, with
+an explicit narrow-screen hint. Foundations use two columns on mobile and four on
+wider screens. Bridge partnership panels and hands wrap; selection uses the existing
+card-selected primitive. No new color or motion tokens are introduced.

@@ -1,6 +1,6 @@
 # Just Cards Architecture (Planning Draft)
 
-_Last updated: February 16, 2026_
+_Last updated: September 17, 2026_
 
 ## Goal
 
@@ -44,8 +44,8 @@ One Durable Object per game room:
 
 - Owns authoritative room state.
 - Validates and applies player actions.
-- Broadcasts updates over WebSocket.
-- Persists checkpoints/events to D1 for recovery/history.
+- Streams viewer-specific projections over hibernating WebSockets, with HTTP polling as a fallback.
+- Persists room events in Durable Object SQLite. D1 remains planned for broader indexed history.
 
 ## 2) Scorekeeper Mode
 
@@ -77,8 +77,9 @@ Event log model:
   - UI posts events to `POST /api/sessions/{sessionId}`.
   - Session and standings always come from `GET /api/sessions/{sessionId}`.
 
-Current scaffolding exposes an in-memory backend API for this flow at:
-`/api/sessions` and `/api/sessions/{sessionId}`.
+The API at `/api/sessions` and `/api/sessions/{sessionId}` persists config, player
+rosters and score events in local SQLite during development and Durable Object
+SQLite in the Worker. Totals remain derived from the event log.
 
 Derived standings are recomputed from events, reducing data corruption risk.
 
@@ -152,7 +153,7 @@ Canonical Rule IR details are documented in:
 Canonical LLM/SLM primitive authoring reference is documented in:
 `/Users/ConnorO/git_repos/just-cards/docs/primitives-kb-v0.md`
 
-Ruleset persistence abstraction (local SQLite now, Cloudflare-backed later) is documented in:
+Ruleset persistence abstraction (local SQLite and a deployed D1 adapter) is documented in:
 `/Users/ConnorO/git_repos/just-cards/docs/ruleset-storage-v0.md`
 
 ## Future Rule Ingestion Pipeline
@@ -171,7 +172,7 @@ Current implementation path for step 6:
 
 - persist via `RulesetStore` abstraction
 - local dev/test default: SQLite (`node:sqlite`)
-- deployment target migration: D1 adapter behind same interface
+- deployed Worker: D1 adapter behind the same interface; request-scoped binding, no memory fallback
 - persisted bundle shape: `runtime-bundle/v1` with `runtimeRulePack + uiProfile`
 
 Current scaffold includes an LLM-aware generator API for this contract:
@@ -204,10 +205,10 @@ Safety requirements:
 
 ### PWA and mobile friendliness status
 
-- Current scorekeeper screen now includes installability hooks in `+layout.svelte` with manifest and service worker registration for basic offline/return behavior (`static/manifest.webmanifest`, `static/sw.js`).
-- A mobile-first play surface prototype is available at `/play`, driven from `gameplay/v0` primitives (`GameEvent` -> `GameplayState` -> UI view model) with card movement animations and hand/board/seat rendering.
-- Ruleset-backed play rendering is available at `/play/[rulesetId]`, loading persisted `runtime-bundle/v1` (`runtimeRulePack` + `uiProfile`) via server-side route loader.
-- Play surface now includes a guide/audit tab sourced from bundle explainability data so non-expert users can learn objective/turn/scoring without reading raw primitives.
+- The built scorekeeper uses `static/manifest.webmanifest` and the automatically registered `src/service-worker.ts` for offline shell/assets. A device score-event outbox supports offline entry and safe reconnect (see the September 17 update below).
+- `/play` is the family lobby with a persisted game catalog, URL/text import and recent-room resume. `/play/room/{code}` renders authoritative shared games with live private/public cards.
+- `/play/[rulesetId]` loads a persisted bundle. Supported table policies open a shared-game lobby; other bundles remain explicitly labelled draft previews.
+- Shared rooms include a rules guide, scoring values/defaults and round history. Draft previews retain their guide/audit tab from bundle explainability data.
 - Play surface labels are configurable per zone (`board`, `discard`, etc.) at the view-model layer so future generated games can rename UI semantics without changing gameplay primitive IDs.
 - Play surface zone visibility and hints are profile-driven (visible-zone list + label/hint maps), allowing game-specific zone UX without game-specific rendering code branches.
 - UI visual design primitives are centralized (shared token layer + contrast tests) to keep Score/Play surfaces consistent as generated game UIs expand:
@@ -215,7 +216,7 @@ Safety requirements:
 - Control sizing is normalized for touch:
   - `min-height: 44px` for entry controls and buttons.
   - clear tap-friendly spacing and compact layout breaks at mobile-first breakpoints.
-- Pattern of polling-based updates remains appropriate for single-operator scorekeeping until websocket multiplayer UI work starts.
+- Shared play uses authenticated WebSockets with per-seat projections and reconnect; polling remains a fallback and the scorekeeper transport.
 
 ## Phased Delivery Plan
 
@@ -262,3 +263,50 @@ Stay on Cloudflare unless one of these appears:
 - Need for deeper integrations that are materially easier in AWS.
 
 Otherwise, keep architecture simple and continue on Cloudflare.
+
+## Implemented family play slice (2026-09-17)
+
+See [Shared table v1](./shared-table-v1.md) for executable policy, APIs, privacy,
+storage boundaries, verified games, and remaining work. `runtimeRulePack.tableRules`
+is optional within `runtime-bundle/v1`; legacy gameplay events and MCP previews remain
+compatible. Supported games use shared rooms instead of the client-local demo.
+
+## Structured import validation (2026-09-17)
+
+Website and MCP generation share a strict `rule-extraction/v1` contract and pipeline. Model output includes executable `table-rules/v1`, complete rank values and source evidence. Separate source review and actual-engine behavioral checks produce persisted `rule-validation/v1` metadata. Imported rules require readiness before shared room creation; accepting assumptions reruns validation and saves an immutable copy. See [ruleset generation](./ruleset-generation-v0.md), which supersedes the earlier facts-only extraction scaffold described above.
+
+## Device score outbox and manual variants (2026-09-17)
+
+Physical scoring now has an event-derived device snapshot/outbox with idempotent
+sync, event-count conflict detection, cross-tab Web Locks, and explicit conflict
+copy recovery. Server state remains authoritative after synchronization. The built
+score shell supports offline reload; APIs/private room pages are excluded from SW
+caching. See [scorekeeper rules](./scorekeeper-rules.md).
+
+Family house rules are immutable runtime bundles compiled from supported settings,
+with parent provenance and fresh behavioral reports, saved through RulesetStore.
+The same variants drive new shared rooms and guided scoring. See
+[the feature spec](./specs/2026-09-17-offline-and-house-rules.md).
+
+
+### Library metadata and interrupted rooms (2026-09-20)
+
+RulesetStore now offers compare-and-set metadata updates for shared names/archive
+flags. Favorites live in browser preferences; canonical bundles and existing game
+snapshots remain immutable. Shared rooms snapshot the roster on each deal, preserve
+retired identities for scoring history, and replay command retractions for host undo.
+Pause/host/seat controls are authoritative room mutations. Private seat recovery uses
+single-use hashed capabilities and rotates the authenticated seat credential. The
+Durable Object revokes old sockets and uses presence alarms to pause disconnected
+tables. See [Shared table v1](./shared-table-v1.md) and
+[Ruleset storage](./ruleset-storage-v0.md) for contracts and user behavior.
+
+### Additional card families (2026-09-20)
+
+`table-engine` dispatches to `additional-table` using mutually exclusive patience,
+shedding or contract policies. `contract-scoring` is a pure shared rubber scorer used
+by both authoritative Bridge rooms and replayed physical `add_contract` score events.
+New state zones are explicitly projected to avoid stock, blind-card and honors leaks.
+Policy schemas remain backward compatible with stored Golf/Rummy bundles. Palace
+house-rule switches are schema-validated curated variants; AI-imported new-family
+policies remain blocked until import-time behavioral review covers those families.

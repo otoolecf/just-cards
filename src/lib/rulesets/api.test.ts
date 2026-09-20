@@ -67,7 +67,8 @@ describe('rulesets api', () => {
 		const payload = (await listResponse.json()) as {
 			rulesets: Array<{ name: string; bundle: { bundleVersion: string; uiProfile: { schemaVersion: string } } }>;
 		};
-		expect(payload.rulesets).toHaveLength(1);
+		expect(payload.rulesets).toHaveLength(7);
+		payload.rulesets = payload.rulesets.filter(r => r.name === 'Test Ruleset');
 		expect(payload.rulesets[0].name).toBe('Test Ruleset');
 		expect(payload.rulesets[0].bundle.bundleVersion).toBe('runtime-bundle/v1');
 		expect(payload.rulesets[0].bundle.uiProfile.schemaVersion).toBe('ui-profile/v0');

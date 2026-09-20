@@ -14,6 +14,9 @@ type UiCardVisibilityMode = 'public' | 'owner_only' | 'hidden';
 
 interface UiProfileV0 {
   schemaVersion: 'ui-profile/v0';
+  scorekeeper?: {
+    patternRound: boolean;
+  };
   hand: {
     zoneId: string;
     label: string;
@@ -78,6 +81,8 @@ interface UiProfileV0 {
 6. `table.zones[*].drawPickMode` (when provided) must be `top|any_visible`.
 7. `hand.cardVisibility`, `table.zones[*].cardVisibility`, and `seats.cards.cardVisibility` (when provided) must be `public|owner_only|hidden`.
 8. `seats.cards.zoneId` must match either `hand.zoneId` or a declared table zone.
+9. If `scorekeeper` is supplied, it must be an object with a boolean `patternRound`.
+   Missing metadata means false; existing bundles remain valid.
 
 ## Generation Defaults
 
@@ -111,3 +116,48 @@ Stored rulesets now use `runtime-bundle/v1`:
 ```
 
 `RulesetService` accepts `runtime-bundle/v0` input for compatibility and upgrades it to v1 by generating `uiProfile`.
+
+## Shared-room rendering (2026-09-17)
+
+`runtimeRulePack.tableRules`, when present, is the executable behavior contract for
+shared rooms. Fixed layouts render stable grid slots; hand/meld policies render
+private hands and contributor-labelled public melds. Stock and discard controls
+follow the policy and server stage. Only allowlisted viewer projections reach the
+UI; client-side masking alone is not a privacy boundary. Existing `ui-profile/v0`
+metadata remains compatible for draft previews and generated guidance. See
+[Shared table v1](./shared-table-v1.md).
+
+## Separate pattern scoring input
+
+`scorekeeper.patternRound` controls whether a guided score session exposes the
+separate pattern-round editor. This is a UI capability, not an authorization rule
+or a declaration that a game has card combinations. Meld validation and Golf column
+cancellation do not require this editor. Generated UI profiles enable it only when
+the runtime declares a `scoringTriggers[*].scorer.kind` of `pattern`; Golf and
+Rummy generate false. Authors can explicitly override the UI capability.
+
+The value is copied into `GuidedScoreProfile.patternRound` when creating a score
+session and retained on reload. Missing fields in older profiles default to false.
+Raw calculator sessions keep the generic editor under collapsed **Advanced/custom
+scoring**. No game-name checks are used for panel visibility.
+
+Imported executable profiles also respect bundle-level `generationReport` readiness: the play lobby excludes unreviewed/blocked candidates, and the import/saved-draft views show rules, assumptions and evidence before enabling play. This gate does not change scorekeeper capability selection.
+
+The import review keeps proposed play/scoring behavior visible, groups assumptions by rule category and collapses the complete assumption list and model evidence/check details for mobile reading. Acceptance is an explicit checkbox and button, disabled for blocked drafts.
+
+Manual family variants recompile runtime/UI profiles from their edited table policy;
+source game names never select a special editor. Fixed layouts expose reveal/pair
+settings, hand/meld policies expose deal/ace settings, and all expose card values and
+limits. Existing sessions keep a copied guided profile, including for offline replay.
+
+## Additional table capabilities (2026-09-20)
+
+The authoritative shared-room UI dispatches on table policy capability, not ruleset
+ID: patience shows stock/waste, suited foundations and seven columns; shedding shows
+private hand, public up cards, masked blind positions and the play pile; contract
+shows auction, partnership progress, current/last trick, own hand and exposed dummy.
+Declarer receives dummy controls only on dummy's turn. Follow-suit and valid shedding
+selections gate controls; the server still validates all commands. All boards use
+shared card and button primitives with keyboard/tap operation. Solitaire's seven
+columns scroll within their container on narrow screens; page width stays bounded.
+Physical guided scoring derives its result-entry capability from the same policy.

@@ -1,9 +1,9 @@
 import type { PageServerLoad } from './$types';
 import { getDefaultRulesetService } from '$lib/rulesets/default-service';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ platform }) => {
 	try {
-		const service = await getDefaultRulesetService();
+		const service = await getDefaultRulesetService(platform);
 		const rulesets = await service.list();
 		return { rulesets };
 	} catch (error) {

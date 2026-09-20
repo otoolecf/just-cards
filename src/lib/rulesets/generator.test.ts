@@ -80,7 +80,7 @@ describe('ruleset generator', () => {
 		expect(facts.setup?.cardsPerPlayer).toBe(6);
 		expect(facts.setup?.initialFaceUpCards).toBe(2);
 		expect(facts.setup?.playerLayout).toEqual({ kind: 'grid', rows: 2, columns: 3 });
-		expect(facts.setup?.drawVisibility?.stock).toBe('preserve');
+		expect(facts.setup?.drawVisibility?.stock).toBe('reveal');
 	});
 
 	it('extract_rule_facts_layout_only_language_does_not_force_board_zone', () => {
@@ -195,7 +195,7 @@ describe('ruleset generator', () => {
 			cardVisibility: 'public',
 			layout: { kind: 'grid', rows: 2, columns: 3 }
 		});
-		expect(bundle.uiProfile.table.zones.find((zone) => zone.id === 'stock')?.drawVisibility).toBe('preserve');
+		expect(bundle.uiProfile.table.zones.find((zone) => zone.id === 'stock')?.drawVisibility).toBe('reveal');
 	});
 
 	it('compile_rule_facts_to_bundle_sets_card_visibility_modes_for_hand_and_seats', () => {

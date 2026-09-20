@@ -19,7 +19,7 @@ interface GenerateRulesetPayload {
 	notes?: string;
 }
 
-export const POST: RequestHandler = async ({ request, fetch }) => {
+export const POST: RequestHandler = async ({ request, fetch, platform }) => {
 	const payload = (await request.json().catch(() => ({}))) as GenerateRulesetPayload;
 	const traceId = `gen-${Math.random().toString(36).slice(2, 8)}`;
 	logServerEvent('ruleset_generate_start', {
@@ -38,19 +38,24 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			},
 			{
 				fetchImpl: fetch,
-				apiKey: env.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
-				primaryModel: env.RULESET_LLM_PRIMARY_MODEL ?? 'gpt-5-nano',
-				fallbackModel: env.RULESET_LLM_FALLBACK_MODEL ?? 'gpt-5-mini'
+				apiKey: platform?.env?.OPENAI_API_KEY ?? env.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
+				primaryModel: env.RULESET_LLM_PRIMARY_MODEL ?? process.env.RULESET_LLM_PRIMARY_MODEL,
+				fallbackModel: env.RULESET_LLM_FALLBACK_MODEL ?? process.env.RULESET_LLM_FALLBACK_MODEL
 			}
 		);
 
-		const service = await getDefaultRulesetService();
+		const service = await getDefaultRulesetService(platform);
 		const ruleset = await service.createDraft(generated.draft);
 		logServerEvent('ruleset_generate_success', {
 			traceId,
 			rulesetId: ruleset.id,
 			rulesetName: ruleset.name,
-			pipeline: generated.pipeline,
+			pipeline: {
+				strategy: generated.pipeline.strategy,
+				model: generated.pipeline.model,
+				reason: generated.pipeline.reason,
+				attemptCount: generated.pipeline.attempts.length
+			},
 			diagnosticsCount: generated.diagnostics.length
 		});
 

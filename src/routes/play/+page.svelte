@@ -1,9 +1,6 @@
 <script lang="ts">
-	import PlayTable from '$lib/components/play-table.svelte';
+	import FamilyLobby from '$lib/components/family-lobby.svelte';
+	import type { PageData } from './$types';
+	export let data: PageData;
 </script>
-
-<svelte:head>
-	<title>Play Table</title>
-</svelte:head>
-
-<PlayTable />
+<FamilyLobby rulesets={data.rulesets} />

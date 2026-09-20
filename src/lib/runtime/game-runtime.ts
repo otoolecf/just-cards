@@ -1,3 +1,4 @@
+import { scoreCardCollection } from '../scorekeeper/collection-scoring';
 import {
 	createGameplayRulePack,
 	deriveGameState,
@@ -9,6 +10,7 @@ import type { PatternMatchOptions, PatternRulePack } from '$lib/gameplay/pattern
 import type { ValidatorRulePack } from '$lib/gameplay/validator';
 import {
 	createRulePack,
+	type RulePack,
 	deriveState,
 	type CardInput,
 	type DeltaEntry,
@@ -54,6 +56,8 @@ export interface RuntimeScoringTrigger {
 	scorer:
 		| {
 				kind: 'card_values';
+				multiplier?: number;
+				columnPairs?: number;
 		  }
 		| {
 				kind: 'pattern';
@@ -79,6 +83,7 @@ export interface RuntimeScoringTrigger {
 }
 
 export interface RuntimeRulePack {
+	tableRules?: import('../gameplay/table-rules').TableRules;
 	gameplayRulePack?: GameplayRulePack;
 	validatorRulePack?: ValidatorRulePack;
 	validatorZoneMoveActionType?: string;
@@ -242,7 +247,8 @@ function resolveTriggerTarget(
 function scoreEventsFromTrigger(
 	event: GameplayMutationEvent,
 	stateAfter: GameplayState,
-	trigger: RuntimeScoringTrigger
+	trigger: RuntimeScoringTrigger,
+	scoreRulePack: RulePack
 ): ScoreEvent[] {
 	const samples = collectTriggerCardSamples(event, stateAfter, trigger);
 	if (samples.length === 0) {
@@ -250,6 +256,15 @@ function scoreEventsFromTrigger(
 	}
 
 	if (trigger.scorer.kind === 'card_values') {
+		const { multiplier, columnPairs } = trigger.scorer;
+		if (multiplier !== undefined || columnPairs !== undefined) {
+			return [{ type: 'add_delta', entries: samples.flatMap(sample => {
+				const target = resolveTriggerTarget(event, sample, trigger);
+				if (!target) return [];
+				const value = scoreCardCollection(sample.cards, scoreRulePack, columnPairs);
+				return [{ target, delta: value * (multiplier ?? 1) }];
+			}) }];
+		}
 		const entries = samples
 			.map((sample) => {
 				const target = resolveTriggerTarget(event, sample, trigger);
@@ -385,7 +400,7 @@ export function deriveGameRuntimeState(
 			if (!matchesTriggerEvent(event, prefixState, trigger)) {
 				continue;
 			}
-			generatedScoreEvents.push(...scoreEventsFromTrigger(event, prefixState, trigger));
+			generatedScoreEvents.push(...scoreEventsFromTrigger(event, prefixState, trigger, (rulePack.scoreRulePack ?? createRulePack()) as RulePack));
 		}
 	}
 

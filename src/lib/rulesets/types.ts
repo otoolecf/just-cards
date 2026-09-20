@@ -1,3 +1,4 @@
+import type { GenerationReport } from './generation-report';
 import type { RuntimeRulePack } from '$lib/runtime/game-runtime';
 import type { UiProfileV0 } from '$lib/ui/ui-profile';
 
@@ -40,6 +41,8 @@ export interface RuntimeRulesetExplainV0 {
 }
 
 export interface RuntimeRulesetBundle {
+	houseRules?: { version: 'house-rules/v1'; parentId: string; parentName: string; createdAt: string };
+	generationReport?: GenerationReport;
 	bundleVersion: 'runtime-bundle/v1';
 	gameId: string;
 	displayName: string;
@@ -58,6 +61,7 @@ export interface CreateRulesetInput {
 }
 
 export interface RulesetRecord {
+	archived?: boolean;
 	id: string;
 	name: string;
 	origin: RulesetOrigin;

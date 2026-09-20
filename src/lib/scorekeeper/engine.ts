@@ -1,3 +1,4 @@
+import { emptyRubber, scoreContract, type ContractResult, type RubberState } from '../gameplay/contract-scoring';
 import rulePackSchema from './rulepack-schema.json';
 import { detectPatterns, type PatternMatchOptions, type PatternRulePack } from '$lib/gameplay/pattern-detector';
 
@@ -123,6 +124,7 @@ export interface PatternScoringRule {
 interface PatternRoundEntry extends RoundEntry {}
 
 export type ScoreEvent =
+ | {type:'add_contract';players:string[];result:ContractResult}
 	| {
 			type: 'add_round';
 			playerCards: Record<string, CardInput[]>;
@@ -163,6 +165,7 @@ export interface ScoreTraceEntry {
 }
 
 export interface ScoreState {
+ rubber?:RubberState;
 	totalsByTarget: Record<string, number>;
 	totalsByPlayer: Record<string, number>;
 	validationIssues?: RulePackValidationIssue[];
@@ -881,11 +884,11 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 		}
 	}
 
-	const appliedMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' }>> = [];
-	const undoneMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' }>> = [];
+	const appliedMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' | 'add_contract' }>> = [];
+	const undoneMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' | 'add_contract' }>> = [];
 
 	events.forEach((event) => {
-		if (event.type === 'add_round' || event.type === 'add_pattern_round' || event.type === 'add_delta' || event.type === 'settle_pool') {
+		if (event.type === 'add_contract' || event.type === 'add_round' || event.type === 'add_pattern_round' || event.type === 'add_delta' || event.type === 'settle_pool') {
 			appliedMutations.push(event);
 			undoneMutations.length = 0;
 			return;
@@ -906,7 +909,14 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 	});
 
 	const totalsByTarget: Record<string, number> = {};
+ let rubber:RubberState|undefined; let contractPlayers:string[]|undefined;
 	appliedMutations.forEach((mutation, eventIndex) => {
+		if(mutation.type==='add_contract') {
+			if(!Array.isArray(mutation.players)||mutation.players.length!==4||new Set(mutation.players).size!==4||mutation.players.some(p=>typeof p!=='string'||!p.trim())||(contractPlayers&&JSON.stringify(contractPlayers)!==JSON.stringify(mutation.players)))throw new Error('Bridge requires four fixed partnership seats');
+			contractPlayers=mutation.players;
+			const scored=scoreContract(rubber??emptyRubber(),mutation.result);rubber=scored.state;
+			applyDeltaTotals(totalsByTarget,mutation.players.map((id,i)=>({target:{kind:'player' as const,id},delta:scored.delta[i%2]})),trace,eventIndex);return;
+		}
 		if (mutation.type === 'add_round') {
 			applyRoundTotals(totalsByTarget, normalizeAddRoundEntries(mutation), validatedRulePack, trace, eventIndex, options.context);
 			return;
@@ -935,6 +945,7 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 	});
 
 	const state: ScoreState = {
+ ...(rubber?{rubber}:{}),
 		totalsByTarget,
 		totalsByPlayer: totalsByPlayerFromTargets(totalsByTarget)
 	};

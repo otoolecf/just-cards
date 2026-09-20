@@ -29,13 +29,13 @@ export async function runRulesetExtractorSkill(
 
 	const sessionValidation = (await context.callTool('validate_ruleset', {
 		ruleset_id: sessionAttempt.ruleset.id
-	})) as { pass: boolean };
-	if (sessionValidation.pass) {
+	})) as { pass: boolean; report?: {status:string} };
+	if (sessionValidation.pass || sessionValidation.report?.status === 'needs_review') {
 		return {
 			rulesetId: sessionAttempt.ruleset.id,
 			rulesetName: sessionAttempt.ruleset.name,
 			usedModelSource: sessionAttempt.generation?.usedModelSource ?? 'session',
-			validationPass: true
+			validationPass: sessionValidation.pass
 		};
 	}
 
@@ -50,7 +50,7 @@ export async function runRulesetExtractorSkill(
 	};
 	const serverValidation = (await context.callTool('validate_ruleset', {
 		ruleset_id: serverAttempt.ruleset.id
-	})) as { pass: boolean };
+	})) as { pass: boolean; report?: {status:string} };
 
 	return {
 		rulesetId: serverAttempt.ruleset.id,

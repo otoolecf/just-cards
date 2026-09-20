@@ -3,7 +3,7 @@ import type { PageServerLoad } from './$types';
 import { getDefaultRulesetService } from '$lib/rulesets/default-service';
 import { logServerEvent } from '$lib/server/log';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, platform }) => {
 	const rulesetId = params.rulesetId?.trim();
 	logServerEvent('play_ruleset_load_start', { rulesetId });
 	if (!rulesetId) {
@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		throw error(404, 'Ruleset not found');
 	}
 
-	const service = await getDefaultRulesetService();
+	const service = await getDefaultRulesetService(platform);
 	const ruleset = await service.getById(rulesetId);
 	if (!ruleset) {
 		logServerEvent('play_ruleset_load_not_found', { rulesetId }, 'warn');

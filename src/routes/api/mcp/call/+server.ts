@@ -29,7 +29,7 @@ function isMcpToolName(name: string): name is McpToolName {
 	);
 }
 
-export const POST: RequestHandler = async ({ request, fetch }) => {
+export const POST: RequestHandler = async ({ request, fetch, platform }) => {
 	const auth = await authorizeMcpRequest(request, { fetchImpl: fetch });
 	if (!auth.ok) {
 		return json(
@@ -49,7 +49,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 	}
 
 	try {
-		const server = await getDefaultMcpServer({ fetchImpl: fetch });
+		const server = await getDefaultMcpServer({ fetchImpl: fetch, platform });
 		const result = await server.callTool(tool, payload.args ?? {}, { traceId });
 		return json({ traceId, result });
 	} catch (error) {

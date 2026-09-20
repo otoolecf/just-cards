@@ -62,6 +62,7 @@ export type UiPrimaryAction =
 
 export interface UiProfileV0 {
 	schemaVersion: 'ui-profile/v0';
+	scorekeeper?: { patternRound: boolean };
 	hand: UiHandProfile;
 	table: {
 		zones: UiTableZoneProfile[];
@@ -84,6 +85,7 @@ export interface UiProfileValidationIssue {
 }
 
 export interface CreateUiProfileInput {
+	scorekeeper?: { patternRound: boolean };
 	hand?: Partial<UiHandProfile>;
 	table?: {
 		zones?: UiTableZoneProfile[];
@@ -241,6 +243,7 @@ export function createUiProfile(input: CreateUiProfileInput = {}): UiProfileV0 {
 
 	return {
 		schemaVersion: 'ui-profile/v0',
+		scorekeeper: { patternRound: input.scorekeeper?.patternRound ?? false },
 		hand: {
 			zoneId: input.hand?.zoneId ?? 'hand',
 			label: input.hand?.label ?? 'Your Hand',
@@ -357,6 +360,10 @@ export function validateUiProfile(profile: unknown, runtimeRulePack?: RuntimeRul
 
 	if (!isObject(profile.hand)) {
 		issues.push({ code: 'missing_hand', message: 'uiProfile.hand must be an object' });
+	}
+	if (profile.scorekeeper !== undefined &&
+		(!isObject(profile.scorekeeper) || typeof profile.scorekeeper.patternRound !== 'boolean')) {
+		issues.push({ code: 'invalid_scorekeeper', message: 'uiProfile.scorekeeper.patternRound must be a boolean' });
 	}
 	if (!isObject(profile.table)) {
 		issues.push({ code: 'missing_table', message: 'uiProfile.table must be an object' });
@@ -635,6 +642,9 @@ export function generateUiProfileFromRuntime(
 	}
 
 	const profile = createUiProfile({
+		scorekeeper: {
+			patternRound: (runtimeRulePack.scoringTriggers ?? []).some(trigger => trigger.scorer.kind === 'pattern')
+		},
 		hand: {
 			zoneId: gameplay.handZoneName,
 			label: options.handLabel ?? 'Your Hand',

@@ -10,9 +10,9 @@ interface CreateRulesetPayload {
 	bundle?: unknown;
 }
 
-export const GET: RequestHandler = async () => {
+export const GET: RequestHandler = async ({ platform }) => {
 	try {
-		const service = await getDefaultRulesetService();
+		const service = await getDefaultRulesetService(platform);
 		const rulesets = await service.list();
 		return json({ rulesets });
 	} catch (error) {
@@ -21,11 +21,11 @@ export const GET: RequestHandler = async () => {
 	}
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, platform }) => {
 	const payload = (await request.json().catch(() => ({}))) as CreateRulesetPayload;
 
 	try {
-		const service = await getDefaultRulesetService();
+		const service = await getDefaultRulesetService(platform);
 		const created = await service.createDraft({
 			name: payload.name ?? '',
 			origin: payload.origin ?? 'manual',
