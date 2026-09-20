@@ -310,3 +310,12 @@ New state zones are explicitly projected to avoid stock, blind-card and honors l
 Policy schemas remain backward compatible with stored Golf/Rummy bundles. Palace
 house-rule switches are schema-validated curated variants; AI-imported new-family
 policies remain blocked until import-time behavioral review covers those families.
+
+## Public-room admission and owner AI
+
+`RoomAdmission`, a separate singleton Durable Object, grants expiring active-room
+reservations atomically. CardRoom remains authoritative for each game's event log.
+Idle games release capacity and remain saved; host resume acquires a new slot.
+The server hook limits AI generation and MCP/chat entry points to signed owner
+sessions or owner-key headers. Family play remains account-free. Configuration,
+failure semantics, privacy, and deployment details: [public rooms](./public-rooms.md).

@@ -1,18 +1,22 @@
 import { dev } from '$app/environment';
 import type { RuntimeRulesetBundle } from '../rulesets/types';
 import { localRoomStorage } from './local-room-storage';
-import { roomRequest } from './room-api';
+import { ManagedRoom } from './managed-room';
+import { localAdmission } from './local-admission';
+import { capacityPolicy } from './room-admission';
+let localManager: Promise<ManagedRoom> | undefined;
 
 export async function dispatchRoom(
 	request: Request,
 	code: string,
 	platform: App.Platform | undefined,
-	bundle?: RuntimeRulesetBundle
+	bundle?: RuntimeRulesetBundle,
+	client = 'unknown',
 ): Promise<Response> {
 	if (!/^[A-Z0-9]{8}$/.test(code))
 		return Response.json(
 			{ error: 'Enter an eight-character room code' },
-			{ status: 400 }
+			{ status: 400 },
 		);
 	if (!dev && platform?.env.ROOMS) {
 		return platform.env.ROOMS.getByName(code).handleRoom(
@@ -20,11 +24,16 @@ export async function dispatchRoom(
 			{
 				method: request.method,
 				authorization: request.headers.get('authorization') ?? '',
-				...(request.method !== 'GET' ? { body: await request.text() } : {})
+				client,
+				...(request.method !== 'GET' ? { body: await request.text() } : {}),
 			},
-			bundle
+			bundle,
 		);
 	}
 	if (!dev) throw new Error('ROOMS binding is required');
-	return roomRequest(request, code, await localRoomStorage(), bundle);
+	localManager ??= Promise.all([localRoomStorage(), localAdmission()]).then(
+		([storage, admission]) =>
+			new ManagedRoom(storage, admission, capacityPolicy(process.env)),
+	);
+	return (await localManager).request(request, code, client, bundle);
 }

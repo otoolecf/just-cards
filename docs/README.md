@@ -93,3 +93,7 @@ This folder holds project planning and architecture docs.
 - [`specs/2026-09-20-game-list-cleanup.md`](./specs/2026-09-20-game-list-cleanup.md): Discoverable rename/removal controls and reversible test-game cleanup.
 - [`specs/2026-09-20-delete-archived-games.md`](./specs/2026-09-20-delete-archived-games.md): Confirmed permanent deletion of archived custom games and cache reconciliation.
 - [`specs/2026-09-20-plain-language-guides.md`](./specs/2026-09-20-plain-language-guides.md): Plain-language, house-rule-aware instructions and full browser playthroughs.
+
+- [Public rooms, capacity, and owner access](./public-rooms.md) — active room limits, idle saves, and owner-only AI.
+
+- [First web deployment](./specs/2026-09-20-first-web-deployment.md) — production launch and owner-protected shared-library edits.

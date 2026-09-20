@@ -1,4 +1,5 @@
 <script lang="ts">
+ import OwnerGate from './owner-gate.svelte';
 	import type { RulesetRecord } from '$lib/rulesets/types';
 	import ScoreButton from './score-button.svelte';
 	import RulesetReview from './ruleset-review.svelte';
@@ -38,6 +39,7 @@
 	}
 </script>
 
+<OwnerGate>
 <section class="jc-panel import-panel">
 	<h2>Add a game from its rules</h2>
 	<p class="jc-subtle">
@@ -116,6 +118,7 @@
 		</div>
 	{/if}
 </section>
+</OwnerGate>
 
 <style>
 	.import-panel {

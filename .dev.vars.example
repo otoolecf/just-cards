@@ -19,3 +19,8 @@
 # JUST_CARDS_MCP_OAUTH_REALM=just-cards-mcp
 # JUST_CARDS_MCP_OAUTH_ALLOWED_ALGS=RS256
 # JUST_CARDS_MCP_OAUTH_CLOCK_SKEW_SECONDS=60
+
+# Owner-only AI imports and assistant endpoints. Use a random key of at least 32
+# characters; never share it in room invites. Sign in at /owner. Unset = disabled.
+# OWNER_ACCESS_KEY=replace-with-a-long-random-secret
+# Non-browser MCP clients also send x-just-cards-owner-key in addition to MCP auth.

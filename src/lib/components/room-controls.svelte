@@ -5,6 +5,7 @@
  export let busy=false;
  export let mutate:(input:RoomMutation)=>Promise<boolean>;
  export let onLeave:()=>void;
+ export let onRefresh:()=>void;
  let privateLink='', privateName='', confirmingUndo=false, copied=false;
  $: me=room.seats.find(s=>s.id===room.selfId);
  $: host=room.selfId===room.hostId;
@@ -21,8 +22,9 @@
  async function copy() {try {await navigator.clipboard.writeText(privateLink);copied=true;}catch {copied=false;}}
 </script>
 {#if room.paused}<section class="jc-panel controls" aria-label="Paused game" aria-live="polite">
- <h2>Game paused</h2><p>{room.pauseReason}</p>
+ <h2>{room.sleeping ? 'Table saved' : 'Game paused'}</h2><p>{room.pauseReason}</p>
  <div class="actions">
+ {#if room.sleeping}<ScoreButton disabled={busy} onPress={onRefresh}>Check table</ScoreButton>{/if}
  {#if me?.away}<ScoreButton disabled={busy} onPress={()=>action('return')}>I'm back</ScoreButton>{/if}
  {#if host}<ScoreButton variant="primary" disabled={busy || room.seats.some(s=>s.away)} onPress={()=>action('resume')}>Resume game</ScoreButton>{:else if room.hostAbsent && me && !me.away}<ScoreButton disabled={busy} onPress={()=>action('claim_host')}>Take over as host</ScoreButton>{/if}
  </div>

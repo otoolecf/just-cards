@@ -4,7 +4,11 @@ import { roomError } from '$lib/server/room-api';
 import { dispatchRoom } from '$lib/server/room-dispatch';
 import { getDefaultRulesetService } from '$lib/rulesets/default-service';
 
-export const POST: RequestHandler = async ({ request, platform }) => {
+export const POST: RequestHandler = async ({
+	request,
+	platform,
+	getClientAddress,
+}) => {
 	try {
 		const payload = (await request.clone().json()) as { rulesetId: string };
 		const ruleset =
@@ -22,10 +26,16 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			.replace(/-/g, '')
 			.slice(0, 8)
 			.toUpperCase();
-		return dispatchRoom(request, code, platform, {
-			...ruleset.bundle,
-			displayName: ruleset.name,
-		});
+		return dispatchRoom(
+			request,
+			code,
+			platform,
+			{
+				...ruleset.bundle,
+				displayName: ruleset.name,
+			},
+			getClientAddress(),
+		);
 	} catch (error) {
 		return roomError(error);
 	}

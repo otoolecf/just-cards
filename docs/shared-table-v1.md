@@ -183,7 +183,7 @@ Normal **Copy invite** links never contain recovery secrets. Possession of a pri
 link grants access to that seat, so it must only be shared with the intended player.
 
 Worker connections heartbeat every 15 seconds. A Durable Object alarm checks
-presence every 15 seconds while players are connected. HTTP activity/clean disconnects
+presence at most once per minute while the room is active (15 seconds after a clean socket close), or earlier at its idle deadline. HTTP activity/clean disconnects
 get a 15-second grace period; silent sockets expire after 45 seconds without a
 heartbeat. Missing players become Away and pause the table; a present player may
 **Take over as host** when the host is away. Reconnection does not silently resume
@@ -248,3 +248,5 @@ Curated presets have regression coverage for these mechanics. Automatic behavior
 approval of AI-imported `patience`, `shedding`, and `contract` policies remains
 blocked: the import-time simulator currently covers grid/meld policies only. This
 prevents a new capability from incorrectly inheriting Golf/Rummy readiness checks.
+
+Active rooms have bounded capacity and idle lifetimes; saved games survive suspension. See [public rooms](./public-rooms.md) for resume behavior and owner-only AI access.

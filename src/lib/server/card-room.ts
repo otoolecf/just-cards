@@ -8,7 +8,8 @@ import {
 	pauseForDisconnected,
 } from './room-service';
 import { parseRoomSocketRequest } from './room-socket';
-import { roomRequest } from './room-api';
+import { ManagedRoom, roomFinished } from './managed-room';
+import { capacityPolicy } from './room-admission';
 import type { RuntimeRulesetBundle } from '../rulesets/types';
 import { handleScoreRequest, type ScoreRequest } from './score-api';
 import type {
@@ -16,8 +17,9 @@ import type {
 	SessionRecord,
 } from '../session/session-store';
 
-export class CardRoom extends DurableObject {
+export class CardRoom extends DurableObject<Env> {
 	private store: RoomStorage;
+	private manager: ManagedRoom;
 	private scoreStore: SessionRepository;
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -69,10 +71,20 @@ export class CardRoom extends DurableObject {
 			},
 			transaction: (fn) => ctx.storage.transactionSync(fn),
 		});
+		this.manager = new ManagedRoom(
+			this.store,
+			this.env.ROOM_ADMISSION.getByName('global'),
+			capacityPolicy(this.env),
+		);
 	}
 	async handleRoom(
 		code: string,
-		input: { method: string; authorization: string; body?: string },
+		input: {
+			method: string;
+			authorization: string;
+			body?: string;
+			client?: string;
+		},
 		bundle?: RuntimeRulesetBundle,
 	): Promise<Response> {
 		const request = new Request('https://room.internal/', {
@@ -80,18 +92,29 @@ export class CardRoom extends DurableObject {
 			headers: { authorization: input.authorization },
 			...(input.body ? { body: input.body } : {}),
 		});
-		const response = await roomRequest(request, code, this.store, bundle);
+		const response = await this.manager.request(
+			request,
+			code,
+			input.client ?? 'unknown',
+			bundle,
+		);
 		if (!response.ok) return response;
 		const hash = await credentialHash(
 			input.authorization.replace(/^Bearer /, ''),
 		);
 		const room = this.store.read(code);
 		if (!room) return response;
-		if (activeSeats(room).some((s) => s.tokenHash === hash)) {
+		if (
+			!room.activity?.suspended &&
+			!roomFinished(room) &&
+			activeSeats(room).some((s) => s.tokenHash === hash)
+		) {
 			this.touch(hash);
 			await this.armPresenceCheck();
 		}
 		if (input.method === 'POST') this.broadcast(code);
+		this.closeInactive(code);
+		await this.armPresenceCheck();
 		return Response.json(viewRoom(room, hash, this.onlineSeats(code)), {
 			headers: response.headers,
 		});
@@ -100,7 +123,12 @@ export class CardRoom extends DurableObject {
 		try {
 			const { code, token } = parseRoomSocketRequest(request);
 			const hash = await credentialHash(token);
-			const room = this.store.read(code);
+			const room = await this.manager.run(() => this.manager.expire(code));
+			if (room && (room.activity?.suspended || roomFinished(room)))
+				return new Response(
+					'This table is saved. Resume it before connecting.',
+					{ status: 409 },
+				);
 			if (!room || !activeSeats(room).some((seat) => seat.tokenHash === hash))
 				return new Response('Join this room first', { status: 403 });
 			if (this.ctx.getWebSockets().length >= 64)
@@ -163,7 +191,7 @@ export class CardRoom extends DurableObject {
 		} | null;
 		if (a) {
 			this.touch(a.hash);
-			await this.armPresenceCheck();
+			await this.armPresenceCheck(15000);
 			this.broadcast(a.code);
 		}
 	}
@@ -211,25 +239,57 @@ export class CardRoom extends DurableObject {
 			.filter((s) => recent.has(s.tokenHash))
 			.map((s) => s.id);
 	}
-	private async armPresenceCheck(): Promise<void> {
-		if ((await this.ctx.storage.getAlarm()) === null)
-			await this.ctx.storage.setAlarm(Date.now() + 15000);
+	private closeInactive(code: string): void {
+		const room = this.store.read(code);
+		if (!room || (!room.activity?.suspended && !roomFinished(room))) return;
+		for (const ws of this.ctx.getWebSockets()) {
+			const a = ws.deserializeAttachment() as { code: string } | null;
+			if (a?.code === code) ws.close(1000, 'Table saved');
+		}
 	}
-	async alarm(): Promise<void> {
-		const codes = this.ctx.storage.sql
+	private async armPresenceCheck(delay = 60000): Promise<void> {
+		const rows = this.ctx.storage.sql
 			.exec<{ code: string }>('SELECT code FROM rooms')
 			.toArray();
-		let watching = false;
-		for (const { code } of codes) {
-			const online = this.onlineSeats(code);
-			const room = this.store.write(code, (previous) =>
-				pauseForDisconnected(previous!, online),
-			);
-			if (!room.events.some((e) => e.type === 'end_game') && online.length)
-				watching = true;
-			this.broadcast(code);
+		const deadlines = rows.flatMap(({ code }) => {
+			const room = this.store.read(code);
+			return room?.activity && !room.activity.suspended && !roomFinished(room)
+				? [room.activity.expiresAt]
+				: [];
+		});
+		if (!deadlines.length) {
+			await this.ctx.storage.deleteAlarm();
+			return;
 		}
-		if (watching) await this.ctx.storage.setAlarm(Date.now() + 15000);
+		const next = Math.max(
+			Date.now() + 1,
+			Math.min(Date.now() + delay, ...deadlines),
+		);
+		const previous = await this.ctx.storage.getAlarm();
+		if (previous === null || next < previous)
+			await this.ctx.storage.setAlarm(next);
+	}
+	async alarm(): Promise<void> {
+		await this.manager.run(async () => {
+			for (const { code } of this.ctx.storage.sql
+				.exec<{ code: string }>('SELECT code FROM rooms')
+				.toArray()) {
+				const before = this.store.read(code);
+				const room = await this.manager.expire(code);
+				if (!room) continue;
+				let changed = before?.revision !== room.revision;
+				if (!room.activity?.suspended && !roomFinished(room)) {
+					const next = pauseForDisconnected(room, this.onlineSeats(code));
+					if (next.revision !== room.revision) {
+						this.store.write(code, () => next);
+						changed = true;
+					}
+				}
+				if (changed) this.broadcast(code);
+				this.closeInactive(code);
+			}
+			await this.armPresenceCheck();
+		});
 	}
 
 	handleScore(id: string, input: ScoreRequest): Response {

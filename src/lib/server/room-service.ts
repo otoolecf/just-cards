@@ -34,6 +34,7 @@ type RoomEvent = { actor: string; requestId: string; input: string } & (
 	| { type: 'end_game' }
 );
 export interface RoomRecord {
+	activity?: { lease: string; expiresAt: number; lastActionAt: number; suspended: boolean };
 	code: string;
 	bundle: RuntimeRulesetBundle;
 	seats: RoomSeat[];
@@ -76,6 +77,8 @@ export type RoomMutation =
 			| { type: 'command'; command: TableCommand }
 	  ));
 export interface RoomView {
+	sleeping?: boolean;
+	activityExpiresAt?: number;
 	code: string;
 	name: string;
 	revision: number;
@@ -452,6 +455,8 @@ export function viewRoom(
 			);
 	return {
 		code: room.code,
+		sleeping: !!room.activity?.suspended,
+		activityExpiresAt: room.activity?.expiresAt,
 		name: room.bundle.displayName,
 		revision: room.revision,
 		selfId: self?.id ?? null,

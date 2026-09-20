@@ -1,4 +1,5 @@
 <script lang="ts">
+ import OwnerGate from '$lib/components/owner-gate.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import { Select, Tabs } from 'bits-ui';
@@ -994,7 +995,7 @@
 						<p class="status-success">{rulesetFeedback.message}</p>
 					{/if}
 				</div>
-				<div class="ruleset-generator">
+				<OwnerGate><div class="ruleset-generator">
 					<div class="ruleset-source-toggle" role="tablist" aria-label="Rules source type">
 						<button
 							type="button"
@@ -1062,6 +1063,7 @@
 						Generate ruleset from input
 					</ScoreButton>
 				</div>
+</OwnerGate>
 				<div class="button-row">
 					<ScoreButton variant="primary" type="button" onPress={() => void createStarterRuleset()} disabled={isRulesetBusy}>
 						Create starter ruleset

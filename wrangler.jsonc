@@ -5,18 +5,46 @@
 	"compatibility_date": "2026-02-16",
 	"compatibility_flags": ["nodejs_compat"],
 	"durable_objects": {
-		"bindings": [{ "name": "ROOMS", "class_name": "CardRoom" }]
+		"bindings": [
+			{
+				"name": "ROOMS",
+				"class_name": "CardRoom",
+			},
+			{
+				"name": "ROOM_ADMISSION",
+				"class_name": "RoomAdmission",
+			},
+		],
 	},
-	"migrations": [{ "tag": "v1-card-rooms", "new_sqlite_classes": ["CardRoom"] }],
-	"d1_databases": [{ "binding": "RULESETS_DB", "database_name": "just-cards-rulesets", "migrations_dir": "migrations" }],
+	"migrations": [
+		{
+			"tag": "v1-card-rooms",
+			"new_sqlite_classes": ["CardRoom"],
+		},
+		{
+			"tag": "v2-room-admission",
+			"new_sqlite_classes": ["RoomAdmission"],
+		},
+	],
+	"d1_databases": [
+		{
+			"binding": "RULESETS_DB",
+			"database_name": "just-cards-rulesets",
+			"migrations_dir": "migrations",
+		},
+	],
 	"assets": {
 		"binding": "ASSETS",
-		"directory": ".svelte-kit/cloudflare"
+		"directory": ".svelte-kit/cloudflare",
 	},
 	"observability": {
-		"enabled": true
+		"enabled": true,
 	},
 	"vars": {
-		"APP_NAME": "just-cards"
-	}
+		"APP_NAME": "just-cards",
+		"ROOM_MAX_ACTIVE": "20",
+		"ROOM_CREATIONS_PER_HOUR": "5",
+		"ROOM_LOBBY_IDLE_SECONDS": "900",
+		"ROOM_GAME_IDLE_SECONDS": "1800",
+	},
 }

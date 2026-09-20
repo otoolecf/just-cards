@@ -42,14 +42,19 @@
 	let retryAt = 0,
 		backoff = 1000,
 		lastMessage = 0;
+	function resting() {
+		return !!(room?.sleeping || room?.closed || room?.table?.stage === 'game_end');
+	}
+	let nextPoll = 0, pollDelay = 2000;
 	function connectSocket() {
-		if (dev || stopped || !room?.selfId || socket || Date.now() < retryAt) return;
+		if (dev || stopped || resting() || document.hidden || !room?.selfId || socket || Date.now() < retryAt) return;
 		const url = new URL(`/api/rooms/${code}/socket`, location.href);
 		url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 		const ws = new WebSocket(url, ['jc-room-v1', `seat.${token}`]);
 		socket = ws;
 		ws.onopen = () => {
 			backoff = 1000;
+			pollDelay = 2000;
 			lastMessage = Date.now();
 			connection = 'Live';
 		};
@@ -65,7 +70,7 @@
 		};
 		ws.onclose = () => {
 			if (socket === ws) socket = null;
-			if (!stopped) {
+			if (!stopped && !resting()) {
 				connection = 'Reconnecting…';
 				retryAt = Date.now() + backoff;
 				backoff = Math.min(15000, backoff * 2);
@@ -127,7 +132,12 @@
 				pickupId = '';
 			}
 		}
-		connection = socket?.readyState === WebSocket.OPEN ? 'Live' : 'Connected';
+		connection = resting() ? 'Saved' : socket?.readyState === WebSocket.OPEN ? 'Live' : 'Connected';
+		if (resting()) {
+			const ws = socket;
+			socket = null;
+			ws?.close();
+		}
 		if (next.closed) {
 			confirmingEnd = false;
 			forgetRoom(localStorage, code);
@@ -183,7 +193,11 @@
   }
   void refresh();
   const timer = setInterval(() => {
-			if (socket?.readyState !== WebSocket.OPEN) void refresh();
+			if (!document.hidden && !resting() && socket?.readyState !== WebSocket.OPEN && Date.now()>=nextPoll) {
+				nextPoll = Date.now() + pollDelay;
+				pollDelay = Math.min(30000, pollDelay * 2);
+				void refresh();
+			}
 		}, 1000);
 		const heartbeat = setInterval(() => {
 			if (socket?.readyState === WebSocket.OPEN) {
@@ -192,7 +206,11 @@
 			}
 		}, 15000);
 		const resume = () => {
-			if (!document.hidden) void refresh();
+			if (!document.hidden) {
+				nextPoll = 0;
+				pollDelay = 2000;
+				void refresh();
+			}
 		};
 		document.addEventListener('visibilitychange', resume);
 		return () => {
@@ -408,7 +426,7 @@
   <label for="recovery-name">Replacement player's name (optional)</label><input class="jc-control" id="recovery-name" maxlength="30" bind:value={recoveryName} />
   <div class="action-row"><ScoreButton disabled={busy} onPress={recover}>Recover my seat</ScoreButton><ScoreButton onPress={dismissRecovery}>Dismiss link</ScoreButton></div>
  </section>{/if}
- {#if room && self && !room.closed}<RoomControls {room} {busy} {mutate} onLeave={()=>lobbyAction('leave')} />{/if}
+ {#if room && self && !room.closed}<RoomControls {room} {busy} {mutate} onRefresh={()=>void refresh()} onLeave={()=>lobbyAction('leave')} />{/if}
 	{#if room && !room.closed && self === room.hostId}
 		{#if confirmingEnd}
 			<section class="jc-panel lobby-panel" aria-label="End game confirmation">
