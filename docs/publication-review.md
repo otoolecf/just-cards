@@ -4,6 +4,12 @@ Use this checklist before publishing the repository or sharing a source archive.
 Review the exact files and Git refs you intend to publish, including uncommitted
 additions. Ignoring a file does not remove an earlier committed version.
 
+## Latest review
+
+See the [2026-10-30 results](./publication-results-2026-10-30.md) for scans, identity
+locations, fixture cleanup and dependency triage. This checklist remains reusable;
+its generic concerns are not all unresolved findings in the current tree.
+
 ## Secrets and local data
 
 Keep credentials, deployment resource IDs and game data out of Git:
@@ -56,8 +62,9 @@ credential; `PUBLIC_APP_URL` supplies the generated documentation link.
 
 ## Third-party fixtures
 
-The rule evaluation fixtures contain publisher HTML, including contact information,
-public telemetry identifiers and scripts. Review redistribution and attribution.
+The current rule evaluation fixtures are original synthetic HTML summaries. Older
+Git revisions contain publisher HTML, including contact information, public telemetry
+identifiers and scripts. Review publication of those historical copies.
 Where practical, use reduced fixtures that preserve the extraction tests without
 unrelated page content. Project code licensing does not establish redistribution
 rights for third-party material.

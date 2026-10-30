@@ -12,14 +12,14 @@ const CRIBBAGE_URL = 'https://bicyclecards.com/how-to-play/cribbage';
 const SHITHEAD_URL = 'https://www.pagat.com/beating/shithead.html';
 
 const SIX_CARD_GOLF_HTML = readFileSync(
-	new URL('./evals/fixtures/six-card-golf.bicyclecards.html', import.meta.url),
+	new URL('./evals/fixtures/six-card-golf.synthetic.html', import.meta.url),
 	'utf8'
 );
 const CRIBBAGE_HTML = readFileSync(
-	new URL('./evals/fixtures/cribbage.bicyclecards.html', import.meta.url),
+	new URL('./evals/fixtures/cribbage.synthetic.html', import.meta.url),
 	'utf8'
 );
-const SHITHEAD_HTML = readFileSync(new URL('./evals/fixtures/shithead.pagat.html', import.meta.url), 'utf8');
+const SHITHEAD_HTML = readFileSync(new URL('./evals/fixtures/shedding.synthetic.html', import.meta.url), 'utf8');
 
 const GOLDEN_CASES: RulesetGoldenCaseDefinition[] = [
 	{

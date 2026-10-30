@@ -4,18 +4,20 @@ This document defines the offline golden-eval harness used to validate ruleset e
 
 ## Purpose
 
-1. Lock in confidence on real-world rule pages.
+1. Lock in extraction behavior for representative card-game rule inputs.
 2. Catch regressions in extraction heuristics quickly.
 3. Keep eval costs near zero while refining interfaces.
 
-## Golden Sources (Snapshot Fixtures)
+## Golden source URLs and synthetic fixtures
 
 1. `https://bicyclecards.com/how-to-play/six-card-golf`
 2. `https://bicyclecards.com/how-to-play/cribbage`
 3. `https://www.pagat.com/beating/shithead.html`
 
-Stored fixture snapshots live in:
-`src/lib/rulesets/evals/fixtures`
+The URLs remain source-detection inputs. Tests use original synthetic HTML summaries,
+not downloaded publisher pages, in `src/lib/rulesets/evals/fixtures`. See the
+[fixture provenance](../src/lib/rulesets/evals/fixtures/README.md). These deterministic
+tests do not establish compatibility with current live publisher HTML.
 
 ## Evaluation Contract
 

@@ -6,7 +6,7 @@ import { evaluateRulesetBundleConfidence } from './confidence';
 
 const SIX_CARD_GOLF_URL = 'https://bicyclecards.com/how-to-play/six-card-golf';
 const SIX_CARD_GOLF_HTML = readFileSync(
-	new URL('./evals/fixtures/six-card-golf.bicyclecards.html', import.meta.url),
+	new URL('./evals/fixtures/six-card-golf.synthetic.html', import.meta.url),
 	'utf8'
 );
 
