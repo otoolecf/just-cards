@@ -7,6 +7,12 @@ function scorePageSource(): string {
 }
 
 describe('score page contract', () => {
+ it('defaults to manual points while respecting guided-only result forms', () => {
+  const source = scorePageSource();
+  expect(source).toContain("let addRoundMode: AddRoundMode = 'delta'");
+  expect(source).toContain("if (guidedOnly) return ['guided']");
+  expect(source).toContain("allowedAddRoundModes(mode, guidedOnly)");
+ });
 	it('score_page_uses_guided_raw_setup_and_no_variant_tabs', () => {
 		const source = scorePageSource();
 		expect(source).toContain('Scoring mode');
@@ -22,8 +28,10 @@ describe('score page contract', () => {
 		expect(source).toContain('Ruleset tools (optional)');
 	});
 
-	it('score_page_uses_direction_driven_standings_sort', () => {
+	it('score_page_preserves_roster_order_with_separate_rank', () => {
 		const source = scorePageSource();
-		expect(source).toContain('sortStandingsByDirection');
+		expect(source).toContain('rosterStandings(');
+		expect(source).toContain('rankLabel');
+		expect(source).toContain("rank === 1");
 	});
 });

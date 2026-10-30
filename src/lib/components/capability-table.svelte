@@ -9,6 +9,7 @@
 	import ScoreButton from './score-button.svelte';
 	export let room: RoomView;
 	export let busy = false;
+	export let guided = false;
 	export let onCommand: (c: TableCommand) => void | Promise<void>;
 	let seenRevision = -1;
 	let selected: string[] = [];
@@ -90,10 +91,10 @@
 {#if p}
 	<section class="jc-panel cap-panel" aria-label="Solitaire table">
 		<h2>Solitaire</h2>
-		<p>
+		{#if guided}<p>
 			Select a face-up card or sequence, then a destination. Build down in
 			alternating colors; empty columns need a King.
-		</p>
+		</p>{/if}
 		<div class="cap-row">
 			<ScoreButton
 				disabled={blocked || (!table.stockCount && !table.discard.length)}
@@ -248,11 +249,11 @@
 						>Pick up pile</ScoreButton
 					>
 				</div>{/if}
-			<p class="jc-subtle">
+			{#if guided}<p class="jc-subtle">
 				Select one or more of the same rank. Pickup is available only when none
 				of your active cards can be played. Blind cards must be tried one at a
 				time.
-			</p>
+			</p>{/if}
 		{/if}
 		{#each table.players as id}<section class="cap-seat">
 				<h3>{name(id)} {id === table.players[table.turn] ? '· turn' : ''}</h3>
@@ -298,7 +299,7 @@
 					>
 					by {name(bridge.bid.player)}
 				</p>{/if}
-			<p>Bid for level + 6 tricks. Strains rise ♣ ♦ ♥ ♠ NT.</p>
+			{#if guided}<p>Bid for level + 6 tricks. Strains rise ♣ ♦ ♥ ♠ NT.</p>{/if}
 			<div class="cap-row">
 				<label
 					>Level <select class="jc-control" bind:value={level}

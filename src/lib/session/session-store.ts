@@ -161,9 +161,10 @@ export function appendSessionEvent(sessionId: string, input: SessionAppendInput,
 	const session = structuredClone(stored);
 
 	const scoreEvent = input.source === 'scorekeeper' ? input.scoreEvent : adaptGameplayScoringToScoreEvent(input.command);
-	if (!scoreEvent || !['add_contract', 'add_round', 'add_pattern_round', 'add_delta', 'settle_pool', 'undo', 'redo'].includes(scoreEvent.type)) {
+	if (!scoreEvent || !['add_mahjong', 'add_contract', 'add_round', 'add_pattern_round', 'add_delta', 'settle_pool', 'undo', 'redo'].includes(scoreEvent.type)) {
 		throw new Error('Invalid score event');
 	}
+	if(scoreEvent.type==='add_mahjong' && (session.config.scoreGuidedProfile?.roundScoring!=='mahjong' || JSON.stringify(scoreEvent.players)!==JSON.stringify(session.config.players) || JSON.stringify(scoreEvent.policy)!==JSON.stringify(session.config.scoreGuidedProfile.tileMahjong))) throw new Error('Mahjong scoring requires the configured seats and rules');
 	if(scoreEvent.type==='add_contract' && (session.config.scoreGuidedProfile?.roundScoring!=='contract' || JSON.stringify(scoreEvent.players)!==JSON.stringify(session.config.players))) throw new Error('Contract scoring requires the configured Bridge partnership seats');
 	const sourcePayload = input.source === 'scorekeeper' ? input.scoreEvent : input.command;
 

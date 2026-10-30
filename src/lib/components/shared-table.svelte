@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import PlayGuide from './play-guide.svelte';
+	import GuidedModeToggle from './guided-mode-toggle.svelte';
+	import { displayGameName } from '$lib/ui/play-preferences';
+	let guided = false;
 	import {
 		canMeldCards,
 		findMeld,
@@ -19,6 +22,7 @@
  import ScoreButton from './score-button.svelte';
 	import CardTile from './card-tile.svelte';
  import CapabilityTable from './capability-table.svelte';
+ import MahjongTable from './mahjong-table.svelte';
 	export let code: string;
 	let room: RoomView | null = null,
 		token = '',
@@ -97,8 +101,8 @@
 		? findMeld([...mine, ...pickupCards], room.rules.meld, pickupId || undefined)
 		: undefined;
 	$: turnName = room?.seats.find((s) => s.id === table?.players[table.turn])?.name ?? '';
-	$: additional=Boolean(room?.rules.patience||room?.rules.shedding||room?.rules.contract);
- $: instruction = additional ? (room?.paused?'Paused — use Table controls to continue.':ended?'Deal complete':table?.stage==='setup'?'Choose your starting face-up cards.':`Current turn: ${turnName}`) : room?.paused ? 'Paused — use Table controls to continue.' : arranging
+	$: additional=Boolean(room?.rules.tileMahjong||room?.rules.patience||room?.rules.shedding||room?.rules.contract);
+ $: instruction = additional ? (room?.paused?'Paused — use Table controls to continue.':ended?'Deal complete':table?.mahjong?.phase==='claims'?'Waiting for tile claims':table?.stage==='setup'?'Choose your starting face-up cards.':`Current turn: ${turnName}`) : room?.paused ? 'Paused — use Table controls to continue.' : arranging
 		? 'Arrange your hand, then tap Done arranging to play.'
 		: table?.stage === 'setup'
 			? mine.filter((c) => c.faceUp).length < (room?.rules.layout?.initialReveals ?? 0)
@@ -408,10 +412,11 @@
 	<header class="table-header">
 		<div>
 			<a class="home-link" href="/play">Just Cards</a>
-			<h1>{room?.name ?? 'Opening table…'}</h1>
+			<h1>{displayGameName(room?.name ?? 'Opening table…')}</h1>
 		</div>
 		<a class="home-link" href="/">Score</a>
 	</header>
+	{#if room}<GuidedModeToggle bind:guided />{/if}
 	<div class="room-strip">
 		<p>Room <strong data-testid="room-code">{code}</strong></p>
 		<ScoreButton onPress={copyInvite}>Copy invite</ScoreButton><span class="jc-subtle"
@@ -502,7 +507,7 @@
 						>{/if}
 					<span class="jc-subtle">{seat.away?'Away':seat.connection==='online'?'Connected':seat.connection==='offline'?'Disconnected':'Present'}</span>
 					{#if table}<span
-							>{table.patience?`${table.patience.foundations.reduce((n,p)=>n+p.length,0)} / 52 home`:`${table.hands[seat.id]?.length ?? 0} cards`} · {table.totals[seat.id] ?? 0} pts</span
+							>{table.mahjong?`${table.mahjong.hands[seat.id]?.length ?? 0} tiles`:table.patience?`${table.patience.foundations.reduce((n,p)=>n+p.length,0)} / 52 home`:`${table.hands[seat.id]?.length ?? 0} cards`} · {table.totals[seat.id] ?? 0} pts</span
 						>{/if}
 				</div>{/each}
 		</section>
@@ -518,7 +523,7 @@
 				{#if self === room.hostId}<ScoreButton
 						variant="primary"
 						disabled={busy || room.paused || room.seats.length < room.rules.players.min}
-						onPress={() => deal('start')}>Deal cards</ScoreButton
+						onPress={() => deal('start')}>{room.rules.tileMahjong?'Deal tiles':'Deal cards'}</ScoreButton
 					>{:else}<p>Waiting for the host to deal.</p>{/if}
 			</section>{/if}
 	{/if}
@@ -528,7 +533,9 @@
 				>Round {table.round}{room.rules.scoring.rounds
 					? ` of ${room.rules.scoring.rounds}`
 					: ''}</span
-			><strong>{instruction}</strong>
+			><strong>{!guided && !additional && !room.paused && !ended && !arranging && table.stage !== 'setup'
+				? `${myTurn ? 'Your turn' : turnName} · ${table.stage === 'draw' ? 'Draw' : room.rules.layout ? 'Replace or discard' : 'Play'}`
+				: instruction}</strong>
 		</section>
 		{#if ended}
 			<section class="jc-panel results">
@@ -560,7 +567,7 @@
 					>{/if}
 			</section>
 		{/if}
-		{#if additional}<CapabilityTable {room} {busy} onCommand={command}/>{:else}
+		{#if room.rules.tileMahjong}<MahjongTable {room} {busy} {guided} onCommand={command}/>{:else if additional}<CapabilityTable {room} {busy} {guided} onCommand={command}/>{:else}
 		<section class="piles" aria-label="Card piles">
 			<div class="jc-panel pile stock">
 				<h2>Stock</h2>
@@ -621,7 +628,7 @@
 				<h2>{room.rules.layout ? 'Your layout' : 'Your hand'}</h2>
 				<span class="jc-subtle">{mine.length} cards</span>
 			</div>
-			{#if room.rules.meld}
+			{#if room.rules.meld && guided}
 				<p class="jc-subtle">
 					Starting hand: {room.rules.deal.byPlayerCount?.[room.seats.length] ??
 						room.rules.deal.cardsPerPlayer} cards each for {room.seats.length} players.
@@ -757,10 +764,10 @@
 			</section>{/if}
 		{#if room.rules.meld}<section class="jc-panel meld-panel">
 				<h2>Table melds</h2>
-				<p class="jc-subtle">
+				{#if guided}<p class="jc-subtle">
 					These cards have been played face up for everyone. After drawing on your turn, select
 					cards from your hand and add them to a matching meld. Your added cards score for you.
-				</p>
+				</p>{/if}
 				{#if !table.melds.length}<p class="jc-subtle">
 						Melds and layoffs will appear here for everyone.
 					</p>{/if}
@@ -813,7 +820,7 @@
 				</table>
 			</div>
 		</details>{/if}
-	{#if room}<details class="jc-panel history-panel">
+	{#if room}<details class="jc-panel history-panel" open={guided}>
 			<summary>How to play</summary>
             <PlayGuide rules={room.rules} cardValues={room.cardValues} />
         </details>{/if}

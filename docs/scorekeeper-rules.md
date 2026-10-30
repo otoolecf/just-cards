@@ -279,3 +279,12 @@ without updating game/vulnerability progress. Passed-out hands need no score ent
 These are rubber scores, including honors, not duplicate scores. There is no bonus
 settlement for an unfinished rubber. The virtual table and physical contract inputs
 call the same arithmetic function; score state remains derived from immutable events.
+
+## Stable score display (2026-10-30)
+
+Current score uses the same player roster order as round entry. Rows never move
+based on totals. Separate ordinal labels use the configured low/high-win direction;
+tied totals share competition rank (1st, 1st, 3rd) with a Tied label. All players in
+first place are highlighted. Before scoring, the empty state remains; after scoring
+starts, roster players without entries display zero. Totals and event replay are unchanged.
+This supersedes the sorted-display behavior in the February 18 standings spec.

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { rosterStandings } from '$lib/session/roster-standings';
  import OwnerGate from '$lib/components/owner-gate.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import type { PageData } from './$types';
@@ -14,7 +15,7 @@
 		parseCardsFromText,
 		parseNamedRoundText,
 		parsePatternScoringText,
-		sortStandingsByDirection,
+
 		type GuidedScoreProfile,
 		type GuidedScoreZoneProfile,
 		type PatternModePreset,
@@ -26,6 +27,7 @@
 	import RulesetLibrary from '$lib/components/ruleset-library.svelte';
  import { catalogSelection, readFavorites, reconcileCatalog } from '$lib/rulesets/catalog';
  import HouseRulesEditor from '$lib/components/house-rules-editor.svelte';
+ import MahjongScoreInput from '$lib/components/mahjong-score-input.svelte';
  import CapabilityScoreInput from '$lib/components/capability-score-input.svelte';
 	import { canPlayRuleset } from '$lib/rulesets/generation-report';
 	import CardTapInput from '$lib/components/card-tap-input.svelte';
@@ -88,7 +90,7 @@
 	let sessionRoster: string[] = [];
 	let setupPlayerCount = 2;
  let scoringPresetId='';
- $: if(!activeSessionId && selectedScoreInputMode==='guided' && selectedRulesetRecord && scoringPresetId!==selectedRulesetRecord.id){scoringPresetId=selectedRulesetRecord.id;const r=selectedRulesetRecord.bundle.runtimeRulePack.tableRules;if(r?.patience)setupPlayerCount=1;else if(r?.contract)setupPlayerCount=4;else if(setupPlayerCount<2)setupPlayerCount=2;syncSetupPlayers();}
+ $: if(!activeSessionId && selectedScoreInputMode==='guided' && selectedRulesetRecord && scoringPresetId!==selectedRulesetRecord.id){scoringPresetId=selectedRulesetRecord.id;const r=selectedRulesetRecord.bundle.runtimeRulePack.tableRules;if(r?.patience)setupPlayerCount=1;else if(r?.contract||r?.tileMahjong)setupPlayerCount=4;else if(setupPlayerCount<2)setupPlayerCount=2;syncSetupPlayers();}
 	let selectedScoreInputMode: ScoreInputMode = 'guided';
 	let selectedRawWinDirection: ScoreWinDirection = 'high_wins';
 	let selectedRulesetId = '';
@@ -99,7 +101,7 @@
 
 	let selectedPatternPackId = PATTERN_PRESETS[0]?.id ?? '';
 	let modePatternPack: PatternModePreset | undefined = PATTERN_PRESETS[0];
-	let addRoundMode: AddRoundMode = 'guided';
+	let addRoundMode: AddRoundMode = 'delta';
 	let quickRoundText = '';
 	let playerCardsById: Record<string, string> = {};
 	let manualDeltaById: Record<string, string> = {};
@@ -243,8 +245,9 @@
 		return (profile?.zones ?? []).filter((zone) => zone.role !== 'exclude');
 	}
 
-	function allowedAddRoundModes(mode: ScoreInputMode): AddRoundMode[] {
-		return mode === 'guided' ? ['guided', 'delta'] : ['rows', 'text', 'delta'];
+	function allowedAddRoundModes(mode: ScoreInputMode, guidedOnly: boolean): AddRoundMode[] {
+		if (guidedOnly) return ['guided'];
+		return mode === 'guided' ? ['delta', 'guided'] : ['delta', 'rows', 'text'];
 	}
 
 	function syncGuidedInputsForRoster(players: string[], zones: GuidedScoreZoneProfile[]): void {
@@ -304,7 +307,8 @@
 	$: showPatternRound = rawScoring || activeGuidedProfile?.patternRound === true;
 	$: {
 		const mode = sessionState?.config.scoreInputMode ?? selectedScoreInputMode;
-		const allowed = allowedAddRoundModes(mode);
+		const guidedOnly = mode === 'guided' && ['contract', 'mahjong'].includes(activeGuidedProfile?.roundScoring ?? '');
+		const allowed = allowedAddRoundModes(mode, guidedOnly);
 		if (!allowed.includes(addRoundMode)) {
 			addRoundMode = allowed[0];
 		}
@@ -328,7 +332,8 @@
 	}
 
 	$: displayedEvents = sessionState ? [...sessionState.events].slice(-5).reverse() : [];
-	$: standings = sortStandingsByDirection(
+	$: standings = rosterStandings(
+		activePlayers,
 		sessionState?.state.totalsByPlayer ?? {},
 		sessionState?.config.scoreWinDirection ?? activeGuidedProfile?.winDirection ?? selectedRawWinDirection
 	);
@@ -401,12 +406,13 @@
 	}
 
 	async function createSessionAndStart(): Promise<void> {
+		addRoundMode = 'delta';
 		if (isPosting || isBusy) {
 			return;
 		}
 		const names = dedupePlayers(setupPlayers);
-		if (names.length < 1 || (selectedScoreInputMode==='guided' && setupGuidedProfile?.roundScoring==='contract' && names.length!==4) || (selectedScoreInputMode==='guided' && setupGuidedProfile?.roundScoring==='solo_outcome' && names.length!==1)) {
-			setFeedback('error', 'Enter one player for Solitaire, exactly four for Bridge, and at least one for other score sheets.');
+		if (names.length < 1 || (selectedScoreInputMode==='guided' && ['contract','mahjong'].includes(setupGuidedProfile?.roundScoring??'') && names.length!==4) || (selectedScoreInputMode==='guided' && setupGuidedProfile?.roundScoring==='solo_outcome' && names.length!==1)) {
+			setFeedback('error', 'Enter one player for Solitaire, exactly four for Bridge or Mahjong, and at least one for other score sheets.');
 			return;
 		}
 
@@ -765,6 +771,7 @@
 		if (scoreEvent.type === 'add_pattern_round') {
 			return `add_pattern_round (player targets: ${scoreEvent.entries.length})`;
 		}
+		if(scoreEvent.type==='add_mahjong')return scoreEvent.result.draw?'Mahjong: drawn hand':`Mahjong: ${scoreEvent.result.winner} wins${scoreEvent.result.fan!==undefined?` (${scoreEvent.result.fan} faan)`:''}`;
 		if(scoreEvent.type==='add_contract')return `Contract: ${scoreEvent.result.level} ${scoreEvent.result.strain}, ${scoreEvent.result.tricks} tricks`;
 		if (scoreEvent.type === 'add_delta') {
 			return `add_delta (entries: ${scoreEvent.entries.length})`;
@@ -1158,7 +1165,8 @@
 					{/each}
 					{#if setupGuidedProfile}
 						<p class="hint">
-							{#if setupGuidedProfile.roundScoring==='contract'}Rubber Bridge: enter the contract and tricks; partners are players 1 &amp; 3 and 2 &amp; 4.
+							{#if setupGuidedProfile.roundScoring==='mahjong'}Four-player Hong Kong mahjong: enter tiles or faan. The app calculates payments and tracks the dealer and winds.
+ {:else if setupGuidedProfile.roundScoring==='contract'}Rubber Bridge: enter the contract and tricks; partners are players 1 &amp; 3 and 2 &amp; 4.
  {:else if setupGuidedProfile.roundScoring}Record completed deals or the first player out. One point per win.
  {:else}Win direction: {formatWinDirection(setupGuidedProfile.winDirection)}.
 							Zones: {guidedEntryZones.map((zone) => zone.label).join(', ') || 'None'}.{/if}
@@ -1248,14 +1256,14 @@
 		<section class="panel score-spotlight">
 			<h2>Current score</h2>
 			{#if standings.length > 0}
-				<ol class="score-leaderboard">
-					{#each standings as [player, total], index}
-						<li class={`score-row ${index === 0 ? 'leader' : ''}`.trim()}>
-							<div class="score-player">{player}</div>
+				<ul class="score-leaderboard">
+					{#each standings as { player, total, rank, rankLabel } (player)}
+						<li class={`score-row ${rank === 1 ? 'leader' : ''}`.trim()}>
+							<div class="score-player">{player} <span class="jc-subtle score-rank">{rankLabel}</span></div>
 							<div class="score-total">{total}</div>
 						</li>
 					{/each}
-				</ol>
+				</ul>
 			{:else}
 				<p class="empty">No totals yet. Add a round to start.</p>
 			{/if}
@@ -1300,7 +1308,7 @@
 								Quick text
 							</Tabs.Trigger>
 						{/if}
-						{#if activeGuidedProfile?.roundScoring!=='contract'}<Tabs.Trigger
+						{#if !['contract','mahjong'].includes(activeGuidedProfile?.roundScoring??'')}<Tabs.Trigger
 							value="delta"
 							class={`mode-trigger ${addRoundMode === 'delta' ? 'active' : ''}`.trim()}
 						>
@@ -1309,7 +1317,7 @@
 					</Tabs.List>
 
 					<Tabs.Content value="guided">
-						{#if activeGuidedProfile?.roundScoring}<CapabilityScoreInput kind={activeGuidedProfile.roundScoring} players={activePlayers} rubber={sessionState?.state.rubber} busy={isPosting} onSubmit={submitCapabilityScore}/>{:else if guidedEntryZones.length === 0}
+						{#if activeGuidedProfile?.roundScoring==='mahjong'&&activeGuidedProfile.tileMahjong}<MahjongScoreInput players={activePlayers} policy={activeGuidedProfile.tileMahjong} progress={sessionState?.state.mahjong} busy={isPosting} onSubmit={submitCapabilityScore}/>{:else if activeGuidedProfile?.roundScoring&&activeGuidedProfile.roundScoring!=='mahjong'}<CapabilityScoreInput kind={activeGuidedProfile.roundScoring} players={activePlayers} rubber={sessionState?.state.rubber} busy={isPosting} onSubmit={submitCapabilityScore}/>{:else if guidedEntryZones.length === 0}
 							<p class="hint">No guided scoring zones configured for this ruleset.</p>
 						{:else}
 							<p class="hint">Tap cards by zone. Guided mode applies ruleset card values and zone roles.</p>
@@ -1504,6 +1512,7 @@ run: 5"
 </main>
 
 <style>
+	.score-rank { font-size: var(--jc-type-sm); font-weight: 400; margin-inline-start: 8px; }
 	.pattern-panel summary {
 		min-height: 44px;
 		padding: 12px 0;

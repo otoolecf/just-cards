@@ -187,7 +187,8 @@ export interface GuidedScoreSpecialRuleColumnPairZero {
 export type GuidedScoreSpecialRule = GuidedScoreSpecialRuleColumnPairZero;
 
 export interface GuidedScoreProfile {
- roundScoring?:'contract'|'outcome'|'solo_outcome';
+ tileMahjong?: import('../gameplay/mahjong').MahjongPolicy;
+ roundScoring?:'contract'|'outcome'|'solo_outcome'|'mahjong';
 	rulesetId: string;
 	/** Separate pattern-round entry; absent in legacy sessions means disabled. */
 	patternRound?: boolean;
@@ -405,7 +406,7 @@ export function deriveGuidedScoreProfileFromBundle(
 ): GuidedScoreProfile {
 	const table = bundle.runtimeRulePack.tableRules;
 	if (table) return {
- ...(table.contract?{roundScoring:'contract' as const}:table.patience?{roundScoring:'solo_outcome' as const}:table.shedding?{roundScoring:'outcome' as const}:{}),
+ ...(table.tileMahjong?{roundScoring:'mahjong' as const,tileMahjong:structuredClone(table.tileMahjong)}:table.contract?{roundScoring:'contract' as const}:table.patience?{roundScoring:'solo_outcome' as const}:table.shedding?{roundScoring:'outcome' as const}:{}),
 		patternRound: bundle.uiProfile.scorekeeper?.patternRound === true,
 		rulesetId, winDirection: table.scoring.lowWins ? 'low_wins' : 'high_wins',
 		scoreRulePack: normalizeScoreRulePack(bundle.runtimeRulePack.scoreRulePack),

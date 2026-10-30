@@ -135,3 +135,25 @@ card exposed in a column; its seven-column layout scrolls inside the board, with
 an explicit narrow-screen hint. Foundations use two columns on mobile and four on
 wider screens. Bridge partnership panels and hands wrap; selection uses the existing
 card-selected primitive. No new color or motion tokens are introduced.
+
+### Mahjong tiles (2026-09-27)
+
+`MahjongTile` supplies original inline SVG dots, bamboo, character, wind and dragon
+faces. It uses existing surface/brand/text/error tokens, an optional plain-language
+label, descriptive accessible names, pressed selection and visible keyboard focus.
+Interactive tiles are at least 52px wide and 82px tall; racks wrap within the mobile
+page. The shared tile component serves live play and physical scoring. No new color
+or motion tokens are introduced. Gameplay controls reuse ScoreButton.
+
+### Guided mode toggle (2026-09-27)
+
+`GuidedModeToggle` is shared by live rooms and draft previews. Its native checkbox
+uses a labelled 44px-minimum touch target and semantic text tokens. Normal mode is
+the default; optional teaching text follows the bound personal preference. Essential
+status, errors, controls and the rules disclosure remain usable in normal mode.
+
+### Stable score rows (2026-10-30)
+
+Scorekeeper totals follow entry roster order, with separate ordinal rank text using
+existing muted-text and small-type tokens. The list is unordered so row position
+cannot imply rank. Leader styling follows computed rank, including ties.

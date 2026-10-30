@@ -159,7 +159,7 @@ export function evaluateTableBehavior(b: RuntimeRulesetBundle): BehaviorReport {
 	);
 	if (!report.checks[0].pass) return report;
 	const r = b.runtimeRulePack.tableRules!;
-	if(r.patience || r.shedding || r.contract){report.checks.push({id:'capability-import-review',pass:false,details:'This capability is available as a curated built-in. Automated imported-policy behavioral review is not yet supported.'});return report;}
+	if(r.patience || r.shedding || r.contract || r.tileMahjong){report.checks.push({id:'capability-import-review',pass:false,details:'This capability is available as a curated built-in. Automated imported-policy behavioral review is not yet supported.'});return report;}
 	const players = Array.from({ length: r.players.min }, (_, i) => `seat-${i}`);
 	const initial = () => createTable(players, b, makeDeck());
 	const open = (s: TableState) => {

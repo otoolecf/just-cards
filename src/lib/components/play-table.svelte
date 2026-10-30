@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Tabs } from 'bits-ui';
+	import GuidedModeToggle from './guided-mode-toggle.svelte';
+	let guided = false;
 	import { crossfade, fade } from 'svelte/transition';
 	import {
 		createGameplayRulePack,
@@ -432,6 +434,7 @@
 			<a href="/play" class="jc-mode-link" aria-current="page">Play</a>
 		</nav>
 	</header>
+	<GuidedModeToggle bind:guided />
 
 	<section class="meta-strip">
 		<p><strong>Phase:</strong> {surface.phase}</p>
@@ -439,7 +442,7 @@
 		<p><strong>Turn:</strong> {activeSeat?.playerId ?? 'n/a'}</p>
 		<p><strong>Dealer:</strong> {surface.seats.find((seat) => seat.isDealer)?.playerId ?? 'n/a'}</p>
 	</section>
-	{#if rulesetBundle && quickStartPreview.length > 0}
+	{#if guided && rulesetBundle && quickStartPreview.length > 0}
 		<section class="meta-strip setup-strip" aria-label="Ruleset setup hints">
 			{#each quickStartPreview as line}
 				<p>{line}</p>
@@ -512,7 +515,7 @@
 								<header>
 									<div>
 										<h2>{zone.label}</h2>
-										<p class="zone-hint">{zoneHint(zone.zoneId)}</p>
+										{#if guided}<p class="zone-hint">{zoneHint(zone.zoneId)}</p>{/if}
 									</div>
 									<p>{zone.cards.length} cards</p>
 								</header>
@@ -633,7 +636,7 @@
 							</ScoreButton>
 						{/each}
 					</div>
-				{:else}
+				{:else if guided}
 					<p class="hand-action-label hand-action-hint">{handHintText()}</p>
 				{/if}
 			</div>

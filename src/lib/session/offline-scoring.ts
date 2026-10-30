@@ -228,6 +228,7 @@ export function createOfflineScoreClient(
 				);
 			if (
 				![
+					'add_mahjong',
 					'add_contract',
 					'add_round',
 					'add_pattern_round',

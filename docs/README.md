@@ -97,3 +97,8 @@ This folder holds project planning and architecture docs.
 - [Public rooms, capacity, and owner access](./public-rooms.md) — active room limits, idle saves, and owner-only AI.
 
 - [First web deployment](./specs/2026-09-20-first-web-deployment.md) — production launch and owner-protected shared-library edits.
+
+- [Hong Kong mahjong](./mahjong.md): Guided tile play, physical scoring, exact rules and compatibility contracts.
+- [Mahjong implementation spec](./specs/2026-09-27-hong-kong-mahjong.md): Acceptance criteria and regression verification.
+- [Optional guided play](./specs/2026-09-27-optional-guided-play.md): Normal play by default and a persistent personal guidance toggle across games.
+- [Stable scorekeeper rows](./specs/2026-10-30-stable-score-rows.md): Keep totals aligned with player entry order and show rank separately.

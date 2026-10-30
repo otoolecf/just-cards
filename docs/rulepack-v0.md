@@ -197,3 +197,11 @@ Not yet fully implemented in engine:
 - Rich trigger orchestration beyond the current finite runtime trigger primitives
 - Multi-condition predicates (`AND`/`OR`) and expression trees
 - Percentage/split settlement operations
+
+## Optional tile capability
+
+`tableRules.tileMahjong` adds 136-tile Hong Kong classical play, private claim
+resolution and whole-hand scoring without changing legacy card types or policies.
+The physical `add_mahjong` event derives all player payments and dealer progression
+atomically; undo/redo uses the same event log. See [mahjong](./mahjong.md) for schema,
+scoring, explicit family conventions and import boundaries.

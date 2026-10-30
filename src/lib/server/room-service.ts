@@ -1,3 +1,4 @@
+import { shuffledTiles, type Tile } from '../gameplay/mahjong';
 import { deckCountFor } from '../gameplay/table-rules';
 import { canPlayRuleset } from '../rulesets/generation-report';
 import type { RuntimeRulesetBundle } from '../rulesets/types';
@@ -27,7 +28,7 @@ interface RoomSeat {
 	recoveryHash?: string;
 }
 type RoomEvent = { actor: string; requestId: string; input: string } & (
-	| { type: 'deal'; deck: TableCard[]; players?: string[]; reset?: boolean }
+	| { type: 'deal'; deck: (TableCard | Tile)[]; players?: string[]; reset?: boolean }
 	| { type: 'command'; command: TableCommand }
 	| { type: 'undo'; targetIndex: number }
 	| { type: 'control'; action: string }
@@ -111,6 +112,8 @@ const closed = (room: RoomRecord) =>
 	room.events.some((e) => e.type === 'end_game');
 const between = (state: TableState | null) =>
 	!state || state.stage === 'round_end' || state.stage === 'game_end';
+const fixedRoster = (state: TableState | null) =>
+ Boolean((state?.contract && !state.contract.rubber.finished) || (state?.mahjong && state.stage !== 'game_end'));
 function nameValue(name: string): string {
 	if (typeof name !== 'string' || !name.trim() || name.trim().length > 30)
 		throw new Error('Enter a name from 1 to 30 characters');
@@ -197,7 +200,7 @@ export function updateRoom(
 		if (closed(room))
 			throw new Error('This game has ended. Create a new room.');
 		if (seat) return room;
-		if (!between(state) || (state?.contract && !state.contract.rubber.finished))
+		if (!between(state) || fixedRoster(state))
 			throw new Error(
 				'New players can join between rounds. Use a private recovery link to replace a seat.',
 			);
@@ -332,7 +335,7 @@ export function updateRoom(
 			const targetId = input.type === 'remove_seat' ? input.seatId : seat.id;
 			const target = activeSeats(room).find((s) => s.id === targetId);
 			if (!target) throw new Error('Seat not found');
-			if (!between(state) || (state?.contract && !state.contract.rubber.finished)) {
+			if (!between(state) || fixedRoster(state)) {
 				target.away = true;
 				room.paused = true;
 				room.pauseReason = `${target.name} stepped away. Return or replace this seat to continue.`;
@@ -377,7 +380,7 @@ export function updateRoom(
 			if (input.type === 'new_game' && state?.stage !== 'game_end')
 				throw new Error('Complete the game before a rematch');
 			const players = activeSeats(room).map((s) => s.id),
- deck = shuffledDeck(deckCountFor(room.bundle.runtimeRulePack.tableRules!,players.length));
+ deck = room.bundle.runtimeRulePack.tableRules!.tileMahjong ? shuffledTiles() : shuffledDeck(deckCountFor(room.bundle.runtimeRulePack.tableRules!,players.length));
 			createTable(
 				players,
 				room.bundle,
@@ -483,7 +486,7 @@ export function viewRoom(
 		canJoin:
 			!closed(room) &&
 			between(state) &&
- !(state?.contract && !state.contract.rubber.finished) &&
+ !fixedRoster(state) &&
 			activeSeats(room).length <
 				room.bundle.runtimeRulePack.tableRules!.players.max,
 		canUndo:

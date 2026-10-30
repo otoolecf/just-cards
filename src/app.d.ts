@@ -3,7 +3,7 @@
 // for information about these interfaces
 declare global {
 	namespace App {
-		interface Platform { env: Env }
+		interface Platform { env: Env & { OPENAI_API_KEY?: string } }
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}

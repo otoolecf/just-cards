@@ -89,10 +89,11 @@ export const tableRulesSchema = objectSchema(
 				'Mutually exclusive with layout: set layout=null and scoring.columnPairs=null. Requires roundEnd=empty_hand. Private hand. Sets match rank with distinct suits; runs use one suit and consecutive ranks. Aces low or low/high, never wrapping. Multiple melds and layoffs onto any player meld allowed after draw. Each card scores for its contributor. Discard ends turn; going out by melding also ends round.'
 			)
 		),
+		tileMahjong: nullable(objectSchema({scoring:choice('hk-classical/v1'),flowers:{type:'boolean',enum:[false]},minFan:integer(0,3),maxFan:{type:'integer',enum:[10]},prevailingWinds:{type:'integer',enum:[1,4]},liability:{type:'boolean'}}, 'Four-seat tile capability: 136 tiles, no flowers. Complete four groups and pair or thirteen orphans; Hong Kong classical scoring. Everyone responds to discard claims; win > pung/kong > chow, equal wins nearest next seat. No timers. Minimum faan and one/four wind rotations are explicit. Liability applies on fourth meld or third dragon meld.')) ,
 		patience: nullable(objectSchema({ columns: {type:'integer',enum:[7]}, draw:{type:'integer',enum:[1]}, recycle:{type:'boolean',enum:[true]} }, 'Single-player Klondike: descending alternating colors, empty King, suited A–K foundations, draw one and unlimited recycling.')),
 		shedding: nullable(objectSchema({tableCards:{type:'integer',enum:[3]}, refill:{type:'integer',enum:[3]}, multiDeckFrom:{type:'integer',enum:[3]}, burnTen:{type:'boolean'}, resetTwo:{type:'boolean'}, forcePickupThree:{type:'boolean'}, lowSeven:{type:'boolean'}, fourBurn:{type:'boolean'}}, 'Hand then face-up then blind cards. Same-rank multiples, replenish three, mandatory legal play; pickup if unable. Ten burns and repeats; two resets; optional three forces next pickup/skip, seven requires next rank <=7. Four same ranks burn and pass. First out wins.')),
 		contract: nullable(objectSchema({format:choice('rubber'), honors:{type:'boolean'}}, 'Four fixed partnership seats, full Bridge auction and follow-suit tricks. Declarer controls exposed dummy; rubber scoring with vulnerability, games, penalties and bonuses.')),
-		roundEnd: choice('all_revealed', 'empty_hand', 'foundations_complete', 'empty_all', 'contract_complete'),
+		roundEnd: choice('all_revealed', 'empty_hand', 'foundations_complete', 'empty_all', 'contract_complete', 'tile_win'),
 		stockExhaustion: {
 			...choice('end_round', 'recycle', 'continue'),
 			description: 'end_round: layout/meld end after the turn that empties stock. recycle: patience recycles waste in order. continue: shedding/contract continue without stock.'
@@ -129,7 +130,7 @@ export const tableRulesSchema = objectSchema(
 			'Each zone may appear once at most. Grid layouts score only the hand zone; do not add a meld zone when meld=null. Sum signed card values by zone at round end. All hands become visible; scores accumulate. all_revealed ends immediately after a completed turn reveals a whole player grid, without extra opponent turns.'
 		)
 	},
-	'Choose exactly one capability: layout, meld, patience, shedding, or contract. No jokers. New capabilities require empty scoring.zones: their outcome/contract scoring is independent of card values. Never approximate unsupported mechanics silently.'
+	'Choose exactly one capability: layout, meld, patience, shedding, contract, or tileMahjong. No jokers. New capabilities require empty scoring.zones: their outcome/contract scoring is independent of card values. Never approximate unsupported mechanics silently.'
 );
 
 export function validateSchema(value: unknown, schema: JsonSchema, path = '$'): void {

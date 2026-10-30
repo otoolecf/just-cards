@@ -1,3 +1,4 @@
+import { advanceMahjong, settleMahjong, type MahjongPolicy, type MahjongResult, type MahjongProgress } from '../gameplay/mahjong';
 import { emptyRubber, scoreContract, type ContractResult, type RubberState } from '../gameplay/contract-scoring';
 import rulePackSchema from './rulepack-schema.json';
 import { detectPatterns, type PatternMatchOptions, type PatternRulePack } from '$lib/gameplay/pattern-detector';
@@ -124,6 +125,7 @@ export interface PatternScoringRule {
 interface PatternRoundEntry extends RoundEntry {}
 
 export type ScoreEvent =
+ | {type:'add_mahjong';players:string[];policy:MahjongPolicy;result:MahjongResult}
  | {type:'add_contract';players:string[];result:ContractResult}
 	| {
 			type: 'add_round';
@@ -165,6 +167,7 @@ export interface ScoreTraceEntry {
 }
 
 export interface ScoreState {
+ mahjong?:MahjongProgress;
  rubber?:RubberState;
 	totalsByTarget: Record<string, number>;
 	totalsByPlayer: Record<string, number>;
@@ -884,11 +887,11 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 		}
 	}
 
-	const appliedMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' | 'add_contract' }>> = [];
-	const undoneMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' | 'add_contract' }>> = [];
+	const appliedMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' | 'add_contract' | 'add_mahjong' }>> = [];
+	const undoneMutations: Array<Extract<ScoreEvent, { type: 'add_round' | 'add_pattern_round' | 'add_delta' | 'settle_pool' | 'add_contract' | 'add_mahjong' }>> = [];
 
 	events.forEach((event) => {
-		if (event.type === 'add_contract' || event.type === 'add_round' || event.type === 'add_pattern_round' || event.type === 'add_delta' || event.type === 'settle_pool') {
+		if (event.type === 'add_mahjong' || event.type === 'add_contract' || event.type === 'add_round' || event.type === 'add_pattern_round' || event.type === 'add_delta' || event.type === 'settle_pool') {
 			appliedMutations.push(event);
 			undoneMutations.length = 0;
 			return;
@@ -909,8 +912,13 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 	});
 
 	const totalsByTarget: Record<string, number> = {};
- let rubber:RubberState|undefined; let contractPlayers:string[]|undefined;
+ let mahjong:MahjongProgress|undefined; let rubber:RubberState|undefined; let contractPlayers:string[]|undefined;
 	appliedMutations.forEach((mutation, eventIndex) => {
+		if(mutation.type==='add_mahjong'){
+ const delta=settleMahjong(mutation.players,mutation.result,mutation.policy);
+ mahjong=advanceMahjong(mahjong,mutation.players,mutation.result,mutation.policy);
+ applyDeltaTotals(totalsByTarget,Object.entries(delta).map(([id,delta])=>({target:{kind:'player' as const,id},delta})),trace,eventIndex);return;
+ }
 		if(mutation.type==='add_contract') {
 			if(!Array.isArray(mutation.players)||mutation.players.length!==4||new Set(mutation.players).size!==4||mutation.players.some(p=>typeof p!=='string'||!p.trim())||(contractPlayers&&JSON.stringify(contractPlayers)!==JSON.stringify(mutation.players)))throw new Error('Bridge requires four fixed partnership seats');
 			contractPlayers=mutation.players;
@@ -946,6 +954,7 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 
 	const state: ScoreState = {
  ...(rubber?{rubber}:{}),
+ ...(mahjong?{mahjong}:{}),
 		totalsByTarget,
 		totalsByPlayer: totalsByPlayerFromTargets(totalsByTarget)
 	};

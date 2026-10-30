@@ -161,3 +161,23 @@ selections gate controls; the server still validates all commands. All boards us
 shared card and button primitives with keyboard/tap operation. Solitaire's seven
 columns scroll within their container on narrow screens; page width stays bounded.
 Physical guided scoring derives its result-entry capability from the same policy.
+
+## Tile capability (2026-09-27)
+
+`tableRules.tileMahjong` selects the tile board and guided physical tile/result
+entry. UI dispatch depends on the capability, not a game ID. Existing profiles
+remain valid. The guided score profile copies `tileMahjong` and uses
+`roundScoring: mahjong`; separate pattern-round entry stays disabled. Legal choices
+and explanations come from the private server projection. Optional guided mode and
+tile labels are independent. See [mahjong](./mahjong.md).
+
+## Personal guided play preference (2026-09-27)
+
+Shared rooms and draft previews default to normal play. A common Guided mode checkbox
+controls additional teaching text and remembers the choice in browser storage across
+games. It is a viewer preference, not a ruleset capability, score-entry method, room
+event or host setting. Missing/blocked storage defaults to off. All gameplay controls,
+actionable status and error messages remain available in either mode. How to play is
+always accessible; guided shared rooms expand it automatically. Mahjong tile labels
+remain independent. Existing room names are immutable; presentation aliases only the
+obsolete built-in title “Hong Kong Mahjong (guided)” to “Hong Kong Mahjong”.

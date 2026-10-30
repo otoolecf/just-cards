@@ -1,3 +1,4 @@
+import type { MahjongPolicy } from './mahjong';
 import { tableRulesSchema, toWire, validateSchema } from './policy-schema';
 /** Executable, game-independent policies for a shared physical-style card table. */
 export interface TableRules {
@@ -12,10 +13,11 @@ export interface TableRules {
 		minRun: number;
 		ace: 'low' | 'both';
 	};
+	tileMahjong?: MahjongPolicy;
 	patience?: { columns: 7; draw: 1; recycle: true };
 	shedding?: { tableCards: 3; refill: 3; multiDeckFrom: 3; burnTen: boolean; resetTwo: boolean; forcePickupThree: boolean; lowSeven: boolean; fourBurn: boolean };
 	contract?: { format: 'rubber'; honors: boolean };
-	roundEnd: 'all_revealed' | 'empty_hand' | 'foundations_complete' | 'empty_all' | 'contract_complete';
+	roundEnd: 'all_revealed' | 'empty_hand' | 'foundations_complete' | 'empty_all' | 'contract_complete' | 'tile_win';
 	stockExhaustion: 'end_round' | 'recycle' | 'continue';
 	scoring: {
 		zones: { zone: 'hand' | 'meld'; multiplier: 1 | -1 }[];
@@ -29,8 +31,9 @@ export interface TableRules {
 export function validateTableRules(value: unknown): asserts value is TableRules {
 	validateSchema(toWire(value, tableRulesSchema), tableRulesSchema);
 	const r = value as TableRules | undefined;
-	if (r && (r.patience || r.shedding || r.contract)) {
-		if ([r.patience, r.shedding, r.contract, r.layout, r.meld].filter(Boolean).length !== 1 || r.scoring.zones.length || r.scoring.columnPairs !== undefined || r.scoring.target !== undefined || r.scoring.rounds !== undefined || r.scoring.lowWins || r.discard.immediateUse || r.discard.pickup !== 'top' || r.deal.byPlayerCount) throw new Error('Incompatible capability rules');
+	if (r && (r.patience || r.shedding || r.contract || r.tileMahjong)) {
+		if ([r.patience, r.shedding, r.contract, r.layout, r.meld, r.tileMahjong].filter(Boolean).length !== 1 || r.scoring.zones.length || r.scoring.columnPairs !== undefined || r.scoring.target !== undefined || r.scoring.rounds !== undefined || r.scoring.lowWins || r.discard.immediateUse || r.discard.pickup !== 'top' || r.deal.byPlayerCount) throw new Error('Incompatible capability rules');
+		if (r.tileMahjong && (r.players.min !== 4 || r.players.max !== 4 || r.deal.cardsPerPlayer !== 13 || r.roundEnd !== 'tile_win' || r.stockExhaustion !== 'end_round')) throw new Error('Invalid tile mahjong policy');
 		if (r.patience && (r.players.min !== 1 || r.players.max !== 1 || r.deal.cardsPerPlayer !== 1 || r.roundEnd !== 'foundations_complete' || r.stockExhaustion !== 'recycle')) throw new Error('Invalid patience policy');
 		if (r.contract && (r.players.min !== 4 || r.players.max !== 4 || r.deal.cardsPerPlayer !== 13 || r.roundEnd !== 'contract_complete' || r.stockExhaustion !== 'continue')) throw new Error('Invalid contract policy');
 		if (r.shedding && (r.players.min < 2 || r.players.max > 5 || r.players.max < r.players.min || r.deal.cardsPerPlayer !== 6 || r.roundEnd !== 'empty_all' || r.stockExhaustion !== 'continue')) throw new Error('Invalid shedding policy');

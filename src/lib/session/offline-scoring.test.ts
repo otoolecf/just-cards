@@ -205,3 +205,14 @@ it('replays Bridge contracts offline across reload, undo and exact-once synchron
  await client.post(id,{type:'undo'});expect((await client.get(id)).state.rubber).toBeUndefined();await client.post(id,{type:'redo'});
  h.online();const synced=await client.get(id);expect(synced.state.rubber?.games).toEqual([1,0]);expect(h.server.get(id)?.events).toHaveLength(3);
 });
+
+it('keeps mahjong payments and dealer rotation through offline reload, undo and sync',async()=>{
+ const h=setup();h.offline();const {familyRulesets}=await import('../rulesets/family-presets');const {deriveGuidedScoreProfileFromBundle}=await import('./score-session-commands');
+ const b=familyRulesets().find(r=>r.id==='builtin-hong-kong-mahjong')!,profile=deriveGuidedScoreProfileFromBundle(b.bundle,b.id),players=['N','E','S','W'];
+ let client=h.client();const created=await client.create({players,scoreRulePack:profile.scoreRulePack,scoreInputMode:'guided',scoreGuidedProfile:profile});const id=created.sessionId;
+ await client.post(id,{type:'add_mahjong',players,policy:profile.tileMahjong!,result:{winner:'E',payer:'N',fan:3}});
+ client=h.client();let state=await client.get(id);expect(state.state.mahjong?.dealer).toBe(1);expect(state.state.totalsByPlayer).toEqual({N:-32,E:32,S:0,W:0});
+ await client.post(id,{type:'undo'});expect((await client.get(id)).state.mahjong).toBeUndefined();await client.post(id,{type:'redo'});
+ h.online();state=await client.get(id);expect(state.sync?.status).toBe('synced');expect(state.state.mahjong?.dealer).toBe(1);expect(h.server.get(id)?.events).toHaveLength(3);
+ expect(()=>appendSessionEvent(id,{source:'scorekeeper',scoreEvent:{type:'add_mahjong',players,policy:{...profile.tileMahjong!,minFan:0},result:{winner:'E',fan:0}}},h.server)).toThrow(/configured/);
+});

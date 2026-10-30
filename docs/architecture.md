@@ -319,3 +319,12 @@ Idle games release capacity and remain saved; host resume acquires a new slot.
 The server hook limits AI generation and MCP/chat entry points to signed owner
 sessions or owner-key headers. Family play remains account-free. Configuration,
 failure semantics, privacy, and deployment details: [public rooms](./public-rooms.md).
+
+### Tile capabilities (2026-09-27)
+
+An optional `tileMahjong` policy dispatches to the tile engine alongside existing
+card capabilities. Tile faces/identities are separate types; old card ranks, stored
+policies and command behavior are unchanged. The pure hand evaluator and payment
+function serve both authoritative rooms and physical `add_mahjong` events. Explicit
+viewer projections expose only a player's own legal responses, never other pending
+claims or the wall. No new infrastructure is required. See [mahjong](./mahjong.md).

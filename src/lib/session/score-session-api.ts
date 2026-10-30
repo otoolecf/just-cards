@@ -36,6 +36,7 @@ export interface SessionEventRecord {
 }
 
 export interface SessionState {
+ mahjong?:import('../gameplay/mahjong').MahjongProgress;
  rubber?:import('../gameplay/contract-scoring').RubberState;
 	totalsByTarget: Record<string, number>;
 	totalsByPlayer: Record<string, number>;

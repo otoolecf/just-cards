@@ -1,3 +1,5 @@
+import { createMahjongTable, applyMahjong, projectMahjong, type MahjongState, type MahjongView, type TileCommand } from './mahjong-table';
+import type { Tile } from './mahjong';
 import { createAdditional, applyAdditional, projectAdditional, type AdditionalCommand, type PatienceState, type SheddingState, type ContractState } from './additional-table';
 import { deckCountFor } from './table-rules';
 import { validMeld } from './meld-rules';
@@ -22,7 +24,7 @@ export interface TableMeld {
 	id: string;
 	cards: (TableCard & { ownerId: string })[];
 }
-export type TableCommand = AdditionalCommand
+export type TableCommand = AdditionalCommand | TileCommand
 	| { type: 'reveal'; slot: number }
 	| {
 			type: 'draw';
@@ -36,6 +38,7 @@ export type TableCommand = AdditionalCommand
 	| { type: 'meld'; cardIds: string[] }
 	| { type: 'layoff'; cardIds: string[]; meldId: string };
 export interface TableState {
+ mahjong?:MahjongState;
  patience?:PatienceState; shedding?:SheddingState; contract?:ContractState;
 	layout?: { rows: number; columns: number; initialReveals: number };
 	players: string[];
@@ -57,7 +60,8 @@ export type VisibleCard = {
 	rank?: CardRank;
 	suit?: CardSuit;
 };
-export type TableView = Omit<TableState, 'stock' | 'hands' | 'pending' | 'patience' | 'shedding'> & {
+export type TableView = Omit<TableState, 'stock' | 'hands' | 'pending' | 'patience' | 'shedding' | 'mahjong'> & {
+	mahjong?:MahjongView;
 	patience?:PatienceState<VisibleCard>; shedding?:SheddingState<VisibleCard>;
 	stockCount: number;
 	hands: Record<string, VisibleCard[]>;
@@ -114,7 +118,7 @@ function rules(bundle: RuntimeRulesetBundle): TableRules {
 export function createTable(
 	players: string[],
 	bundle: RuntimeRulesetBundle,
-	deck: TableCard[],
+	inventory: (TableCard | Tile)[],
 	previous?: TableState,
 ): TableState {
 	const r = rules(bundle);
@@ -124,6 +128,8 @@ export function createTable(
 		new Set(players).size !== players.length
 	)
 		throw new Error('Invalid player count');
+ if(r.tileMahjong)return createMahjongTable(players,inventory as Tile[],r.tileMahjong,previous);
+ const deck=inventory as TableCard[];
  const expected=makeDeck(deckCountFor(r,players.length));
  if(deck.length!==expected.length||new Set(deck.map(c=>c.id)).size!==deck.length||expected.some(c=>deck.filter(v=>v.rank===c.rank&&v.suit===c.suit).length!==deckCountFor(r,players.length))) throw new Error('Invalid deck');
 	if (previous && previous.stage !== 'round_end')
@@ -272,6 +278,7 @@ export function applyTableCommand(
 	const r = rules(b),
 		s = structuredClone(state);
 	if (!s.players.includes(actor)) throw new Error('Unknown player');
+	if(r.tileMahjong)return applyMahjong(s,actor,command as TileCommand,r.tileMahjong);
 	if(r.patience||r.shedding||r.contract)return applyAdditional(s,actor,command,r);
 	if (command.type === 'reveal') {
 		if (s.stage !== 'setup' || !r.layout)
@@ -373,6 +380,7 @@ export function projectTable(s: TableState, viewer: string): TableView {
 		show ? { ...c } : { id, faceUp: false };
 	return {
 		...projectAdditional(s),
+		...(s.mahjong?{mahjong:projectMahjong(s,viewer,s.mahjong.policy)}:{}),
 		...(s.layout ? { layout: { ...s.layout } } : {}),
 		players: [...s.players],
 		round: s.round,

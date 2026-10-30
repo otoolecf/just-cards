@@ -1,3 +1,4 @@
+import { mahjongRuleset } from './mahjong-preset';
 import { additionalRulesets } from './additional-presets';
 import { compileRuleFactsToBundle, extractRuleFacts } from './generator';
 import type { RulesetRecord } from './types';
@@ -19,5 +20,5 @@ export function familyRulesets(): RulesetRecord[] {
 			createdAt: '2026-09-17T00:00:00.000Z',
 			updatedAt: '2026-09-17T00:00:00.000Z'
 		};
-	}).concat(additionalRulesets());
+	}).concat(additionalRulesets(), [mahjongRuleset()]);
 }
