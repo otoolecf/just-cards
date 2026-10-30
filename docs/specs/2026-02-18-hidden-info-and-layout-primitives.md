@@ -1,14 +1,10 @@
 # TDD Spec: Hidden-Info And Layout Primitives
 
-_Status: Complete_
-_Owner: Codex_
-_Date: 2026-02-18_
-
-## 1) Intent
+## Intent
 
 Generated rulesets need to express both card arrangement and information visibility, so games like Six Card Golf are playable and auditable without game-specific hardcoding. Current behavior leaks stock draws in feedback and does not expose opponent face-up layout context in a structured way. This change adds reusable primitives for layout and draw visibility and wires them through generation, play state, and UI rendering.
 
-## 2) In Scope
+## In Scope
 
 - Extend `ui-profile/v0` primitives with:
   - card layout metadata (`hand` + optional seat public cards)
@@ -17,19 +13,19 @@ Generated rulesets need to express both card arrangement and information visibil
 - Extend play-surface model to expose player public card layouts and stable slot ordering.
 - Update play UI to render seat public layouts and honor draw visibility policy (no hidden card leakage in feedback).
 
-## 3) Out of Scope
+## Out of Scope
 
 - Multiplayer server-authoritative sync model changes.
 - Full game-specific legality automation for all golf turn nuances.
 - New scoring engine semantics beyond existing rulepack primitives.
 
-## 4) Expected Outcomes
+## Expected Outcomes
 
 1. Six Card Golf generated rulesets include layout metadata (2x3) and stock draw visibility policy.
 2. Play screen shows opponent layout cards (face-up/face-down masked as applicable).
 3. Drawing from stock in hidden-information mode no longer reveals rank/suit in feedback.
 
-## 5) Acceptance Criteria
+## Acceptance Criteria
 
 - [x] `UiProfileV0` supports optional layout + seat public-card primitives and `drawVisibility` zone policy.
 - [x] `extractRuleFacts` and `compileRuleFactsToBundle` emit six-card setup semantics (`cardsPerPlayer`, `initialFaceUp`, 2x3 layout, stock preserve visibility).
@@ -37,7 +33,7 @@ Generated rulesets need to express both card arrangement and information visibil
 - [x] `play-table` uses draw visibility policy and does not leak hidden stock draws in feedback.
 - [x] `npm run test`, `npm run check`, and `npm run build` pass.
 
-## 6) Data and Rules
+## Data and Rules
 
 - Rule/data inputs:
   - source prose/URL extraction output (`RuleFactsV0`)
@@ -49,7 +45,7 @@ Generated rulesets need to express both card arrangement and information visibil
   - Layout primitives are optional and backward-compatible.
   - Existing bundles without layout/visibility fields still render.
 
-## 7) Test Plan (Red -> Green)
+## Test Plan (Red -> Green)
 
 ### Unit Tests (expected to fail first)
 
@@ -63,7 +59,7 @@ Generated rulesets need to express both card arrangement and information visibil
 
 - [x] Playwright mobile audit for generated Six Card Golf shows seat layout cards and hidden stock draw feedback.
 
-## 8) Implementation Notes
+## Implementation Notes
 
 - Planned files:
   - `src/lib/ui/ui-profile.ts` (+ tests)
@@ -77,16 +73,7 @@ Generated rulesets need to express both card arrangement and information visibil
   - Keep rule-driven and generic (no game-name UI branches).
   - Preserve backward compatibility for existing stored bundles.
 
-## 9) Verification Checklist
-
-- [x] Tests written before implementation
-- [x] Tests fail first (red)
-- [x] Implementation added (green)
-- [x] Refactor performed without changing behavior
-- [x] `npm run check` passes
-- [x] `npm run build` passes
-
-## 10) Rollback Plan
+## Rollback Plan
 
 - Revert ui-profile extension fields and play-table usage.
 - Revert setup/layout extraction if it causes non-golf regressions.

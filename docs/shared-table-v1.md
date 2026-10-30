@@ -1,9 +1,5 @@
 # Shared table v1
 
-Implemented 2026-09-17. See the
-[initial review and spec](./specs/2026-09-17-family-card-play.md) and
-[completed first-draft verification](./specs/2026-09-17-family-first-draft.md).
-
 ## Playing and keeping score
 
 Open `/play`, choose a built-in or saved game, enter a name, and create a room.
@@ -136,7 +132,7 @@ APIs). Build/dry-run verification does not deploy anything.
   command API. MCP score leaderboards read the persisted score-session API.
 - No accounts, room expiration, spectator mode, or offline multiplayer. These are separate work from this playable family slice.
 
-## Family house rules (2026-09-17)
+## Family house rules
 
 **Customize house rules** is available for the selected supported game in Play and
 in guided score setup. It edits player limits, private-hand deal counts (including
@@ -157,7 +153,7 @@ values and column cancellation; round/target limits currently end virtual games,
 while physical score sessions remain running scoreboards. Unsupported new mechanics
 still require engine extensions. See [offline physical scoring](./scorekeeper-rules.md).
 
-## Interrupted games (2026-09-20)
+## Interrupted games
 
 **Table controls** offers pause, step away, private recovery and (for the host) host
 transfer and undo. Any seated player may pause; only the host resumes. Step away
@@ -191,7 +187,7 @@ play: return/replace the away seats, then resume explicitly. Browser polling in 
 still supports manual pause/recovery; automatic disconnect detection is a Worker
 feature. All room changes remain durable, authoritative and revision-checked.
 
-## Patience, shedding, and contract capabilities (2026-09-20)
+## Patience, shedding, and contract capabilities
 
 The catalog also includes **Solitaire (draw-one Klondike)**, **Bridge (rubber)**,
 **Palace (Bicycle)**, and **Palace (family rules)**. These are curated, executable

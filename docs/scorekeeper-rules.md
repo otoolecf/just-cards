@@ -3,7 +3,7 @@
 This document explains how score calculation works in the current scorekeeper engine and how to customize it for different games.
 
 For the canonical versioned Rule IR contract, see:
-`/Users/ConnorO/git_repos/just-cards/docs/rulepack-v0.md`
+`docs/rulepack-v0.md`
 
 ## Core Model
 
@@ -32,7 +32,7 @@ Play legality and pattern detection are related but separate concerns.
 ## Built-in Score Modes (UI)
 
 Score mode presets used by the score page are defined in:
-`/Users/ConnorO/git_repos/just-cards/src/lib/session/score-session-commands.ts`
+`src/lib/session/score-session-commands.ts`
 
 - `Standard`: A=1, 2-10 face value, J/Q/K=11/12/13
 - `500 Rummy`: A=15, 2-10 face value, J/Q/K=10
@@ -205,7 +205,7 @@ const events = [
 
 These are good next extensions after scorekeeper MVP if needed.
 
-## Family entry and persistence (2026-09-17)
+## Family entry and persistence
 
 Guided profiles derive from explicit `tableRules` when available. Golf preserves
 six grid positions and cancels equal vertical pairs. Rummy sums contributed table
@@ -228,7 +228,7 @@ defaults to hidden, including in previously saved sessions. Golf column cancella
 and Rummy card totals remain in normal guided entry. Raw calculator sessions retain
 the generic pattern editor under **Advanced/custom scoring**.
 
-## Offline physical scoring (2026-09-17)
+## Offline physical scoring
 
 After loading the built app once online, the score page displays **Available offline
 on this device**. You can start a session, enter guided cards/manual values, undo,
@@ -259,7 +259,7 @@ The SvelteKit service worker precaches build assets and the scorekeeper shell. I
 never caches APIs or private room HTML. This provides offline physical scoring only;
 shared virtual games still require connectivity. A first visit cannot work offline.
 
-## Outcome and contract entry (2026-09-20)
+## Outcome and contract entry
 
 Guided profiles can specify `roundScoring: 'outcome' | 'solo_outcome' | 'contract'`.
 These replace rank-entry zones with result controls and hide unrelated pattern entry.
@@ -280,7 +280,7 @@ These are rubber scores, including honors, not duplicate scores. There is no bon
 settlement for an unfinished rubber. The virtual table and physical contract inputs
 call the same arithmetic function; score state remains derived from immutable events.
 
-## Stable score display (2026-10-30)
+## Stable score display
 
 Current score uses the same player roster order as round entry. Rows never move
 based on totals. Separate ordinal labels use the configured low/high-win direction;

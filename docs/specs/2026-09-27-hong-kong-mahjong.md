@@ -1,8 +1,5 @@
 # Hong Kong mahjong: guided tiles and physical scoring
 
-_Status: Complete_
-_Date: 2026-09-27_
-
 ## Intent
 Enable families to learn and play four-player Hong Kong mahjong on phones, or score physical games. Preserve existing card rules, serialized rooms and score events.
 
@@ -29,10 +26,3 @@ Inventory, decomposition ambiguity, limit hands, invalid copies, threshold and p
 
 ## Rollback
 Do not deploy as part of implementation. New capability is isolated and optional; remove its catalog entry to stop creating new games without changing existing card rooms. Preserve support for already saved tile rooms when deploying future versions.
-
-## Verification outcome
-- `npm test`: 355 passing tests across 63 files, including the regression for a sequence claim that would leave no legal discard.
-- `npm run check`: zero errors and warnings. `npm run build`: passed.
-- Four mobile browser contexts completed 482 table actions, a full hand, result reload, next deal and room closure; both physical scoring entry methods passed. No browser errors or horizontal overflow.
-- Browser regressions passed for Golf, Rummy 500, Solitaire, both Palace presets and Bridge. See [mahjong verification](../mahjong.md#verification).
-- Changes remain on `codex/hong-kong-mahjong`; no production deployment.

@@ -2,16 +2,18 @@
 
 This file defines how coding agents should operate in this repository.
 
+All file paths in these instructions are relative to the repository root.
+
 ## Read Order
 
 Before making code changes, read in this order:
 
-1. `/Users/ConnorO/git_repos/just-cards/docs/README.md`
-2. `/Users/ConnorO/git_repos/just-cards/docs/inspiration.md`
-3. `/Users/ConnorO/git_repos/just-cards/docs/architecture.md`
-4. `/Users/ConnorO/git_repos/just-cards/docs/ui-profile-v0.md` (required for ruleset-driven play UI work)
-5. `/Users/ConnorO/git_repos/just-cards/docs/ui-primitives-v0.md` (required for UI/style work)
-6. `/Users/ConnorO/git_repos/just-cards/AGENTS.md`
+1. `docs/README.md`
+2. `docs/inspiration.md`
+3. `docs/architecture.md`
+4. `docs/ui-profile-v0.md` (required for ruleset-driven play UI work)
+5. `docs/ui-primitives-v0.md` (required for UI/style work)
+6. `AGENTS.md`
 
 ## Project Mission and Scope
 
@@ -51,12 +53,12 @@ Default assumption: Cloudflare-first and JavaScript/TypeScript-first unless arch
 ## UI Primitive Contract (Required)
 
 1. Use shared UI primitives from:
-   `/Users/ConnorO/git_repos/just-cards/docs/ui-primitives-v0.md`
+   `docs/ui-primitives-v0.md`
 2. Use semantic token variables/classes (`--jc-*`, `jc-*`) instead of introducing one-off hex colors or ad-hoc control styles.
 3. If a new semantic color/typography/motion token is needed, add it in:
-   `/Users/ConnorO/git_repos/just-cards/src/lib/ui/design-primitives.ts`
+   `src/lib/ui/design-primitives.ts`
    and update tests in:
-   `/Users/ConnorO/git_repos/just-cards/src/lib/ui/design-primitives.test.ts`
+   `src/lib/ui/design-primitives.test.ts`
 4. Preserve accessibility guarantees:
    - maintain WCAG contrast test pass state
    - keep touch targets at least `44px` for interactive controls
@@ -95,7 +97,7 @@ Definition of done for a TDD task:
 3. No unrelated refactors are mixed in.
 4. `npm run check` and `npm run build` pass locally.
 
-Use `/Users/ConnorO/git_repos/just-cards/docs/templates/tdd-spec-template.md` as the default spec format.
+Use `docs/templates/tdd-spec-template.md` as the default spec format.
 
 ## What Not To Do
 

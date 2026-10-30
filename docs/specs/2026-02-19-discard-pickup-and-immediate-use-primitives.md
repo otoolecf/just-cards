@@ -1,10 +1,6 @@
 # TDD Spec: discard-pickup-and-immediate-use-primitives
 
-_Status: Completed_
-_Owner: Connor + agents_
-_Date: 2026-02-19_
-
-## 1) Intent
+## Intent
 
 Support games like 500 Rum without hardcoded game logic by adding generalized primitives for:
 1. drawing from a non-top visible card in a table zone (usually discard),
@@ -13,7 +9,7 @@ Support games like 500 Rum without hardcoded game logic by adding generalized pr
 
 This must remain ruleset-driven and reusable for other variants with similar discard-pickup mechanics.
 
-## 2) In Scope
+## In Scope
 
 - Extend `gameplay/v0` with source-specific draw constraints under turn-action policy.
 - Track pending draw anchor card identity for immediate-use enforcement.
@@ -21,13 +17,13 @@ This must remain ruleset-driven and reusable for other variants with similar dis
 - Update ruleset extraction/compile pipeline to detect and emit discard pickup semantics from prose.
 - Update play table UI to allow selecting visible discard cards for draw when configured.
 
-## 3) Out of Scope
+## Out of Scope
 
 - Full custom scripting for arbitrary conditional actions.
-- Enforcing “must immediately meld” against complex meld validator semantics in this pass.
+- Enforcing “must immediately meld” against complex meld validator semantics.
 - Multiplayer server authority changes.
 
-## 4) Expected Outcomes
+## Expected Outcomes
 
 1. Rulesets can express draw-source rules per zone (single-top draw or visible-card pickup run).
 2. Engine rejects illegal non-contiguous discard pickups.
@@ -35,7 +31,7 @@ This must remain ruleset-driven and reusable for other variants with similar dis
 4. UI allows tapping visible discard cards to draw selected+above run when profile says `any_visible`.
 5. 500 Rum generated ruleset includes these primitives and behaves serviceably in play UI.
 
-## 5) Acceptance Criteria
+## Acceptance Criteria
 
 - [x] `GameplayRulePack.turnActionPolicy` supports per-source draw rules.
 - [x] `GameplayState.turnActionState` tracks required resolve anchor card when configured.
@@ -44,7 +40,7 @@ This must remain ruleset-driven and reusable for other variants with similar dis
 - [x] Play UI can initiate discard pickup from selected visible discard card.
 - [x] Ruleset generator emits source draw rules for 500-Rum-like wording.
 
-## 6) Data and Rules
+## Data and Rules
 
 - New/extended primitives:
   - `gameplay/v0`:
@@ -63,7 +59,7 @@ This must remain ruleset-driven and reusable for other variants with similar dis
       - `requireTakeAbove?`
       - `requireResolveIncludesPicked?`
 
-## 7) Test Plan (Red -> Green)
+## Test Plan (Red -> Green)
 
 ### Unit Tests
 
@@ -77,28 +73,19 @@ This must remain ruleset-driven and reusable for other variants with similar dis
 
 - [x] play table source includes any-visible draw interaction hooks.
 
-## 8) Planned Files
+## Planned Files
 
-- `/Users/ConnorO/git_repos/just-cards/src/lib/gameplay/engine.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/gameplay/engine.test.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/ui/ui-profile.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/ui/ui-profile.test.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/gameplay/play-surface-profiles.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/gameplay/play-surface-profiles.test.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/components/play-table.svelte`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/components/play-table-style-contract.test.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/generator.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/generator.test.ts`
-- `/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/llm-agent.ts`
-- `/Users/ConnorO/git_repos/just-cards/docs/gameplay-v0.md`
-- `/Users/ConnorO/git_repos/just-cards/docs/ui-profile-v0.md`
-- `/Users/ConnorO/git_repos/just-cards/docs/primitives-kb-v0.md`
-
-## 9) Verification Checklist
-
-- [x] Tests written before implementation
-- [x] Tests fail first (red)
-- [x] Implementation added (green)
-- [x] Refactor performed with tests still passing
-- [x] `npm run check` passes
-- [x] `npm run build` passes
+- `src/lib/gameplay/engine.ts`
+- `src/lib/gameplay/engine.test.ts`
+- `src/lib/ui/ui-profile.ts`
+- `src/lib/ui/ui-profile.test.ts`
+- `src/lib/gameplay/play-surface-profiles.ts`
+- `src/lib/gameplay/play-surface-profiles.test.ts`
+- `src/lib/components/play-table.svelte`
+- `src/lib/components/play-table-style-contract.test.ts`
+- `src/lib/rulesets/generator.ts`
+- `src/lib/rulesets/generator.test.ts`
+- `src/lib/rulesets/llm-agent.ts`
+- `docs/gameplay-v0.md`
+- `docs/ui-profile-v0.md`
+- `docs/primitives-kb-v0.md`

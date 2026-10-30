@@ -15,7 +15,7 @@ This document defines the offline golden-eval harness used to validate ruleset e
 3. `https://www.pagat.com/beating/shithead.html`
 
 Stored fixture snapshots live in:
-`/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/evals/fixtures`
+`src/lib/rulesets/evals/fixtures`
 
 ## Evaluation Contract
 
@@ -32,11 +32,11 @@ Each golden case asserts required signals such as:
 
 ## Runner
 
-- implementation: `/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/golden-evals.ts`
-- tests: `/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/golden-evals.test.ts`
+- implementation: `src/lib/rulesets/golden-evals.ts`
+- tests: `src/lib/rulesets/golden-evals.test.ts`
 - command: `npm run test:golden`
 - bundle confidence implementation used by each case:
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/confidence.ts`
+  - `src/lib/rulesets/confidence.ts`
 
 ## LLM Readiness Gate
 

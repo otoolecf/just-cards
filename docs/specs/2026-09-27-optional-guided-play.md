@@ -1,8 +1,5 @@
 # TDD Spec: Optional guided play
 
-_Status: Complete_
-_Date: 2026-09-27_
-
 ## Intent
 Games should open in normal play. Learning assistance is a personal display preference, not a distinct game or ruleset.
 
@@ -23,9 +20,3 @@ Use a versioned browser preference key. Missing, malformed or inaccessible stora
 
 ## Rollback
 Revert presentation and preference changes; no room or scoring migrations are required.
-
-## Verification
-- Preference tests first failed on the missing module, then passed after implementation.
-- All 358 tests across 64 files pass. `npm run check` reports zero errors/warnings; `npm run build` passes.
-- `tests/browser/guided_mode_smoke.py`: seven built-in presets verified on a local Wrangler preview at 390px. Normal defaults, visible guidance on opt-in, unchanged controls, reload/opt-out/cross-game persistence, separate-viewer independence, and a Solitaire stock draw passed. No page overflow or browser errors.
-- Local preview rebuilt and restarted with its existing saved room data. No production deployment.

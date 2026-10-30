@@ -10,8 +10,8 @@ This document defines the visual primitive layer for `just-cards` UI.
 
 ## Source of Truth
 
-- Token + contrast logic: `/Users/ConnorO/git_repos/just-cards/src/lib/ui/design-primitives.ts`
-- Global token export + utility classes: `/Users/ConnorO/git_repos/just-cards/src/app.css`
+- Token + contrast logic: `src/lib/ui/design-primitives.ts`
+- Global token export + utility classes: `src/app.css`
 
 ## Agent Workflow Contract
 
@@ -86,7 +86,7 @@ Keep visual decisions conservative and consistent with this tone.
 4. Add contrast pairs/tests before introducing new semantic colors.
 5. Reuse shared motion and typography tokens for transitions/headings/body text.
 
-## Card and entry primitives (2026-09-17)
+## Card and entry primitives
 
 - `CardTile` uses `jc-card`, `jc-card-back`, `jc-card-red`, and `jc-card-selected`
   from the shared stylesheet. Existing semantic tokens supply all colors. Cards
@@ -127,7 +127,7 @@ retain 44px targets. Score sync status announces device saves, pending changes a
 conflicts; recovery is an explicit action. CardTapInput's `columnPairs` hint follows
 the active scoring policy rather than assuming every grid cancels matching columns.
 
-### Capability boards (2026-09-20)
+### Capability boards
 
 Patience, shedding and contract boards reuse `CardTile`, `ScoreButton`, `jc-panel`,
 `jc-control` and semantic colors. Solitaire keeps at least 44px of each selectable
@@ -136,7 +136,7 @@ an explicit narrow-screen hint. Foundations use two columns on mobile and four o
 wider screens. Bridge partnership panels and hands wrap; selection uses the existing
 card-selected primitive. No new color or motion tokens are introduced.
 
-### Mahjong tiles (2026-09-27)
+### Mahjong tiles
 
 `MahjongTile` supplies original inline SVG dots, bamboo, character, wind and dragon
 faces. It uses existing surface/brand/text/error tokens, an optional plain-language
@@ -145,15 +145,29 @@ Interactive tiles are at least 52px wide and 82px tall; racks wrap within the mo
 page. The shared tile component serves live play and physical scoring. No new color
 or motion tokens are introduced. Gameplay controls reuse ScoreButton.
 
-### Guided mode toggle (2026-09-27)
+### Guided mode toggle
 
 `GuidedModeToggle` is shared by live rooms and draft previews. Its native checkbox
 uses a labelled 44px-minimum touch target and semantic text tokens. Normal mode is
 the default; optional teaching text follows the bound personal preference. Essential
 status, errors, controls and the rules disclosure remain usable in normal mode.
 
-### Stable score rows (2026-10-30)
+### Stable score rows
 
 Scorekeeper totals follow entry roster order, with separate ordinal rank text using
 existing muted-text and small-type tokens. The list is unordered so row position
 cannot imply rank. Leader styling follows computed rank, including ties.
+
+### Shared source footer
+
+The root layout includes a centered “Source on GitHub” link below route content.
+It reuses `jc-mode-link` for a minimum 44px touch target and the shared muted text
+and small typography tokens. It retains the global focus indicator and opens a
+separate tab with `noopener noreferrer` so an active game remains open.
+
+### Project disclosure
+
+The shared footer offers a native, initially collapsed “About this project”
+details/summary above the source link. Its summary is at least 44px high, retains
+the global keyboard focus treatment, and uses the footer's existing muted text
+and small typography tokens. Expanded copy wraps inside a bounded reading width.

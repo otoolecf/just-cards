@@ -1,14 +1,10 @@
 # TDD Spec: mcp-apps-render-surfaces
 
-_Status: Complete_
-_Owner: Codex_
-_Date: 2026-02-20_
-
-## 1) Intent
+## Intent
 
 Just Cards already exposes MCP tools/resources for ruleset generation and gameplay state, but chat hosts that support MCP Apps need UI-bound tools/resources so users can see structured game visuals directly in-chat. This feature adds MCP Apps-compatible render surfaces for game table state and score leaderboard state while preserving existing query/explore MCP flows. The goal is to let chat users inspect hands/table zones and standings without leaving the chat context.
 
-## 2) In Scope
+## In Scope
 
 - Add MCP Apps render tools for:
   - game table surface (cards/hands/table/seats)
@@ -17,19 +13,19 @@ Just Cards already exposes MCP tools/resources for ruleset generation and gamepl
 - Attach MCP Apps metadata to render tools in the FastMCP bridge.
 - Preserve existing MCP tools/resources and compatibility API routes.
 
-## 3) Out of Scope
+## Out of Scope
 
 - Full multiplayer real-time widget syncing.
 - Replacing existing web `/play` or scorekeeper pages.
 - Adding game-specific hardcoded rendering branches.
 
-## 4) Expected Outcomes
+## Expected Outcomes
 
 1. MCP Apps-capable clients discover render tools with UI metadata and can load corresponding `ui://` resources.
 2. Render tools return deterministic, ruleset-driven view payloads suitable for in-chat display.
 3. Existing MCP query/explore tools remain unchanged and operational.
 
-## 5) Acceptance Criteria
+## Acceptance Criteria
 
 - [x] `tools/list` includes render tools for play table and score leaderboard.
 - [x] Render tools publish MCP Apps metadata with a `ui://` resource URI.
@@ -38,7 +34,7 @@ Just Cards already exposes MCP tools/resources for ruleset generation and gamepl
 - [x] Render leaderboard tool output includes sorted standings (respecting configured win direction).
 - [x] Existing MCP tools (`generate_ruleset`, `start_game`, `submit_move`, etc.) still pass tests.
 
-## 6) Data and Rules
+## Data and Rules
 
 - Rule/data inputs:
   - Existing MCP game snapshots (`gameStore`) + ruleset bundles (`RulesetService`)
@@ -48,7 +44,7 @@ Just Cards already exposes MCP tools/resources for ruleset generation and gamepl
   - Win direction drives leaderboard sort (`high_wins` descending, `low_wins` ascending).
   - Render payloads are serializable and not tied to one game’s custom logic.
 
-## 7) Test Plan (Red -> Green)
+## Test Plan (Red -> Green)
 
 List tests before implementation.
 
@@ -63,7 +59,7 @@ List tests before implementation.
 
 - [ ] `mcp_streamable_http_can_call_render_tools`: end-to-end initialize -> tools/call for render tools returns expected payload.
 
-## 8) Implementation Notes
+## Implementation Notes
 
 Keep short and concrete. Include touched files/modules and why.
 
@@ -80,16 +76,7 @@ Keep short and concrete. Include touched files/modules and why.
   - Keep tool output data-driven using existing gameplay/session primitives.
   - Maintain compatibility with existing auth-protected MCP endpoints.
 
-## 9) Verification Checklist
-
-- [x] Tests written before implementation
-- [x] Tests fail first (red)
-- [x] Implementation added (green)
-- [x] Refactor performed without changing behavior
-- [x] `npm run check` passes
-- [x] `npm run build` passes
-
-## 10) Rollback Plan
+## Rollback Plan
 
 If behavior fails in real usage, how to disable/revert safely?
 

@@ -115,7 +115,7 @@ Provider response bodies are not copied into diagnostics.
 
 Reviewed Bicycle snapshots remain a disclosed availability fallback for Golf and
 500 Rum when the reference site returns 403, 429 or selected temporary failures.
-They are paraphrases reviewed on 2026-09-17, not live page content. Snapshot diagnostics
+They are reviewed paraphrases, not live page content. Snapshot diagnostics
 remain visible. Other blocked sources require pasted rules.
 
 Run `npm test`, `npm run check`, `npm run build` and the Playwright import/review flow.
@@ -123,7 +123,7 @@ Model transport tests use controlled responses, so a passing suite does not by i
 
 The default primary and fallback are both `gpt-5-mini` and deduplicated into one provider sequence; operators may configure a different fallback. Live Golf and Rummy checks motivated this default: mini produced valid policies while nano failed compatibility checks.
 
-### New curated game families (2026-09-20)
+### New curated game families
 
 The shared table schema now describes patience, shedding and rubber-contract
 capabilities. Built-in presets exercise these through separate engine regression

@@ -1,10 +1,8 @@
 # TDD Spec: First public family deployment
 
-_Status: Complete_
-
 ## Intent
-Publish the existing tested family card app on Cloudflare's workers.dev address.
-Protect shared library names and removals before sharing it beyond this computer.
+Publish the family card app on Cloudflare's workers.dev address.
+Protect shared library names and removals for public access.
 
 ## Expected outcomes
 - Public users can read games, favorite them locally, duplicate them, create house
@@ -29,15 +27,3 @@ Inspect the account/resources before creating the app. Apply D1 schema before
 exposing the final app. Keep previous Durable Object migrations. If live validation
 fails, fix and redeploy or disable the worker route; never delete game storage as a
 rollback. Keep deployment resource identifiers in ignored local configuration.
-
-## Verification results
-- The new policy test failed before implementation and passes afterward.
-- 327 tests across 61 files pass; `npm run check` and `npm run build` pass.
-- Eight relevant local browser regressions pass, including owner-managed library
-  deletion, public gameplay, private recovery, and disconnected-host takeover.
-- Production deployment succeeded at https://just-cards.otoolecf.workers.dev.
-- The native Playwright deployment smoke passed with two mobile contexts, live
-  WebSockets, a complete Golf round, scoring, reload, and end-game cleanup.
-- Anonymous AI and catalog edits are denied, owner edits succeed, and the owner
-  cookie is Secure/HttpOnly/SameSite=Strict. Temporary test ruleset deleted.
-- Owner/provider secrets uploaded without printing values; upload file removed.

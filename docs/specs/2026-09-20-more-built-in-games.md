@@ -1,6 +1,4 @@
 # TDD Spec: Solitaire, rubber Bridge, and Palace
-_Status: Complete_
-_Date: 2026-09-20_
 
 ## Intent
 Add playable built-ins using reusable rules-as-data capabilities, retaining existing
@@ -43,25 +41,6 @@ physical score input where card-value addition is inappropriate. Preserve old im
 never approve a new unsupported rule through old behavioral checks.
 Run unit/check/build and isolated Worker browser tests for all three, mobile visuals,
 and existing Golf/Rummy/offline-score regressions. Update docs with exact scope.
-
-## Verification
-- `npm test`: 310 tests across 57 files pass. New coverage includes complete
-  Palace deals at every supported player count, complete Bridge trick play, auction
-  legality and passed-out hands, deterministic replay, conservation, privacy,
-  Solitaire moves/win/concede/recycle, Bridge arithmetic, offline contract events,
-  partnership roster protection and saved Palace switches.
-- `npm run check`: zero errors and warnings. `npm run build`: passes.
-- Five new Worker browser tests pass on the final build: Solitaire draw/move/undo/
-  rematch, two-phone Palace setup, four-phone Bridge auction/dummy control, offline
-  Bridge scoring/undo/redo/reload, physical outcomes and saved Palace variants.
-- Eleven existing Golf/Rummy, offline/house-rule, library and interruption browser
-  regressions pass. The disconnect alarm case timed out in the parallel run and
-  passed in an isolated rerun; no presence implementation was changed for this task.
-- Mobile visual inspection at 390px: all three boards and Bridge scoring fit the
-  page; controls are at least 44px high; no browser errors. Solitaire columns scroll
-  inside the board and foundations fit a two-column grid.
-- Main local Worker restarted on port 8787. Browser mutations used an isolated QA
-  Worker on 8788; existing user games/catalog entries were preserved.
 
 ## Deliberate boundaries
 Four humans are required for virtual Bridge; no bots, duplicate scoring or unfinished

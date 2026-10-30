@@ -1,7 +1,5 @@
 # TDD Spec: Ruleset-controlled pattern round entry
 
-_Status: Complete_
-
 ## Intent
 
 Hide unrelated pattern scoring in Golf and other guided games. Represent the need
@@ -25,11 +23,3 @@ Test schema validation, preset generation, explicit opt-in, legacy default and J
 round-trip. Browser-test Golf absence after creation/reload and explicit custom
 opt-in presence. Update the raw scoring browser flow for its advanced disclosure.
 Run unit tests, check, build and browser tests against the built Worker.
-
-## Verification
-
-Four capability tests failed before implementation and now pass. All 247 unit tests
-pass; check reports zero errors/warnings and build passes. Seven scoring browser
-tests pass on both Vite/SQLite and the Worker, covering Golf/Rummy, legacy saved
-sessions, custom opt-in, raw advanced entry and reload. The local Worker runs the
-updated build; existing score sessions require no migration.

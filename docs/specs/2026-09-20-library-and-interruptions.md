@@ -1,8 +1,5 @@
 # TDD Spec: Organizing rulesets and interrupted games
 
-_Status: Complete_
-_Date: 2026-09-20_
-
 ## Intent and agreed behavior
 Make the family library manageable and let a table survive people leaving or
 switching phones. Users approved private recovery links without accounts, pausing
@@ -49,22 +46,3 @@ All room mutations retain atomic revision and idempotency checks.
   cannot steal another seat by guessing IDs; idempotent retry and secret redaction.
 - Disconnect/reconnect grace, presence updates, replacement and host transfer work
   across real browser contexts and stored room restart.
-
-## Verification
-- Red: catalog and interruption tests failed against the original store/room APIs
-  before implementing metadata updates, roster boundaries, pause and recovery.
-- Green: `npm test` — 290 tests across 55 files pass. Coverage includes all three
-  catalog adapters, stale metadata rejection, builtin protection, blocked-copy
-  readiness, recovery hashing/rotation/retry, score undo and legacy deal replay.
-- `npm run check` — zero errors and warnings; `npm run build` passes.
-- Built Worker: all 23 Playwright tests pass against isolated local D1/DO storage,
-  including library updates in both modes, roster changes between rounds, old-phone
-  revocation, transfer/undo, clean-disconnect pause and host takeover. Import tests
-  use deterministic extraction; this task does not change live AI generation.
-- Full Worker process restart: paused Rummy seat, exact hand and pending drawn card
-  survive; a previously issued private link claims the seat and revokes the old token.
-- Python Playwright mobile review at 390px: library and paused-table screenshots
-  inspected; no horizontal overflow or browser errors; control targets at least 44px.
-- Applied the additive catalog migration to the existing local D1 database and
-  restarted the user's Worker on port 8787. QA uses port 8788 and separate persistence.
-- No deployment, account system, or automatic multiplayer offline play added.

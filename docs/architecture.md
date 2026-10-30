@@ -1,6 +1,4 @@
-# Just Cards Architecture (Planning Draft)
-
-_Last updated: September 17, 2026_
+# Just Cards Architecture
 
 ## Goal
 
@@ -67,7 +65,7 @@ Event log model:
 - `redo`
 - `correction`
 
-#### Scorekeeper UI decisions (2026-02-17)
+#### Scorekeeper UI decisions
 
 - `bits-ui` is used for select-like interactions and tab-like controls to keep accessible primitives and consistent behavior across form controls:
   - `Select.Root` + `Select.Trigger` + `Select.Content` + `Select.Item`.
@@ -84,7 +82,7 @@ SQLite in the Worker. Totals remain derived from the event log.
 Derived standings are recomputed from events, reducing data corruption risk.
 
 Score rule abstraction details and examples live in:
-`/Users/ConnorO/git_repos/just-cards/docs/scorekeeper-rules.md`
+`docs/scorekeeper-rules.md`
 
 ## Rules-as-Data Foundation
 
@@ -115,7 +113,7 @@ Gameplay-state mechanics are tracked through a separate `gameplay/v0` abstractio
 - hand/table/meld/discard zone transitions
 
 See:
-`/Users/ConnorO/git_repos/just-cards/docs/gameplay-v0.md`
+`docs/gameplay-v0.md`
 
 ### Rule execution primitives
 
@@ -148,13 +146,13 @@ Example mappings:
 - Crib/kitty scores can accrue to a `pool` target, then settle to dealer/team on trigger.
 
 Canonical Rule IR details are documented in:
-`/Users/ConnorO/git_repos/just-cards/docs/rulepack-v0.md`
+`docs/rulepack-v0.md`
 
 Canonical LLM/SLM primitive authoring reference is documented in:
-`/Users/ConnorO/git_repos/just-cards/docs/primitives-kb-v0.md`
+`docs/primitives-kb-v0.md`
 
 Ruleset persistence abstraction (local SQLite and a deployed D1 adapter) is documented in:
-`/Users/ConnorO/git_repos/just-cards/docs/ruleset-storage-v0.md`
+`docs/ruleset-storage-v0.md`
 
 ## Future Rule Ingestion Pipeline
 
@@ -205,14 +203,14 @@ Safety requirements:
 
 ### PWA and mobile friendliness status
 
-- The built scorekeeper uses `static/manifest.webmanifest` and the automatically registered `src/service-worker.ts` for offline shell/assets. A device score-event outbox supports offline entry and safe reconnect (see the September 17 update below).
+- The built scorekeeper uses `static/manifest.webmanifest` and the automatically registered `src/service-worker.ts` for offline shell/assets. A device score-event outbox supports offline entry and safe reconnect (see offline scoring below).
 - `/play` is the family lobby with a persisted game catalog, URL/text import and recent-room resume. `/play/room/{code}` renders authoritative shared games with live private/public cards.
 - `/play/[rulesetId]` loads a persisted bundle. Supported table policies open a shared-game lobby; other bundles remain explicitly labelled draft previews.
 - Shared rooms include a rules guide, scoring values/defaults and round history. Draft previews retain their guide/audit tab from bundle explainability data.
 - Play surface labels are configurable per zone (`board`, `discard`, etc.) at the view-model layer so future generated games can rename UI semantics without changing gameplay primitive IDs.
 - Play surface zone visibility and hints are profile-driven (visible-zone list + label/hint maps), allowing game-specific zone UX without game-specific rendering code branches.
 - UI visual design primitives are centralized (shared token layer + contrast tests) to keep Score/Play surfaces consistent as generated game UIs expand:
-  - `/Users/ConnorO/git_repos/just-cards/docs/ui-primitives-v0.md`
+  - `docs/ui-primitives-v0.md`
 - Control sizing is normalized for touch:
   - `min-height: 44px` for entry controls and buttons.
   - clear tap-friendly spacing and compact layout breaks at mobile-first breakpoints.
@@ -264,18 +262,18 @@ Stay on Cloudflare unless one of these appears:
 
 Otherwise, keep architecture simple and continue on Cloudflare.
 
-## Implemented family play slice (2026-09-17)
+## Shared family play
 
 See [Shared table v1](./shared-table-v1.md) for executable policy, APIs, privacy,
-storage boundaries, verified games, and remaining work. `runtimeRulePack.tableRules`
+storage boundaries, supported games, and limitations. `runtimeRulePack.tableRules`
 is optional within `runtime-bundle/v1`; legacy gameplay events and MCP previews remain
 compatible. Supported games use shared rooms instead of the client-local demo.
 
-## Structured import validation (2026-09-17)
+## Structured import validation
 
 Website and MCP generation share a strict `rule-extraction/v1` contract and pipeline. Model output includes executable `table-rules/v1`, complete rank values and source evidence. Separate source review and actual-engine behavioral checks produce persisted `rule-validation/v1` metadata. Imported rules require readiness before shared room creation; accepting assumptions reruns validation and saves an immutable copy. See [ruleset generation](./ruleset-generation-v0.md), which supersedes the earlier facts-only extraction scaffold described above.
 
-## Device score outbox and manual variants (2026-09-17)
+## Device score outbox and manual variants
 
 Physical scoring now has an event-derived device snapshot/outbox with idempotent
 sync, event-count conflict detection, cross-tab Web Locks, and explicit conflict
@@ -288,8 +286,7 @@ with parent provenance and fresh behavioral reports, saved through RulesetStore.
 The same variants drive new shared rooms and guided scoring. See
 [the feature spec](./specs/2026-09-17-offline-and-house-rules.md).
 
-
-### Library metadata and interrupted rooms (2026-09-20)
+### Library metadata and interrupted rooms
 
 RulesetStore now offers compare-and-set metadata updates for shared names/archive
 flags. Favorites live in browser preferences; canonical bundles and existing game
@@ -301,7 +298,7 @@ Durable Object revokes old sockets and uses presence alarms to pause disconnecte
 tables. See [Shared table v1](./shared-table-v1.md) and
 [Ruleset storage](./ruleset-storage-v0.md) for contracts and user behavior.
 
-### Additional card families (2026-09-20)
+### Additional card families
 
 `table-engine` dispatches to `additional-table` using mutually exclusive patience,
 shedding or contract policies. `contract-scoring` is a pure shared rubber scorer used
@@ -320,7 +317,7 @@ The server hook limits AI generation and MCP/chat entry points to signed owner
 sessions or owner-key headers. Family play remains account-free. Configuration,
 failure semantics, privacy, and deployment details: [public rooms](./public-rooms.md).
 
-### Tile capabilities (2026-09-27)
+### Tile capabilities
 
 An optional `tileMahjong` policy dispatches to the tile engine alongside existing
 card capabilities. Tile faces/identities are separate types; old card ranks, stored

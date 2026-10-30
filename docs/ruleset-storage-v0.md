@@ -24,6 +24,9 @@ queries preserve source URLs, notes and timestamps. Duplicate IDs cannot overwri
 
 ## Schema and deployment
 
+For a new installation, follow the explicit [deployment guide](./deployment.md),
+which provisions D1 and applies migrations before publishing the Worker.
+
 `migrations/0001_rulesets.sql` defines the D1 schema and its ordering index.
 
 - `npm run cf:migrate:local` applies migrations to Wrangler's local D1 simulation.
@@ -43,7 +46,7 @@ changes cannot change games already in progress.
 
 New imports optionally carry `generationReport` (`rule-validation/v1`) inside `runtime-bundle/v1`. Storage validates report shape and policy/scoring snapshot consistency. Review acceptance saves a new record; the original draft and room snapshots remain immutable. No adapter or SQL schema change is needed.
 
-## Library organization (2026-09-20)
+## Library organization
 
 `RulesetRecord.archived` is catalog metadata. Migration `0002_ruleset_catalog.sql`
 adds the D1 column; the Node SQLite adapter upgrades existing local databases.

@@ -1,14 +1,10 @@
 # TDD Spec: scorekeeper-guided-raw-ruleset-scoring
 
-_Status: Complete_
-_Owner: Connor + agents_
-_Date: 2026-02-19_
-
-## 1) Intent
+## Intent
 
 Scorekeeper setup still depends on hardcoded game modes and hardcoded variant tabs, which blocks ruleset-driven scoring UX and creates drift between generated game rules and score entry behavior. We need a generic scoring setup where users choose either guided (ruleset-aware) or raw (calculator) input, and standings ordering follows explicit win-direction metadata rather than mode IDs. Guided mode should use ruleset primitives to render per-zone card entry and compute deltas without adding one-off game UI tabs.
 
-## 2) In Scope
+## In Scope
 
 - Add score session setup modes: `guided` and `raw`.
 - Remove hardcoded game mode options/tabs from score page (`standard/rummy/golf/cribbage`, `500 Rummy net`, `Six Card Golf hole`).
@@ -17,20 +13,20 @@ Scorekeeper setup still depends on hardcoded game modes and hardcoded variant ta
 - Persist scoring mode metadata in session config/view (`scoreInputMode`, `scoreWinDirection`, `scoreRulesetId`, guided profile).
 - Sort standings from explicit win direction metadata.
 
-## 3) Out of Scope
+## Out of Scope
 
 - Reworking gameplay runtime primitives.
 - Full automatic score extraction from live gameplay events.
 - New LLM extraction logic for scoring semantics.
 
-## 4) Expected Outcomes
+## Expected Outcomes
 
 1. Session creation supports `guided` (requires selected ruleset) and `raw` (calculator-first) without mode hardcoding.
 2. Guided add-round UI renders from ruleset-driven zone profile and posts computed `add_delta` events.
 3. Raw mode remains quick/manual via card rows, quick text, and direct deltas.
 4. Leaderboard ordering uses persisted win direction (`high_wins` or `low_wins`) independent of mode IDs.
 
-## 5) Acceptance Criteria
+## Acceptance Criteria
 
 - [x] Score page setup includes scoring mode selector and no hardcoded game-mode selector.
 - [x] Guided mode requires a ruleset and builds score session config from ruleset bundle primitives.
@@ -39,7 +35,7 @@ Scorekeeper setup still depends on hardcoded game modes and hardcoded variant ta
 - [x] Session API/store round-trips score config metadata needed to rehydrate guided/raw flows after join/reload.
 - [x] Standings sort uses `scoreWinDirection` and no longer depends on `scoreModeId`.
 
-## 6) Data and Rules
+## Data and Rules
 
 - Rule/data inputs:
   - `runtime-bundle/v1` (`runtimeRulePack`, `uiProfile`, optional `explain`)
@@ -50,7 +46,7 @@ Scorekeeper setup still depends on hardcoded game modes and hardcoded variant ta
   - Guided profile and win direction are explicit session config, not transient UI-only state.
   - Finite special scoring behavior is encoded as declarative primitive kinds, not game-name checks.
 
-## 7) Test Plan (Red -> Green)
+## Test Plan (Red -> Green)
 
 ### Unit Tests (expected to fail first)
 
@@ -64,31 +60,22 @@ Scorekeeper setup still depends on hardcoded game modes and hardcoded variant ta
 
 - [x] `score_page_contract_uses_guided_raw_setup_and_no_variant_tabs`: score page source reflects guided/raw setup and removes hardcoded variant tabs.
 
-## 8) Implementation Notes
+## Implementation Notes
 
 - Planned files:
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/session/score-session-commands.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/session/score-session-commands.test.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/session/session-store.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/session/session-store.test.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/session/score-session-api.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/routes/api/sessions/+server.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/routes/+page.svelte`
-  - `/Users/ConnorO/git_repos/just-cards/src/routes/score-page-contract.test.ts`
+  - `src/lib/session/score-session-commands.ts`
+  - `src/lib/session/score-session-commands.test.ts`
+  - `src/lib/session/session-store.ts`
+  - `src/lib/session/session-store.test.ts`
+  - `src/lib/session/score-session-api.ts`
+  - `src/routes/api/sessions/+server.ts`
+  - `src/routes/+page.svelte`
+  - `src/routes/score-page-contract.test.ts`
 - Constraints:
   - Use existing design tokens/classes and preserve 44px touch targets.
   - Keep rules data-driven and avoid game-name hardcoding in scoring logic.
 
-## 9) Verification Checklist
-
-- [x] Tests written before implementation
-- [x] Tests fail first (red)
-- [x] Implementation added (green)
-- [x] Refactor performed without changing behavior
-- [x] `npm run check` passes
-- [x] `npm run build` passes
-
-## 10) Rollback Plan
+## Rollback Plan
 
 - Revert score page to current mode-based setup and disable guided profile scoring path.
 - Keep persisted sessions readable by treating unknown config keys as optional/no-op.

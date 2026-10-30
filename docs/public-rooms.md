@@ -87,7 +87,7 @@ Existing MCP credentials alone do not grant owner access. Non-browser clients se
 requests are rejected. Non-AI MCP tools currently share this owner-only boundary;
 public family gameplay uses the regular room and score APIs.
 
-## Verification
+## Testing
 
 Spec: [public room capacity](./specs/2026-09-21-public-room-capacity.md).
 Unit tests cover admission transactions' pure mutation, managed lifecycle, owner
@@ -113,26 +113,11 @@ The existing `import-resume.spec.ts` browser tests require
 through the same owner endpoint as the UI. Keep provider keys empty for tests that
 should use the deterministic extraction fallback.
 
-## First production deployment
+## Deployment
 
-Live site: https://just-cards.otoolecf.workers.dev
+[Hosted app]({{PUBLIC_APP_URL}})
 
-The production Worker, D1 schema, room classes, and admission coordinator are
-provisioned. OWNER_ACCESS_KEY and OPENAI_API_KEY are Wrangler-managed secrets.
-The owner key is also in the ignored local `.dev.vars` file for the owner's use.
-The temporary bulk-secret upload file was removed after upload.
-
-The resolved production binding IDs and absolute local build paths are in ignored
-`.wrangler/production.json`. Keep resource/account identifiers out of Git. This
-file is a deployment snapshot: regenerate it from `wrangler.jsonc` when settings or
-bindings change, preserving the production database ID and resolving paths for the
-current checkout. For the current checkout, rebuild and deploy with
-`npx wrangler deploy --config .wrangler/production.json`. Apply future remote D1
-migrations with the same config before code that requires those schema changes.
-Do not point a development test at the production database.
-
-Local room history and custom rules were not copied to production. Built-in games
-are supplied by the deployed app. First-launch verification completed a real Golf
-round with two isolated mobile browser contexts, checked scores and reconnect,
-verified HTTPS owner cookies and anonymous write denial, then ended its test room
-and deleted its temporary ruleset. No paid AI generation was needed for verification.
+Set `PUBLIC_APP_URL` when running `npm run docs:build` to render the hosted-app
+link. Follow [Deploy to your own Cloudflare account](./deployment.md) to provision
+your Worker, D1 database and secrets. Local game history and custom rules are not
+copied to production; built-in games are supplied by the app.

@@ -65,4 +65,3 @@ Any architecture or feature decision should be evaluated by asking:
 2. Does it preserve social game flow (fast, clear, low setup)?
 3. Does it keep rules/scoring extensible to new games?
 4. Does it keep operational complexity low for a small project?
-

@@ -19,7 +19,7 @@ Use it as source-of-truth for:
   - pattern detector: `pattern/v0`
 
 Persistence of generated bundles is handled through `RulesetStore` abstraction;
-see `/Users/ConnorO/git_repos/just-cards/docs/ruleset-storage-v0.md`.
+see `docs/ruleset-storage-v0.md`.
 
 ## Shared Card and Target Types
 
@@ -420,7 +420,7 @@ LLM/SLM should generate one runtime bundle with this top-level shape:
 - Runtime trigger conditions are finite (event type, phase, optional zone filters).
 - Poker betting rounds, side pots, and showdown resolution are not yet first-class primitives.
 
-## Optional executable table policy (2026-09-17)
+## Optional executable table policy
 
 `RuntimeRulePack.tableRules?: TableRules` is the shared-room contract, validated by
 `src/lib/gameplay/table-rules.ts`. Its `table-rules/v1` schema expresses player

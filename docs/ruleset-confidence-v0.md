@@ -8,8 +8,8 @@ Validate that a `runtime-bundle/v1` is not only schema-valid, but also operation
 
 ## Evaluator
 
-- implementation: `/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/confidence.ts`
-- tests: `/Users/ConnorO/git_repos/just-cards/src/lib/rulesets/confidence.test.ts`
+- implementation: `src/lib/rulesets/confidence.ts`
+- tests: `src/lib/rulesets/confidence.test.ts`
 
 ## Confidence Check Categories
 

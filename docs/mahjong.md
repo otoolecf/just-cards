@@ -36,10 +36,6 @@ Physical score event `add_mahjong` includes the configured four players, copied 
 
 AI imports remain blocked for this capability until a dedicated source-review/behavioral import gate is added. A schema-valid candidate alone cannot claim to have passed that review.
 
-## Verification
+## Testing
 
 Tests cover inventory conservation, hidden-information projections, scoring and ambiguous decomposition, claims independent of arrival order, all quad types, robbed quads, complete exhausted-wall replay, payments, liability, dealer rotation, match completion, room pause/recovery/undo, offline scoring and old card capabilities. `tests/browser/mahjong_walkthrough.py` uses four mobile browser contexts and actual buttons for shared play and both physical entry methods. Existing card walkthroughs remain in `tests/browser/play_walkthrough.py`.
-
-Verified locally on 2026-09-27: all 355 tests across 63 files pass, and Svelte checking reports no errors or warnings. An isolated Wrangler preview completed 482 mahjong table actions, including a full exhausted-wall hand, results after reconnect, the next deal, and ending the room. Both quick-faan and tile-based physical scoring saved and survived reload. Four 390px browser contexts showed no horizontal page overflow or browser errors.
-
-Existing-game browser regressions also passed: Golf (19 actions), Rummy 500 (50), Solitaire (108), family Palace (96), Bicycle Palace (85), and Bridge (60). These exercise completed rounds, melds and layoffs, stock recycling, blind Palace cards, follow-suit and dummy play. No production deployment was performed.

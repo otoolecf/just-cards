@@ -1,14 +1,10 @@
 # TDD Spec: scorekeeper-round-entry
 
-_Status: In Progress_
-_Owner: Connor + agents_
-_Date: 2026-02-16_
-
-## 1) Intent
+## Intent
 
 Enable players to track card-game scores without pen and paper, with minimal manual math. The system should apply base card values plus ordered rule modifiers (including game-specific overrides), compute round totals, and maintain standings. It must also support undo/redo to recover from entry mistakes quickly.
 
-## 2) In Scope
+## In Scope
 
 - Rule-driven card value resolution for number cards and face cards.
 - Round scoring for multiple players from a set of cards.
@@ -16,20 +12,20 @@ Enable players to track card-game scores without pen and paper, with minimal man
 - Derived standings from an event stream.
 - Undo and redo for the most recent score events.
 
-## 3) Out of Scope
+## Out of Scope
 
 - Any UI beyond existing app scaffold.
 - Multiplayer sync, networking, or persistence layers (D1/Durable Objects).
 - Full game-rule parsing from external text/web pages.
 - Play legality validation (`canPlay`) and pattern detection (`whatPatternsExist`) beyond card-value scoring.
 
-## 4) Expected Outcomes
+## Expected Outcomes
 
 1. Given round card input, the engine returns per-player round totals and cumulative standings.
 2. Card values are controlled by the active `RulePack` (e.g., face cards as `10` or `11/12/13`, ace low or high).
 3. Undo/redo modifies derived standings predictably without mutating historical events.
 
-## 5) Acceptance Criteria
+## Acceptance Criteria
 
 - [ ] Rule pack supports configurable per-rank values (including face cards and ace).
 - [ ] Applying one round updates standings for all players in that round.
@@ -37,7 +33,7 @@ Enable players to track card-game scores without pen and paper, with minimal man
 - [ ] Undo removes the latest applied scoring change from derived standings.
 - [ ] Redo reapplies the last undone change and restores prior standings.
 
-## 6) Data and Rules
+## Data and Rules
 
 - Rule/data inputs:
   - `RulePack` with base rank values and ordered modifiers.
@@ -47,7 +43,7 @@ Enable players to track card-game scores without pen and paper, with minimal man
   - Standings are derived from events, not manually mutated totals.
   - Undo/redo affect only derivation state and preserve prior events.
 
-## 7) Test Plan (Red -> Green)
+## Test Plan (Red -> Green)
 
 List tests before implementation.
 
@@ -69,27 +65,18 @@ List tests before implementation.
 - [ ] `derive_standings_with_alternate_modifiers`: verifies same events derive differently under a different modifier set.
 - [ ] `derive_standings_with_per_card_designator_tags`: verifies tag-driven card overrides in a single event.
 
-## 8) Implementation Notes
+## Implementation Notes
 
 Keep short and concrete. Include touched files/modules and why.
 
 - Planned files:
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/scorekeeper/engine.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/scorekeeper/engine.test.ts`
+  - `src/lib/scorekeeper/engine.ts`
+  - `src/lib/scorekeeper/engine.test.ts`
 - Constraints:
   - Keep logic pure and deterministic with no network/storage dependencies.
   - Keep API minimal so later D1/DO adapters can wrap it.
 
-## 9) Verification Checklist
-
-- [x] Tests written before implementation
-- [x] Tests fail first (red)
-- [x] Implementation added (green)
-- [ ] Refactor performed without changing behavior
-- [x] `npm run check` passes
-- [x] `npm run build` passes
-
-## 10) Rollback Plan
+## Rollback Plan
 
 If behavior fails in real usage, how to disable/revert safely?
 

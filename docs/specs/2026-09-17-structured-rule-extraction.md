@@ -1,8 +1,5 @@
 # TDD Spec: Structured rule extraction and behavioral review
 
-_Status: Complete_
-_Date: 2026-09-17_
-
 ## Intent
 Transform source prose into the existing executable primitives through a shared, versioned contract. Distinguish engine correctness from fidelity to the source, and expose assumptions instead of silently advertising every import as playable.
 
@@ -32,17 +29,8 @@ Canonical stored payload remains runtime-bundle/v1 with optional generationRepor
 ## Rollback
 Use builtin presets or previously saved rooms. New imported drafts remain inspectable without enabling room creation. Revert extraction integration without altering event logs or stored room snapshots.
 
-## Browser verification finding
-The actual Worker suite exposed a pre-existing disconnect error: hibernating sockets
-can report reserved close status 1005, which cannot be sent in a close frame. Add a
-small tested close-code normalizer so browser disconnects do not throw during review
-and multiplayer validation. Browser import waits must allow bounded model latency.
+## WebSocket disconnect handling
 
-## Verification results
-
-- Red-first contract, review gate, evidence-path, compatibility-diagnostic and disconnect regression tests captured before their implementations.
-- 268 unit/integration tests; type check and production build pass.
-- Worker browser suite: 15 checks including full multiplayer Rummy play, privacy and scorekeeping.
-- Live model extraction verified for Golf and Rummy. Golf passed six seeded round simulations; Rummy passed twelve and preserved 13 cards for two players, suffix pickup, immediate use, meld/layoff policy and signed net scoring. Source uncertainties remained visible for review.
-- Mobile browser verified saved review, explicit acceptance and room creation; expanded model commentary collapsed for readability.
-- Model fallback and source-review repair both exercised live. Default model set to the successfully evaluated mini model.
+Hibernating sockets can report reserved close status 1005, which cannot be sent
+in a close frame. Normalize reserved close codes before responding. Browser import
+waits must allow bounded model latency.

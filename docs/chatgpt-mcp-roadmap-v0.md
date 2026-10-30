@@ -112,7 +112,7 @@ Enable users to:
 2. ChatGPT can generate and open playable rulesets from URL/prose with explainable diagnostics.
 3. AI-assisted move suggestions are always validated by server gameplay rules before state mutation.
 
-## Current Implementation Snapshot (2026-02-20)
+## MCP implementation
 
 Delivered endpoints:
 

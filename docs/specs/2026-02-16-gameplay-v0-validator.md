@@ -1,10 +1,6 @@
 # TDD Spec: gameplay-v0-validator
 
-_Status: Draft_
-_Owner: Connor + agents_
-_Date: 2026-02-16_
-
-## 1) Intent
+## Intent
 
 Add a reusable validation primitive for gameplay actions so card games can enforce move legality without hardcoding rules per game.
 Examples include:
@@ -13,7 +9,7 @@ Examples include:
 - Golf/other games: a play may require a minimum card count and specific rank constraints.
 - Optional context gates (phase/actor) without coupling to one game.
 
-## 2) In Scope
+## In Scope
 
 - Validate proposed play actions (`cards` + `actionType` + `actor`) against a validator rule pack.
 - Support composable match semantics (`all`, `any`) over:
@@ -24,19 +20,19 @@ Examples include:
 - Strict vs non-strict schema behavior.
 - Return stable validation issues for failed actions.
 
-## 3) Out of Scope
+## Out of Scope
 
 - Score calculation (`scorekeeper` module).
 - Multiplayer transport/persistence.
 - Complex wild-card / jokers / trump-specific modifiers (future extension).
 
-## 4) Expected Outcomes
+## Expected Outcomes
 
 1. Gameplay actions can be validated against game-specific declarative rules.
 2. OR-able rules (for example `set OR run`) are supported.
 3. Validation diagnostics are deterministic and versioned.
 
-## 5) Acceptance Criteria
+## Acceptance Criteria
 
 - [ ] Empty rule pack defaults to permissive validation.
 - [ ] Same-rank (set) rule accepts/rejects based on card shape and min/max count.
@@ -46,7 +42,7 @@ Examples include:
 - [ ] Strict mode throws on malformed schema.
 - [ ] Non-strict mode returns issues without throwing.
 
-## 6) Data and Rules
+## Data and Rules
 
 Inputs:
 
@@ -59,7 +55,7 @@ Invariants:
 - Same action+pack should produce stable pass/fail and issue ordering.
 - Validation should not mutate cards or external state.
 
-## 7) Test Plan (Red -> Green)
+## Test Plan (Red -> Green)
 
 ### Unit Tests (expected to fail first)
 
@@ -78,20 +74,13 @@ Invariants:
 - [x] `returns_an_issue_when_capabilities_are_missing_for_used_matches`
 - [x] `supports_actor_gated_rules_via_context`
 
-## 8) Implementation Notes
+## Implementation Notes
 
 - New modules:
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/gameplay/validator.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/gameplay/validator.test.ts`
+  - `src/lib/gameplay/validator.ts`
+  - `src/lib/gameplay/validator.test.ts`
 - Keep card predicates pure (no gameplay state mutation).
 
-## 9) Verification Checklist
-
-- [ ] Tests written before implementation
-- [ ] `npm test` passes
-- [ ] `npm run check` passes
-- [ ] `npm run build` passes
-
-## 10) Rollback Plan
+## Rollback Plan
 
 - Keep validator disabled via config and rely on permissive gameplay engine mode while hardening rule expressions.

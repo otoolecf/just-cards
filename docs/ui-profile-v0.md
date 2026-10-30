@@ -117,7 +117,7 @@ Stored rulesets now use `runtime-bundle/v1`:
 
 `RulesetService` accepts `runtime-bundle/v0` input for compatibility and upgrades it to v1 by generating `uiProfile`.
 
-## Shared-room rendering (2026-09-17)
+## Shared-room rendering
 
 `runtimeRulePack.tableRules`, when present, is the executable behavior contract for
 shared rooms. Fixed layouts render stable grid slots; hand/meld policies render
@@ -150,7 +150,7 @@ source game names never select a special editor. Fixed layouts expose reveal/pai
 settings, hand/meld policies expose deal/ace settings, and all expose card values and
 limits. Existing sessions keep a copied guided profile, including for offline replay.
 
-## Additional table capabilities (2026-09-20)
+## Additional table capabilities
 
 The authoritative shared-room UI dispatches on table policy capability, not ruleset
 ID: patience shows stock/waste, suited foundations and seven columns; shedding shows
@@ -162,7 +162,7 @@ shared card and button primitives with keyboard/tap operation. Solitaire's seven
 columns scroll within their container on narrow screens; page width stays bounded.
 Physical guided scoring derives its result-entry capability from the same policy.
 
-## Tile capability (2026-09-27)
+## Tile capability
 
 `tableRules.tileMahjong` selects the tile board and guided physical tile/result
 entry. UI dispatch depends on the capability, not a game ID. Existing profiles
@@ -171,7 +171,7 @@ remain valid. The guided score profile copies `tileMahjong` and uses
 and explanations come from the private server projection. Optional guided mode and
 tile labels are independent. See [mahjong](./mahjong.md).
 
-## Personal guided play preference (2026-09-27)
+## Personal guided play preference
 
 Shared rooms and draft previews default to normal play. A common Guided mode checkbox
 controls additional teaching text and remembers the choice in browser storage across

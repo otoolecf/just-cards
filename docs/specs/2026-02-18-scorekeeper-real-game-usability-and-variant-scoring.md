@@ -1,14 +1,10 @@
 # TDD Spec: scorekeeper-real-game-usability-and-variant-scoring
 
-_Status: Complete_
-_Owner: Connor + agents_
-_Date: 2026-02-18_
+## Intent
 
-## 1) Intent
+The score page currently mixes setup, ruleset generation, and active scoring controls in a way that makes single-operator live scoring harder than necessary. We need a clearer score-first layout and deterministic scoring helpers for real card-game variants so one scorer can run physical-table games (or mirror in-browser games) without manual math mistakes. The implementation adds variant-aware scoring-assist primitives and updates the score page UX to prioritize quick entry and clarity.
 
-The score page currently mixes setup, ruleset generation, and active scoring controls in a way that makes single-operator live scoring harder than necessary. We need a clearer score-first layout and deterministic scoring helpers for real card-game variants so one scorer can run physical-table games (or mirror in-browser games) without manual math mistakes. This pass adds variant-aware scoring-assist primitives and updates the score page UX to prioritize quick entry and clarity.
-
-## 2) In Scope
+## In Scope
 
 - Reorganize score-page layout so session setup/active scoring is primary and ruleset generation is secondary.
 - Add add-round entry modes for manual deltas and variant scoring assists.
@@ -18,13 +14,13 @@ The score page currently mixes setup, ruleset generation, and active scoring con
 - Wire score-page submit flow to post `add_delta` events for assist-driven rounds.
 - Add backend unit tests proving card/value primitive correctness for these rule examples.
 
-## 3) Out of Scope
+## Out of Scope
 
 - Full multiplayer real-time scoring workflow changes.
 - Automatic gameplay-to-score synchronization for every play action.
 - Exhaustive rules coverage for all Rummy/Golf house variants.
 
-## 4) Expected Outcomes
+## Expected Outcomes
 
 1. The score page is easier to scan for a lay scorer: start/join and active scoring controls are prominent, and optional ruleset tools are visually secondary.
 2. A scorer can submit per-player manual point deltas without entering cards.
@@ -32,7 +28,7 @@ The score page currently mixes setup, ruleset generation, and active scoring con
 4. A scorer can submit a Six Card Golf hole by entering a 2x3 card layout and using deterministic column-pair logic.
 5. Deterministic tests verify these primitives against known example outcomes.
 
-## 5) Acceptance Criteria
+## Acceptance Criteria
 
 - [x] Score page keeps the primary scoring flow above optional tools.
 - [x] Add-round supports `rows`, `text`, `delta`, `rummy-net`, and `golf-hole` entry modes.
@@ -41,7 +37,7 @@ The score page currently mixes setup, ruleset generation, and active scoring con
 - [x] `golf-hole` mode computes per-player hole score using Six Card Golf values and column pair-zero rule in a 2x3 layout.
 - [x] Unit tests cover both assists and mode presets; tests are red before implementation and green after.
 
-## 6) Data and Rules
+## Data and Rules
 
 - Rule/data inputs:
   - Existing `rulepack/v0` card value primitives from `scorekeeper/engine`.
@@ -52,7 +48,7 @@ The score page currently mixes setup, ruleset generation, and active scoring con
   - Variant assists are deterministic functions from parsed cards to signed deltas.
   - Six Card Golf helper requires exactly 6 cards in row-major 2x3 order.
 
-## 7) Test Plan (Red -> Green)
+## Test Plan (Red -> Green)
 
 ### Unit Tests (expected to fail first)
 
@@ -66,28 +62,19 @@ The score page currently mixes setup, ruleset generation, and active scoring con
 
 - [x] Score-page source contract includes new add-round mode labels and helper section copy.
 
-## 8) Implementation Notes
+## Implementation Notes
 
 - Planned files:
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/session/score-session-commands.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/session/score-session-commands.test.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/routes/+page.svelte`
-  - `/Users/ConnorO/git_repos/just-cards/src/routes/score-page-contract.test.ts` (new)
-  - `/Users/ConnorO/git_repos/just-cards/docs/specs/2026-02-18-scorekeeper-real-game-usability-and-variant-scoring.md`
+  - `src/lib/session/score-session-commands.ts`
+  - `src/lib/session/score-session-commands.test.ts`
+  - `src/routes/+page.svelte`
+  - `src/routes/score-page-contract.test.ts` (new)
+  - `docs/specs/2026-02-18-scorekeeper-real-game-usability-and-variant-scoring.md`
 - Constraints:
   - Keep mobile-first touch targets >= 44px.
   - Use existing semantic token classes/variables (`--jc-*`, `jc-*`), no ad-hoc theme drift.
 
-## 9) Verification Checklist
-
-- [x] Tests written before implementation
-- [x] Tests fail first (red)
-- [x] Implementation added (green)
-- [x] Refactor performed without changing behavior
-- [x] `npm run check` passes
-- [x] `npm run build` passes
-
-## 10) Rollback Plan
+## Rollback Plan
 
 - Remove new add-round assist modes from score page and keep existing rows/text flow.
 - Keep helper functions internal and unused, preserving current event-log behavior.

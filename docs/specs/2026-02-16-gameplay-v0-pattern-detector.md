@@ -1,10 +1,6 @@
 # TDD Spec: gameplay-v0-pattern-detector
 
-_Status: Green (implemented)_
-_Owner: Connor + agents_
-_Date: 2026-02-16_
-
-## 1) Intent
+## Intent
 
 Add a backend pattern-detection primitive that can detect score-relevant card combinations in a collection:
 
@@ -15,7 +11,7 @@ Add a backend pattern-detection primitive that can detect score-relevant card co
 
 `PatternDetector` should return concrete card groups so scorers can remain decoupled.
 
-## 2) In Scope
+## In Scope
 
 - New pattern pack type and validator for schema/runtime issues.
 - Detection output of deterministic card combinations per rule.
@@ -28,20 +24,20 @@ Add a backend pattern-detection primitive that can detect score-relevant card co
 - Strict vs non-strict schema mode.
 - Optional trace output for diagnosis.
 
-## 3) Out of Scope
+## Out of Scope
 
 - Scoring application / scoring coefficients (handled by separate scorer primitive).
 - UI rendering and live multiplayer integration.
 - Wildcards/jokers and declarative boolean expression trees.
 
-## 4) Expected Outcomes
+## Expected Outcomes
 
 - Card lists can be analyzed for named patterns from game-defined rules.
 - Runs can be interpreted with default or custom rank order.
 - Composition semantics are explicit and stable.
 - Detection issues are deterministic and include schema/capability failures.
 
-## 5) Acceptance Criteria
+## Acceptance Criteria
 
 - [ ] Detects same-rank patterns with min/max cardinality and duplicate-card combinations.
 - [ ] Detects rank runs by default rank order and with custom ace-high order.
@@ -51,7 +47,7 @@ Add a backend pattern-detection primitive that can detect score-relevant card co
 - [ ] Missing capability results in explicit issue.
 - [ ] Trace captures matcher and rule evaluation steps.
 
-## 6) Data and Rules
+## Data and Rules
 
 Inputs:
 
@@ -67,7 +63,7 @@ Invariants:
 - Returned matches do not mutate inputs.
 - Card identity uses stable indices from the input array.
 
-## 7) Test Plan (Red -> Green)
+## Test Plan (Red -> Green)
 
 ### Unit Tests
 
@@ -87,22 +83,14 @@ Invariants:
 - `detection_remains_stable_across_identical_inputs`
 - `detects_multiple_patterns_from_single_hand`
 
-## 8) Implementation Notes
+## Implementation Notes
 
 - Add:
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/gameplay/pattern-detector.ts`
-  - `/Users/ConnorO/git_repos/just-cards/src/lib/gameplay/pattern-detector.test.ts`
+  - `src/lib/gameplay/pattern-detector.ts`
+  - `src/lib/gameplay/pattern-detector.test.ts`
 - Keep this module data-driven and versioned for reuse by future rule ingestion.
 - Use trace stages `rulepack`, `rule`, `match`, and `compose`.
 
-## 9) Verification Checklist
-
-- [x] Spec written first
-- [x] Tests added then implemented in green
-- [x] `npm test`
-- [x] `npm run check`
-- [x] `npm run build`
-
-## 10) Rollback Plan
+## Rollback Plan
 
 - If behavior is incorrect for a game rule set, disable by requiring default permissive pattern mode per game config and keep detector off until configuration is corrected.

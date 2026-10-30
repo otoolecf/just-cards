@@ -1,15 +1,12 @@
 # TDD Spec: Family card play and explicit scoring primitives
 
-_Status: Complete_
-_Date: 2026-09-17_
-
-## 1) Intent
+## Intent
 
 Make a shared round usable on separate family members' phones, with private cards,
 legal turns, readable pickup piles, and automatic scoring. With physical cards,
 provide fast rank entry and positional Golf scoring without requiring suits or math.
 
-## 2) Review findings
+## Original problems
 
 - Play routes currently initialize client-local demo events and fixed players.
 - Generated rules sum hands at round end, omitting column cancellation and net scoring.
@@ -21,7 +18,7 @@ provide fast rank entry and positional Golf scoring without requiring suits or m
 - Setup is inferred from descriptive strings; there is no explicit two-player deal override.
 - Score input requires a suit even when only rank matters.
 
-## 3) Scope
+## Scope
 
 - Declarative table rules: fixed grid replacement or private hand/meld play; setup,
   discard pickup, immediate-use anchor, meld validation, round ending, scoring and winner.
@@ -35,9 +32,9 @@ provide fast rank entry and positional Golf scoring without requiring suits or m
 - Persist score-session event logs and player rosters through the same local/Cloudflare
   storage boundary; restore a session after reload and retain names before the first score.
 
-## 4) Source decisions
+## Source decisions
 
-Reviewed 2026-09-17:
+Rule sources:
 - https://bicyclecards.com/how-to-play/six-card-golf
 - https://bicyclecards.com/how-to-play/500-rum
 
@@ -52,7 +49,7 @@ The Bicycle 500 Rum page omits numeric rank values and stock-exhaustion handling
 Keep the repository's A=15, faces=10, numeral face-value convention visibly identified
 as a default. Exhausted stock ends a hand as an explicit app convention.
 
-## 5) Acceptance criteria
+## Acceptance criteria
 
 - [x] Extraction isolates article rules, rejects a directory, preserves deal overrides,
   and compiles explicit rules without inferring gameplay from a game name.
@@ -64,45 +61,16 @@ as a default. Exhausted stock ends a hand as an explicit app convention.
 - [x] Physical-card scoring accepts ranks, editable grid positions, and net table/hand values.
 - [x] Unit/integration tests, check, build, and browser tests pass.
 
-## 6) Red → green test plan
+## Red → green test plan
 
 Write failing extraction, policy, command/replay, projection and storage tests before
 implementation. Cover complete deterministic rounds, negative totals, paired twos,
 turn/identity/revision rejection, card conservation, ace boundaries and foreign layoffs.
 Then verify real browser flows and the Cloudflare worker build locally.
 
-## 7) Boundaries and rollback
+## Boundaries and rollback
 
 No deployment, accounts, AI players, billing, or arbitrary natural-language completeness.
 Keep stored runtime-bundle/v1 backward compatible through optional table policy.
 Reverting this branch restores the prior demo and scoring routes; no migration of existing
-ruleset data is needed. Preserve the pre-existing package-lock.json modification.
-
-## 8) Verification and implementation evidence
-
-- `npm test`: 229 tests across 40 files pass, including primitive contrast tests.
-- `npm run check`: zero errors and warnings.
-- `npm run build`: Cloudflare adapter build and Durable Object export pass.
-- `npm run test:e2e`: seven Chromium tests pass. Separate 390px browser contexts
-  complete a Golf round, receive automatic scores, deal again, and resume seats.
-  Rummy verifies the two-player deal, private hand, stock draw and discard. Physical
-  scoring verifies rank-only positional entry, standings, undo/redo and reload.
-- Both actual Bicycle article responses were passed through the deterministic
-  extractor/compiler and checked against the executable policies. Checked-in tests
-  use concise paraphrases and minimal HTML fixtures rather than full articles.
-- Local Wrangler runtime completed a full Golf round, independently checked the
-  computed column scores, saved a scorekeeper event, and retained room revision,
-  scores, player roster and score events across a process restart.
-- `wrangler deploy --dry-run` packages the Worker with `ROOMS`. Nothing was deployed.
-- Final 390px mobile rendering inspected; no horizontal page overflow.
-
-The red/green cycle also caught concurrent opening-reveal conflicts, stale Svelte
-standings/roster dependencies, unsupported suffix pickup on a fixed grid, and malformed
-score events that could poison durable replay. Regression coverage accompanies each
-behavioral fix; opening-reveal rebasing is exercised by the two-browser Golf flow.
-
-This section records the initial implementation checkpoint. The completed
-[family first draft](./2026-09-17-family-first-draft.md) adds D1 ruleset persistence,
-hibernating WebSockets, import/resume flows and full Rummy browser coverage.
-Current policy and runtime boundaries are documented in
-[Shared table v1](../shared-table-v1.md). MCP gameplay retains its existing prototype.
+ruleset data is needed.

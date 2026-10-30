@@ -1,7 +1,5 @@
 # TDD Spec: Public rooms with bounded active capacity
 
-_Status: Implemented_
-
 ## Intent
 Anyone can create an unlisted room without an account. Bound simultaneous active rooms and repeated creation while preserving saved games. AI generation remains owner-only.
 
@@ -23,24 +21,7 @@ Anyone can create an unlisted room without an account. Bound simultaneous active
 - Existing room/game regressions; npm run check and npm run build.
 
 ## Implementation and boundaries
-Use a small RoomAdmission Durable Object for capacity coordination, separate from per-room CardRoom objects. SQLite local adapters preserve development parity. Admission is not a hard spend cap and physical-score storage is not included in the active shared-room count. No production deployment, public room directory or account administration in this change.
+Use a small RoomAdmission Durable Object for capacity coordination, separate from per-room CardRoom objects. SQLite local adapters preserve development parity. Admission is not a hard spend cap and physical-score storage is not included in the active shared-room count. Public room discovery and account administration are outside scope.
 
 ## Rollback
 Revert feature code/config together, retain persisted room event logs. Do not delete room storage to recover capacity.
-
-## Validation results
-
-- 326 unit/integration tests pass across 61 files.
-- Dedicated compiled-Worker capacity/auth browser test passes: eight concurrent
-  creates yield exactly two admitted rooms; expired games stop polling; denied
-  resume preserves cards; released capacity permits resume; owner login/logout
-  and encoded-path authorization checks pass.
-- 13 existing gameplay/browser regressions pass, including multiplayer and
-  physical scoring, hand arrangement, recovery, and disconnected-host takeover.
-- Two owner-authenticated import/resume browser tests pass using the deterministic
-  extraction fallback; no paid provider calls were used for validation.
-- Native Python Playwright mobile inspection confirms owner sign-in, conditional
-  import forms, no horizontal overflow, and no browser exceptions.
-- `npm run check` and `npm run build` pass.
-- Production deployment and configuring the actual owner secret remain deployment
-  steps; no production resources or family-table test actions were performed.
