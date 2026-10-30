@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('$lib/server/owner-config', () => ({ ownerKey: () => undefined }));
 vi.mock('$app/environment', () => ({ dev: false }));
 import { handle } from './hooks.server';
+import { GET as sitemapGet } from './routes/sitemap.xml/+server';
 import { load as homeLoad } from './routes/+page.server';
 import { load as playLoad } from './routes/play/+page.server';
 import { load as rulesetLoad } from './routes/play/[rulesetId]/+page.server';
@@ -14,7 +15,11 @@ const pages = [
 	['/play', '/%70lay/__data.json', 'GET'],
 	['/play/[rulesetId]', '/play/audit-ruleset', 'GET'],
 	['/play/[rulesetId]', '/play/audit-ruleset/__data.json', 'GET'],
-	['/play/[rulesetId]', '/play/audit-ruleset', 'HEAD']
+	['/play/[rulesetId]', '/play/audit-ruleset', 'HEAD'],
+	['/sitemap.xml', '/sitemap.xml', 'GET'],
+	['/sitemap.xml', '/sitemap.xml', 'HEAD'],
+	['/sitemap.xml', '/%73itemap.xml', 'GET'],
+	['/sitemap.xml', '/sitemap.xml?cache=miss', 'GET']
 ] as const;
 
 function request(
@@ -26,13 +31,15 @@ function request(
 	const limit = vi.fn(async () => ({ success: allowed }));
 	const prepare = vi.fn(() => ({
 		all: async () => ({ results: [] }),
-		bind: () => ({ first: async () => null })
+		bind: () => ({ first: async () => null, all: async () => ({ results: [] }) })
 	}));
 	const platform = {
 		env: { API_RATE_LIMIT: { limit }, RULESETS_DB: { prepare } }
 	};
 	const resolve = vi.fn(async () => {
 		const event = { platform, params: { rulesetId: 'audit-ruleset' } };
+		if (route === '/sitemap.xml')
+			return sitemapGet(event as unknown as Parameters<typeof sitemapGet>[0]);
 		if (route === '/')
 			await homeLoad(event as unknown as Parameters<typeof homeLoad>[0]);
 		if (route === '/play')
@@ -67,7 +74,7 @@ describe('database page admission', () => {
 			expect(r.prepare).not.toHaveBeenCalled();
 		}
 	);
-	it.each(['/', '/play', '/play/[rulesetId]'])(
+	it.each(['/', '/play', '/play/[rulesetId]', '/sitemap.xml'])(
 		'fails closed for %s without its binding',
 		async (route) => {
 			const r = request(route, '/play');
@@ -85,13 +92,22 @@ describe('database page admission', () => {
 			expect(r.prepare).toHaveBeenCalledTimes(1);
 		}
 	);
-	it('shares the API budget with database pages', async () => {
+	it.each(['GET', 'HEAD'])('allows admitted sitemap %s requests', async (method) => {
+		const r = request('/sitemap.xml', '/sitemap.xml', method, true);
+		const response = await handle(r.args);
+		expect(response.status).toBe(200);
+		expect(response.headers.get('content-type')).toContain('application/xml');
+		expect(await response.text()).toContain('<urlset');
+		expect(r.limit).toHaveBeenCalledTimes(1);
+		expect(r.prepare).toHaveBeenCalledTimes(1);
+	});
+	it.each(['/play', '/sitemap.xml'])('shares the API budget with %s', async (route) => {
 		const api = request('/api/rulesets', '/api/rulesets', 'GET', true);
 		api.limit
 			.mockResolvedValueOnce({ success: true })
 			.mockResolvedValue({ success: false });
 		expect((await handle(api.args)).status).toBe(200);
-		const page = request('/play', '/play');
+		const page = request(route, route);
 		page.args.event.platform!.env.API_RATE_LIMIT =
 			api.args.event.platform!.env.API_RATE_LIMIT;
 		expect((await handle(page.args)).status).toBe(429);
@@ -101,8 +117,8 @@ describe('database page admission', () => {
 		]);
 		expect(page.prepare).not.toHaveBeenCalled();
 	});
-	it('leaves static assets outside database admission', async () => {
-		const r = request(null, '/icon-192.png');
+	it.each(['/icon-192.png', '/robots.txt'])('leaves %s outside database admission', async (path) => {
+		const r = request(null, path);
 		expect((await handle(r.args)).status).toBe(200);
 		expect(r.limit).not.toHaveBeenCalled();
 	});

@@ -28,7 +28,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     );
   }
   // Data requests and encoded URLs have the same resolved ID as their page.
-  const databasePage = ["/", "/play", "/play/[rulesetId]"].includes(route);
+  const databasePage = ["/", "/play", "/play/[rulesetId]", "/sitemap.xml"].includes(route);
   if ((route.startsWith("/api/") || databasePage) && event.platform) {
     const denied = await edgeAdmission(
       event.platform.env.API_RATE_LIMIT,

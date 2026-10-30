@@ -21,9 +21,10 @@ unregistered. There is no destructive automatic history migration.
 
 Production admission is serialized in RoomAdmission SQLite and fails closed:
 - Platform request limiter: 1,200 requests per address per minute shared by APIs,
-  sockets and database-backed pages (`/`, `/play`, `/play/[rulesetId]`). Page HTML,
-  HEAD and SvelteKit data requests use resolved route IDs and are admitted before
-  loaders or database queries; static assets do not consume this allowance.
+  sockets, database-backed pages (`/`, `/play`, `/play/[rulesetId]`) and
+  `/sitemap.xml`. Page HTML, sitemap GET/HEAD and SvelteKit data requests use resolved
+  route IDs and are admitted before loaders or database queries; static assets do
+  not consume this allowance.
   Cloudflare enforces this per location, not as a strict worldwide billing cap.
   Protected requests fail closed if the binding is missing.
 - Discovery: 60 unknown-ID lookups per hashed address per minute and 10,000
