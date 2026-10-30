@@ -23,12 +23,13 @@ for (const route of ['/', '/play']) {
 		await page.goto(route);
 		const footer = page.getByRole('contentinfo');
 		const summary = footer.locator('summary', { hasText: 'About this project' });
-		const description = footer.getByText('Just Cards is a personal side project', { exact: false });
+		const description = footer.locator('.jc-about-copy');
 		await expect(summary).toBeVisible();
 		await expect(description).not.toBeVisible();
 		await summary.focus();
 		await page.keyboard.press('Enter');
 		await expect(description).toBeVisible();
+		await expect(description.locator('p')).toHaveCount(3);
 		await expect(description).toContainText('spend more time playing while learning unfamiliar games more easily.');
 		await expect(description).toContainText('Substantial portions of the code and documentation were developed with AI assistance.');
 		await expect(description).toContainText('Expect rough edges; bug reports and contributions are welcome.');

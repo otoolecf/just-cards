@@ -126,6 +126,7 @@ test('scorekeeper row entry flow', async ({ page }) => {
 	}
 	await expect(page.locator('section:has(h2:has-text("Current score"))').first()).toBeVisible();
 
+	await page.getByRole('tab', { name: 'Player card rows', exact: true }).click();
 	await page.getByRole('radio', { name: 'Alice: suit clubs' }).click();
 	await page.getByRole('button', { name: 'Alice: add AC' }).click();
 	await page.getByRole('button', { name: 'Alice: add 10C' }).click();

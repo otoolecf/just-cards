@@ -4,7 +4,7 @@
 </script>
 
 <svelte:head
-	><title>Family table · Just Cards</title><meta
+	><title>Just Cards · Family table</title><meta
 		name="robots"
 		content="noindex"
 	/></svelte:head

@@ -1,0 +1,30 @@
+import { expect, test } from '@playwright/test';
+
+test('score event history stays collapsed until requested', async ({ page }) => {
+	await page.setViewportSize({ width: 320, height: 740 });
+	await page.goto('/');
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('spinbutton', { name: 'Players', exact: true }).fill('2');
+	await page.getByPlaceholder('Player 1', { exact: true }).fill('History A');
+	await page.getByPlaceholder('Player 2', { exact: true }).fill('History B');
+	await page.getByRole('button', { name: 'Create session', exact: true }).click();
+	const history = page.locator('.event-panel details');
+	const summary = history.locator('summary');
+	await expect(summary).toContainText('Recent events (0)');
+	await expect(history).not.toHaveAttribute('open');
+	await page.getByLabel('History A', { exact: true }).fill('7');
+	await page.getByRole('button', { name: 'Add round', exact: true }).click();
+	await expect(summary).toContainText('Recent events (1)');
+	await expect(history).not.toHaveAttribute('open');
+	await expect(history.locator('li')).not.toBeVisible();
+	await summary.focus();
+	await page.keyboard.press('Enter');
+	await expect(history.locator('li')).toBeVisible();
+	expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+	await page.keyboard.press('Enter');
+	await expect(history.locator('li')).not.toBeVisible();
+	await page.reload();
+	await expect(summary).toContainText('Recent events (1)');
+	await expect(history).not.toHaveAttribute('open');
+});

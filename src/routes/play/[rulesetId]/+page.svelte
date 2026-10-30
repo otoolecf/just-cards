@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.ruleset.bundle.displayName} | Play Table</title>
+	<title>Just Cards · {data.ruleset.bundle.displayName}</title>
 </svelte:head>
 
 {#if data.ruleset.bundle.generationReport}

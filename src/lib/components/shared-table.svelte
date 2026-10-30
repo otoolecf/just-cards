@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BrandWordmark from '$lib/components/brand-wordmark.svelte';
 	import { onMount } from 'svelte';
 	import PlayGuide from './play-guide.svelte';
 	import GuidedModeToggle from './guided-mode-toggle.svelte';
@@ -411,7 +412,7 @@
 <main class="shared-table">
 	<header class="table-header">
 		<div>
-			<a class="home-link" href="/play">Just Cards</a>
+			<a class="home-link" href="/play"><BrandWordmark /></a>
 			<h1>{displayGameName(room?.name ?? 'Opening table…')}</h1>
 		</div>
 		<a class="home-link" href="/">Score</a>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BrandWordmark from '$lib/components/brand-wordmark.svelte';
 	import { onMount } from 'svelte';
 	import PlayGuide from './play-guide.svelte';
 	import { cardValue, createRulePack, type CardRank, type RulePack } from '$lib/scorekeeper/engine';
@@ -65,8 +66,7 @@
 			aria-current="page">Play</a
 		>
 	</nav>
-	<p class="jc-subtle">Just Cards · Bring your people</p>
-	<h1>A card table wherever you are.</h1>
+	<h1><BrandWordmark /></h1>
 	<p>
 		Everyone joins on their own phone. Your cards stay private, the table stays in sync, and scores
 		take care of themselves.

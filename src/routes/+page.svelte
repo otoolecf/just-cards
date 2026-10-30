@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BrandWordmark from '$lib/components/brand-wordmark.svelte';
 	import { rosterStandings } from '$lib/session/roster-standings';
  import OwnerGate from '$lib/components/owner-gate.svelte';
 	import { onDestroy, onMount } from 'svelte';
@@ -938,14 +939,14 @@
 </script>
 
 <svelte:head>
-	<title>Scorekeeper</title>
+	<title>Just Cards · Scorekeeper</title>
 </svelte:head>
 
 <main class="score-page">
 	<header class="top">
 		<div>
-			<h1>Scorekeeper</h1>
-			<p class="subtitle">Fast one-device scoring for live card games.</p>
+			<h1><BrandWordmark /></h1>
+			<p class="subtitle">Keep score while enjoying the game.</p>
 			{#if offlineReady}<p class="jc-subtle">Available offline on this device</p>{/if}
 		</div>
 		<nav class="jc-mode-links" aria-label="Mode links">
@@ -1493,25 +1494,41 @@ run: 5"
 		</details>
 		{/if}
 
-		<section class="panel">
-			<h2>Recent events ({sessionState?.eventCount ?? 0})</h2>
-			{#if sessionState && sessionState.events.length > 0}
-				<ul>
-					{#each displayedEvents as event}
-						<li>
-							<div>{describeEventType(event)}</div>
-							<div class="small">source: {event.source} @ {event.createdAt}</div>
-						</li>
-					{/each}
-				</ul>
-			{:else}
-				<p class="empty">No events yet.</p>
-			{/if}
+		<section class="panel event-panel">
+			<details>
+				<summary><h2>Recent events ({sessionState?.eventCount ?? 0})</h2></summary>
+				<div class="event-content">
+					{#if sessionState && sessionState.events.length > 0}
+						<ul>
+							{#each displayedEvents as event}
+								<li>
+									<div>{describeEventType(event)}</div>
+									<div class="small">source: {event.source} @ {event.createdAt}</div>
+								</li>
+							{/each}
+						</ul>
+					{:else}
+						<p class="empty">No events yet.</p>
+					{/if}
+				</div>
+			</details>
 		</section>
 	{/if}
 </main>
 
 <style>
+	.event-panel summary {
+		min-height: 44px;
+		padding: 10px 0;
+		cursor: pointer;
+	}
+	.event-panel summary h2 {
+		display: inline;
+	}
+	.event-content {
+		overflow-wrap: anywhere;
+	}
+
 	.score-rank { font-size: var(--jc-type-sm); font-weight: 400; margin-inline-start: 8px; }
 	.pattern-panel summary {
 		min-height: 44px;

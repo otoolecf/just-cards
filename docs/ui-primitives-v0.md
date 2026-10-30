@@ -171,3 +171,22 @@ The shared footer offers a native, initially collapsed “About this project”
 details/summary above the source link. Its summary is at least 44px high, retains
 the global keyboard focus treatment, and uses the footer's existing muted text
 and small typography tokens. Expanded copy wraps inside a bounded reading width.
+
+### Brand wordmark
+
+`BrandWordmark` combines a small overlapping-card ornament with a bold “Just” and
+italic serif “Cards”. It uses existing foreground, brand, surface and line tokens,
+inherits its size from the heading or link, and uses system fonts. Decorative
+cards are hidden from assistive technology; the accessible text is “Just Cards”.
+Score and Play use it as their main title; rooms retain their game heading with
+the wordmark in the home link. Branding adds no motion or external assets.
+
+### About panel and event history
+
+The footer About disclosure uses `jc-panel`, a left-aligned summary with a
+non-announced plus/close indicator, and three paragraphs. The AI disclosure uses
+the existing muted surface and small type; main copy uses the medium type token.
+Scorekeeper Recent events uses native details/summary, collapsed on initial render
+with a visible event count. Adding events does not force it open. Both summaries
+retain keyboard focus indicators and at least 44px targets. Event metadata wraps
+inside the panel on narrow screens.
