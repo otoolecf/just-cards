@@ -137,3 +137,27 @@ PUBLIC_APP_URL=https://your-worker.your-subdomain.workers.dev npm run docs:build
 
 Generated docs live in ignored `.output/docs/`. This does not change runtime routes
 or publish documentation automatically.
+
+## Public URL and search discovery
+
+The primary installation uses `https://justcards.app`. Page metadata, social sharing
+and `/sitemap.xml` default to that origin. Independent deployments should set
+`PUBLIC_APP_URL` in `.env.local` or the build environment before `npm run build`.
+`/robots.txt` advertises the sitemap using the same origin. The sitemap includes
+Score, Play and stored public rulesets, including drafts. Owner access and shared
+rooms use `noindex` and are excluded from the sitemap. Canonicals omit queries;
+room sharing metadata points to `/play` rather than exposing a room code.
+
+For a Cloudflare-managed custom domain, add this to your ignored deployment config:
+
+```json
+"routes": [{ "pattern": "your-domain.example", "custom_domain": true }]
+```
+
+The primary installation sets the pattern to `justcards.app`. Wrangler attaches
+the domain during deploy. Retain your existing bindings and database configuration.
+See [Cloudflare Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
+Social previews use the existing 512px PNG app icon and page-specific descriptions.
+After deployment, optionally verify your domain in Google Search Console, submit
+`/sitemap.xml`, and request indexing for `/` and `/play`. Search engines can also
+discover the site through public links; submission does not guarantee indexing.

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SiteMetadata from '$lib/components/site-metadata.svelte';
 	import { onMount } from 'svelte';
 	import ScoreButton from '$lib/components/score-button.svelte';
 	let owner = false,
@@ -39,7 +40,7 @@
 	}
 </script>
 
-<svelte:head><title>Owner access · Just Cards</title></svelte:head>
+<SiteMetadata title="Owner access · Just Cards" description="Owner sign-in for Just Cards management tools." noindex />
 <main class="jc-panel">
 	<h1>Owner access</h1>
 	<p>

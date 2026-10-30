@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SiteMetadata from '$lib/components/site-metadata.svelte';
 	import PlayTable from '$lib/components/play-table.svelte';
 	import RulesetReview from '$lib/components/ruleset-review.svelte';
 	import { canPlayRuleset } from '$lib/rulesets/generation-report';
@@ -9,9 +10,7 @@
 	export let data: PageData;
 </script>
 
-<svelte:head>
-	<title>Just Cards · {data.ruleset.bundle.displayName}</title>
-</svelte:head>
+<SiteMetadata title={`Just Cards — ${data.ruleset.bundle.displayName}`} description={`Review the rules for ${data.ruleset.bundle.displayName} and explore its play and scoring options in Just Cards.`} />
 
 {#if data.ruleset.bundle.generationReport}
 	<main class="jc-panel" style="max-width: 900px; margin: 20px auto; padding: 20px;">

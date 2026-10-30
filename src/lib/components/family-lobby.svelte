@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { playDescription } from '$lib/site/metadata';
  import OwnerGate from './owner-gate.svelte';
  import { safeSourceUrl } from '$lib/rulesets/source-url';
 	import BrandWordmark from '$lib/components/brand-wordmark.svelte';
@@ -81,8 +82,7 @@
 	</nav>
 	<h1><BrandWordmark /></h1>
 	<p>
-		Everyone joins on their own phone. Your cards stay private, the table stays in sync, and scores
-		take care of themselves.
+		{playDescription}
 	</p>
 	{#if recent.length}<section aria-label="Recent tables" class="recent-tables">
 			<h2>Your recent tables</h2>

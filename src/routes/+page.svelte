@@ -1,4 +1,6 @@
 <script lang="ts">
+	import SiteMetadata from '$lib/components/site-metadata.svelte';
+	import { scoreTitle, scoreDescription } from '$lib/site/metadata';
 	import BrandWordmark from '$lib/components/brand-wordmark.svelte';
 	import { rosterStandings } from '$lib/session/roster-standings';
  import OwnerGate from '$lib/components/owner-gate.svelte';
@@ -938,15 +940,13 @@
 	});
 </script>
 
-<svelte:head>
-	<title>Just Cards · Scorekeeper</title>
-</svelte:head>
+<SiteMetadata title={scoreTitle} description={scoreDescription} />
 
 <main class="score-page">
 	<header class="top">
 		<div>
 			<h1><BrandWordmark /></h1>
-			<p class="subtitle">Keep score while enjoying the game.</p>
+			<p class="subtitle">{scoreDescription}</p>
 			{#if offlineReady}<p class="jc-subtle">Available offline on this device</p>{/if}
 		</div>
 		<nav class="jc-mode-links" aria-label="Mode links">
