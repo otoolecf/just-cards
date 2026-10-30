@@ -10,11 +10,13 @@ interface CreateRulesetPayload {
 	bundle?: unknown;
 }
 
-export const GET: RequestHandler = async ({ platform }) => {
+export const GET: RequestHandler = async ({ platform, url }) => {
 	try {
 		const service = await getDefaultRulesetService(platform);
-		const rulesets = await service.list();
-		return json({ rulesets });
+		const raw = Number(url?.searchParams.get('offset') ?? 0);
+  const offset=Number.isSafeInteger(raw)&&raw>=0?raw:0;
+  const rulesets = await service.list(100,offset);
+  return json({ rulesets, nextOffset:rulesets.length===100?offset+100:null });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unable to list rulesets';
 		return json({ error: message }, { status: 500 });

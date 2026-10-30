@@ -8,6 +8,9 @@ for (const route of ['/', '/play']) {
 		await expect(page).toHaveTitle(/^Just Cards/);
 		const decoration = page.locator('.jc-wordmark-cards');
 		await expect(decoration).toHaveAttribute('aria-hidden', 'true');
+		await expect(decoration).toHaveJSProperty('tagName', 'IMG');
+		expect(await decoration.getAttribute('src')).toBe(await page.locator('link[rel="icon"]').getAttribute('href'));
+		await expect(decoration).toHaveJSProperty('naturalWidth', 64);
 		await expect(page.getByRole('navigation', { name: 'Mode links' })).toBeVisible();
 		expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 	});

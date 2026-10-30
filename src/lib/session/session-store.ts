@@ -109,12 +109,19 @@ function cloneScoreEvent(scoreEvent: ScoreEvent): ScoreEvent {
 	return structuredClone(scoreEvent);
 }
 
-function toSessionState(record: SessionRecord, trace = false): ScoreState {
-	const events = record.events.map((entry) => entry.scoreEvent);
-	return deriveState(events, record.config.scoreRulePack ?? createRulePack(), { trace });
+function toSessionState(record: SessionRecord): ScoreState {
+	// Public session input must not enable debug allocation, including legacy flags.
+	// Project execution options without changing the persisted event log.
+	const events = record.events.map(({ scoreEvent }) =>
+		scoreEvent.type === 'add_pattern_round'
+			? { ...scoreEvent, matchOptions: { ...scoreEvent.matchOptions, trace: false } }
+			: scoreEvent
+	);
+	return deriveState(events, record.config.scoreRulePack ?? createRulePack(), { trace: false, strictValidation: true });
 }
 
 export function createSession(input: SessionCreateInput, repository: SessionRepository = sessions): SessionRecord {
+	if (JSON.stringify(input.config).length > 16000) throw new Error('Session settings are too large');
 	const sessionId = input.sessionId ?? randomSessionId();
 	if (repository.has(sessionId)) {
 		const existing = repository.get(sessionId)!;
@@ -158,6 +165,8 @@ export function appendSessionEvent(sessionId: string, input: SessionAppendInput,
 		}
 	}
 	if (input.expectedEventCount !== undefined && (!Number.isInteger(input.expectedEventCount) || input.expectedEventCount !== stored.events.length)) throw new Error('Conflict: scores changed on another device');
+	if (stored.events.length >= 1000) throw new Error('Session event limit reached; start a new session');
+	if (JSON.stringify(input).length > 16000) throw new Error('Score event is too large');
 	const session = structuredClone(stored);
 
 	const scoreEvent = input.source === 'scorekeeper' ? input.scoreEvent : adaptGameplayScoringToScoreEvent(input.command);
@@ -180,6 +189,7 @@ export function appendSessionEvent(sessionId: string, input: SessionAppendInput,
 
 	session.events.push(event);
 	session.updatedAt = event.createdAt;
+	if (JSON.stringify(session).length > 262144) throw new Error('Session storage limit reached; start a new session');
 	// Validate replay before replacing the durable log (or mutating the in-memory adapter).
 	const derived = toSessionState(session);
 	if (Object.values(derived.totalsByTarget).some(total => !Number.isFinite(total))) {
@@ -195,7 +205,7 @@ export function buildSessionStateView(sessionId: string, repository: SessionRepo
 		throw new Error(`Session "${sessionId}" not found`);
 	}
 
-	const state = toSessionState(session, session.config.trace === true || false);
+	const state = toSessionState(session);
 	const events = session.events.map((entry) => ({
 		...(entry.requestId ? { requestId: entry.requestId } : {}),
 		id: entry.id,
@@ -221,7 +231,7 @@ export function buildSessionStateView(sessionId: string, repository: SessionRepo
 			scoreGuidedProfile: session.config.scoreGuidedProfile
 				? structuredClone(session.config.scoreGuidedProfile)
 				: undefined,
-			trace: session.config.trace
+			trace: false
 		},
 		state,
 		events

@@ -1,4 +1,5 @@
 <script lang="ts">
+ import { safeSourceUrl } from '$lib/rulesets/source-url';
 	import type { RulePack } from '$lib/scorekeeper/engine';
 	import type { RulesetRecord } from '$lib/rulesets/types';
 	import ScoreButton from './score-button.svelte';
@@ -104,7 +105,7 @@
 		{#if report.acceptedAt}<p>You accepted the rules and assumptions for this saved copy.</p>{/if}
 		{#if record.sourceUrl}<a
 				class="jc-mode-link"
-				href={record.sourceUrl}
+				href={safeSourceUrl(record.sourceUrl)}
 				target="_blank"
 				rel="noreferrer">Open original rules</a
 			>{/if}

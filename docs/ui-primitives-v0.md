@@ -174,9 +174,9 @@ and small typography tokens. Expanded copy wraps inside a bounded reading width.
 
 ### Brand wordmark
 
-`BrandWordmark` combines a small overlapping-card ornament with a bold “Just” and
-italic serif “Cards”. It uses existing foreground, brand, surface and line tokens,
-inherits its size from the heading or link, and uses system fonts. Decorative
+`BrandWordmark` combines the shared SVG overlapping-card mark with a bold “Just” and
+italic serif “Cards”. It uses the same bundled SVG as the favicon with the existing design palette.
+The mark inherits its size from the heading or link; the wordmark uses system fonts. Decorative
 cards are hidden from assistive technology; the accessible text is “Just Cards”.
 Score and Play use it as their main title; rooms retain their game heading with
 the wordmark in the home link. Branding adds no motion or external assets.
@@ -190,3 +190,11 @@ Scorekeeper Recent events uses native details/summary, collapsed on initial rend
 with a visible event count. Adding events does not force it open. Both summaries
 retain keyboard focus indicators and at least 44px targets. Event metadata wraps
 inside the panel on narrow screens.
+
+### Favicon and app icons
+
+The tab icon uses a square, font-independent SVG of overlapping cards with a club.
+Bundled and static SVG entry points share the same artwork and design-token palette.
+Apple touch uses a 180px PNG; the manifest includes 192px and 512px PNGs with the
+existing background token. The SVG remains transparent for browser tabs. Regenerate
+the PNG sizes from the SVG when changing the mark, retaining their declared sizes.

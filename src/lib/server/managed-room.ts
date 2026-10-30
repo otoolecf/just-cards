@@ -71,6 +71,7 @@ export class ManagedRoom {
 				};
 				const response = await roomRequest(request, code, staged, bundle);
 				if (!response.ok || !candidate) return response;
+ if (candidate.events.length > 2000 || JSON.stringify(candidate).length > 524288) throw new Error('Table history limit reached; start a new table');
 				if (old && candidate.revision === old.revision) return response;
 				const finished = roomFinished(candidate);
 				const activating =

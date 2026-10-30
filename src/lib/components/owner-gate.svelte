@@ -10,7 +10,7 @@
 </script>
 
 {#if owner}<slot />{:else}<p class="jc-subtle">
-		AI rule imports are available to the owner. <a
+		AI imports and saving shared games are available to the owner. <a
 			class="jc-mode-link"
 			href="/owner">Owner sign in</a
 		>

@@ -9,12 +9,12 @@
 
 <svelte:head>
 	<title>Just Cards</title>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" type="image/svg+xml" sizes="any" href={favicon} />
 	<link rel="manifest" href="/manifest.webmanifest" />
 	<meta name="theme-color" content="#111827" />
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-title" content="Just Cards" />
-	<link rel="apple-touch-icon" href="/favicon.svg" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 </svelte:head>
 
 {@render children()}

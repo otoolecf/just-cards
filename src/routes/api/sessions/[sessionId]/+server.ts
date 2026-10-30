@@ -4,9 +4,9 @@ import type { SessionAppendInput } from '$lib/session/session-store';
 import type { GameplayScoringCommand } from '$lib/session/score-event-adapter';
 import type { ScoreEvent } from '$lib/scorekeeper/engine';
 
-export const GET: RequestHandler = ({ params, platform }) =>
-	dispatchScore(params.sessionId, { type: 'get' }, platform);
-export const POST: RequestHandler = async ({ params, request, platform }) => {
+export const GET: RequestHandler = ({ params, platform, getClientAddress }) =>
+	dispatchScore(params.sessionId, { type: 'get' }, platform, getClientAddress());
+export const POST: RequestHandler = async ({ params, request, platform, getClientAddress }) => {
 	const body = (await request.json().catch(() => ({}))) as {
 		requestId?: string;
 		expectedEventCount?: number;
@@ -34,5 +34,5 @@ export const POST: RequestHandler = async ({ params, request, platform }) => {
 		};
 	else
 		return Response.json({ error: 'Invalid event payload' }, { status: 400 });
-	return dispatchScore(params.sessionId, { type: 'append', input }, platform);
+	return dispatchScore(params.sessionId, { type: 'append', input }, platform, getClientAddress());
 };

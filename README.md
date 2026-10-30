@@ -63,6 +63,21 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
+The default browser run starts a fresh temporary application on port 5186, with
+isolated SQLite data and a test-only owner key. It does not reuse a running dev
+server or read your local secret files. Management scenarios sign in explicitly;
+anonymous access checks remain anonymous. Room quotas are raised only in this
+local test process. Tests run serially because they exercise a shared catalog.
+Assertions allow the local HTTP fallback’s maximum 30-second polling interval;
+Worker runs exercise the real-time transport.
+
+Set `PLAYWRIGHT_BASE_URL` to test an explicitly selected isolated server instead.
+For owner scenarios, provide its matching `E2E_OWNER_ACCESS_KEY`. Worker-only
+WebSocket/offline/presence tests require `CF_INTEGRATION=1`; the dedicated capacity
+scenario also requires `ROOM_CAPACITY_E2E=1` and the configuration described in
+[public rooms](docs/public-rooms.md). These scenarios are explicitly skipped by
+the Vite run. Do not run the full mutation suite against production.
+
 `npm run test:golden` and `npm run test:confidence` exercise offline ruleset
 fixtures and bundle validation. No provider key is needed.
 

@@ -288,3 +288,33 @@ tied totals share competition rank (1st, 1st, 3rd) with a Tied label. All player
 first place are highlighted. Before scoring, the empty state remains; after scoring
 starts, roster players without entries display zero. Totals and event replay are unchanged.
 This supersedes the sorted-display behavior in the February 18 standings spec.
+
+## Pattern execution limits
+
+Public session responses do not generate detailed debug traces. Legacy trace
+settings and event-level pattern trace options are ignored during server replay,
+and returned session configuration reports `trace: false`. Scores and stored
+events remain unchanged. Direct engine callers can still request diagnostics;
+the public session API does not expose a switch to enable them.
+
+Public session creation and replay also enforce strict rule validation. Pattern
+IDs must be unique and 1–96 characters long. Each pattern needs a scoring mapping;
+mapping IDs must be unique, points must be finite numbers, and at most 32 mappings
+are accepted. Zero-point mappings are valid. Invalid mappings are rejected before
+candidate enumeration and saving, even if their pattern would have no matches.
+Validation messages are deduplicated and bounded as they are collected. Existing
+invalid events are preserved and return a compact error; undo can remove one from
+active scoring, and redo is rejected while it remains invalid.
+
+Pattern scoring shares a runtime work budget across all patterns and player
+entries in an event, with a larger budget for replaying the session. Work includes
+intermediate candidates and rejected combinations, even when a rule returns only
+one match. `all` stops at its first child with no matches.
+
+An operation exceeding the budget returns a complexity error rather than partial
+scores. The server validates the complete replay before saving an event, including
+redo; rejected operations leave the stored history unchanged. Existing expensive
+histories also receive bounded replay. Undo can recover a session if the remaining
+active events fit the limits; otherwise simplify the pattern in a new session.
+Existing history is preserved. See [security limits](./security-deployment.md) and
+[the regression specification](./specs/2026-10-30-scoring-work-budget.md).

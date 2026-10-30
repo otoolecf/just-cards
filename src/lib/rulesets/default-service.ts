@@ -10,7 +10,13 @@ function withPresets(service: RulesetService): RulesetService {
 		createDraft: service.createDraft.bind(service),
 		deleteArchived: service.deleteArchived.bind(service),
 		updateMetadata: service.updateMetadata.bind(service),
-		list: async () => [...familyRulesets(), ...(await service.list())],
+		list: async (limit = 100, offset = 0) => {
+   const presets=familyRulesets();
+   const count=Number.isFinite(limit)?Math.min(100,Math.max(1,Math.trunc(limit))):100;
+   const start=Number.isFinite(offset)?Math.max(0,Math.trunc(offset)):0;
+   const builtins=presets.slice(start,start+count);
+   return [...builtins,...(builtins.length<count?await service.list(count-builtins.length,Math.max(0,start-presets.length)):[])];
+  },
 		getById: async (id) =>
 			familyRulesets().find((r) => r.id === id) ?? (await service.getById(id)),
 	};

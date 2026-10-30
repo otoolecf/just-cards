@@ -3,11 +3,11 @@ export const OWNER_SESSION_SECONDS = 8 * 3600;
 export const protectedOwnerPath = (route: string, method = 'GET') => {
 	const path = route.replace(/\/+$/, '');
 	return (
-		(['PATCH', 'DELETE'].includes(method) && /^\/api\/rulesets\/[^/]+$/.test(path)) ||
+		(['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && (path === '/api/rulesets' || path.startsWith('/api/rulesets/'))) ||
 		path === '/api/rulesets/generate' ||
 		path === '/api/mcp' ||
 		path.startsWith('/api/mcp/') ||
-		path === '/api/chat/actions'
+		path === '/api/chat/actions' || path === '/api/owner/resources'
 	);
 };
 export function sameOrigin(request: Request): boolean {

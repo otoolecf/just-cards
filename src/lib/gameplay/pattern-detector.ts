@@ -1,3 +1,5 @@
+import { addIssues, validRuleId } from '$lib/scorekeeper/diagnostics';
+import { assertPatternBudget, PatternWorkBudget } from './pattern-budget';
 import type { CardInput, CardRank, CardSuit } from '$lib/scorekeeper/engine';
 
 export type PatternDetectorSchema = 'pattern/v0';
@@ -269,42 +271,47 @@ function isValidPatternMatch(value: unknown): value is PatternMatchKind {
 	return true;
 }
 
-function validatePatternRulePack(rulePack: unknown): PatternDetectorRuleIssue[] {
+export function validatePatternRulePack(rulePack: unknown): PatternDetectorRuleIssue[] {
 	const issues: PatternDetectorRuleIssue[] = [];
 
 	if (!isObject(rulePack)) {
-		issues.push({ code: 'schema_not_object', message: 'Pattern rule pack must be an object' });
+		addIssues(issues, { code: 'schema_not_object', message: 'Pattern rule pack must be an object' });
 		return issues;
 	}
 	if ((rulePack as { schemaVersion?: unknown }).schemaVersion !== 'pattern/v0') {
-		issues.push({
+		addIssues(issues, {
 			code: 'schema_version_mismatch',
-			message: `Expected schemaVersion "pattern/v0" but received "${String((rulePack as { schemaVersion?: unknown }).schemaVersion ?? 'undefined')}"`
+			message: 'Expected schemaVersion pattern/v0'
 		});
 	}
 	if (!Array.isArray(rulePack.rankOrder) || rulePack.rankOrder.length === 0) {
-		issues.push({ code: 'invalid_rank_order', message: 'rankOrder must be a non-empty array of ranks' });
+		addIssues(issues, { code: 'invalid_rank_order', message: 'rankOrder must be a non-empty array of ranks' });
 	}
 	if (!Array.isArray(rulePack.patterns)) {
-		issues.push({ code: 'missing_patterns', message: 'patterns is required and must be an array' });
+		addIssues(issues, { code: 'missing_patterns', message: 'patterns is required and must be an array' });
 		return issues;
 	}
 
+	const ids = new Set<string>();
 	for (let i = 0; i < (rulePack.patterns as unknown[]).length; i++) {
 		const pattern = (rulePack.patterns as unknown[])[i] as Record<string, unknown>;
 		if (!isObject(pattern)) {
-			issues.push({ code: 'invalid_pattern_shape', message: `patterns[${i}] must be an object`, });
+			addIssues(issues, { code: 'invalid_pattern_shape', message: `patterns[${i}] must be an object`, });
 			continue;
 		}
-		if (typeof pattern.id !== 'string' || !pattern.id) {
-			issues.push({ code: 'invalid_pattern_id', message: `patterns[${i}] is missing a valid id` });
+		if (!validRuleId(pattern.id)) {
+			addIssues(issues, { code: 'invalid_pattern_id', message: `patterns[${i}] requires an ID from 1 to 96 characters` });
+		}
+		if (typeof pattern.id === 'string') {
+			if (ids.has(pattern.id)) addIssues(issues, { code: 'duplicate_pattern_id', message: 'Pattern IDs must be unique.' });
+			ids.add(pattern.id);
 		}
 		if (!isObject(pattern.match) || !isValidPatternMatch(pattern.match)) {
-			issues.push({ code: 'invalid_pattern_match', message: `patterns[${i}] has invalid match definition` });
+			addIssues(issues, { code: 'invalid_pattern_match', message: `patterns[${i}] has invalid match definition` });
 		}
 	}
 	if (rulePack.requirePatterns && (rulePack.patterns as unknown[]).length === 0) {
-		issues.push({ code: 'patterns_required', message: 'requirePatterns is true but patterns is empty' });
+		addIssues(issues, { code: 'patterns_required', message: 'requirePatterns is true but patterns is empty' });
 	}
 
 	return issues;
@@ -328,9 +335,10 @@ function isInRange(value: number, min: number | undefined, max: number | undefin
 	return true;
 }
 
-function dedupeByIndices(candidates: PatternCandidates[]): PatternCandidates[] {
+function dedupeByIndices(candidates: PatternCandidates[], work: PatternWorkBudget): PatternCandidates[] {
 	const seen = new Map<string, PatternCandidates>();
 	for (const candidate of candidates) {
+		work.consume();
 		const key = candidate.indices.join(',');
 		if (!seen.has(key)) {
 			seen.set(key, candidate);
@@ -354,13 +362,15 @@ function combineCandidateLists(
 	index: number,
 	working: number[],
 	emit: (combined: number[]) => void,
-	disallowOverlap: boolean
+	disallowOverlap: boolean,
+	work: PatternWorkBudget
 ): void {
 	if (index >= children.length) {
 		emit(working);
 		return;
 	}
 	for (const candidate of children[index] || []) {
+		work.consume();
 		const combined = [...working, ...candidate.indices];
 		if (disallowOverlap && hasOverlap(working, candidate.indices)) {
 			continue;
@@ -371,12 +381,14 @@ function combineCandidateLists(
 			index + 1,
 			combined,
 			emit,
-			disallowOverlap
+			disallowOverlap,
+			work
 		);
 	}
 }
 
-function generateCombinations(items: number[], size: number, start = 0, prefix: number[] = [], out: number[][] = []): number[][] {
+function generateCombinations(items: number[], size: number, work: PatternWorkBudget, start = 0, prefix: number[] = [], out: number[][] = []): number[][] {
+	work.consume();
 	if (size === 0) {
 		out.push([...prefix]);
 		return out;
@@ -390,13 +402,14 @@ function generateCombinations(items: number[], size: number, start = 0, prefix: 
 	}
 	for (let i = start; i <= items.length - size; i++) {
 		prefix.push(items[i]);
-		generateCombinations(items, size - 1, i + 1, prefix, out);
+		generateCombinations(items, size - 1, work, i + 1, prefix, out);
 		prefix.pop();
 	}
 	return out;
 }
 
-function cartesianProduct(options: number[][], out: number[][] = [], prefix: number[] = []): number[][] {
+function cartesianProduct(options: number[][], work: PatternWorkBudget, out: number[][] = [], prefix: number[] = []): number[][] {
+	work.consume();
 	if (options.length === 0) {
 		out.push([...prefix]);
 		return out;
@@ -404,7 +417,7 @@ function cartesianProduct(options: number[][], out: number[][] = [], prefix: num
 	const [head, ...tail] = options;
 	for (const headValue of head) {
 		prefix.push(headValue);
-		cartesianProduct(tail, out, prefix);
+		cartesianProduct(tail, work, out, prefix);
 		prefix.pop();
 	}
 	return out;
@@ -413,7 +426,8 @@ function cartesianProduct(options: number[][], out: number[][] = [], prefix: num
 function combinationsByRank(
 	cardsByRank: Map<string, number[]>,
 	cardCountRange: { minCards?: number; maxCards?: number },
-	rankOrder: string[]
+	rankOrder: string[],
+	work: PatternWorkBudget
 ): PatternCandidates[] {
 	const candidates: PatternCandidates[] = [];
 	for (const [rank, indices] of cardsByRank.entries()) {
@@ -424,23 +438,27 @@ function combinationsByRank(
 		}
 		const max = Math.min(indices.length, maxCards);
 		for (let size = minCards; size <= max; size++) {
-			const cardCombinations = generateCombinations(indices, size);
+			const cardCombinations = generateCombinations(indices, size, work);
 			for (const combo of cardCombinations) {
 				candidates.push({ indices: combo });
 			}
 		}
 	}
 
-	return rankOrder.length > 0 ? dedupeByIndices(candidates) : candidates;
+	return rankOrder.length > 0 ? dedupeByIndices(candidates, work) : candidates;
 }
 
 function buildConsecutiveRuns(
 	rankOrder: string[],
 	rankIndex: Record<string, number>,
 	cardsByRank: Map<string, number[]>,
-	rankLimit: { minCards?: number; maxCards?: number }
+	rankLimit: { minCards?: number; maxCards?: number },
+	work: PatternWorkBudget
 ): PatternCandidates[] {
-	const availableRanks = rankOrder.filter((rank) => cardsByRank.has(rank));
+	const availableRanks = rankOrder.filter((rank) => {
+		work.consume();
+		return cardsByRank.has(rank);
+	});
 	const candidates: PatternCandidates[] = [];
 	const minCards = rankLimit.minCards ?? 3;
 	const maxCards = rankLimit.maxCards;
@@ -451,6 +469,7 @@ function buildConsecutiveRuns(
 	for (let start = 0; start < availableRanks.length; start++) {
 		let end = start;
 		while (end + 1 < availableRanks.length) {
+			work.consume();
 			const rankA = availableRanks[end];
 			const rankB = availableRanks[end + 1];
 			if (rankIndex[rankB] === rankIndex[rankA] + 1) {
@@ -467,9 +486,10 @@ function buildConsecutiveRuns(
 		}
 		for (let windowSize = minCards; windowSize <= segmentMax; windowSize++) {
 			for (let offset = 0; offset <= segmentLength - windowSize; offset++) {
+				work.consume();
 				const windowRanks = availableRanks.slice(start + offset, start + offset + windowSize);
 				const rankOptions = windowRanks.map((rank) => cardsByRank.get(rank) ?? []);
-				const combos = cartesianProduct(rankOptions);
+				const combos = cartesianProduct(rankOptions, work);
 				for (const combo of combos) {
 					candidates.push({ indices: combo.sort((a, b) => a - b) });
 				}
@@ -477,20 +497,20 @@ function buildConsecutiveRuns(
 		}
 	}
 
-	return dedupeByIndices(candidates);
+	return dedupeByIndices(candidates, work);
 }
 
-function runCandidates(cards: CardInput[], availableIndices: number[], rankIndex: Record<string, number>, rankOrder: string[], match: PatternMatchKind & { kind: 'run' }): PatternCandidates[] {
+function runCandidates(cards: CardInput[], availableIndices: number[], rankIndex: Record<string, number>, rankOrder: string[], match: PatternMatchKind & { kind: 'run' }, work: PatternWorkBudget): PatternCandidates[] {
 	const candidates: PatternCandidates[] = [];
 	if (!match.requireSameSuit) {
 		const byRank = toCardMapByKey(cards, availableIndices, (card) => card.rank);
-		candidates.push(...buildConsecutiveRuns(rankOrder, rankIndex, byRank, { minCards: match.minCards, maxCards: match.maxCards }));
+		candidates.push(...buildConsecutiveRuns(rankOrder, rankIndex, byRank, { minCards: match.minCards, maxCards: match.maxCards }, work));
 		return candidates;
 	}
 	const bySuit = toCardMapByKey(cards, availableIndices, (card) => card.suit);
 	for (const suitIndices of bySuit.values()) {
 		const byRank = toCardMapByKey(cards, suitIndices, (card) => card.rank);
-		const suitCandidates = buildConsecutiveRuns(rankOrder, rankIndex, byRank, { minCards: match.minCards, maxCards: match.maxCards });
+		const suitCandidates = buildConsecutiveRuns(rankOrder, rankIndex, byRank, { minCards: match.minCards, maxCards: match.maxCards }, work);
 		candidates.push(...suitCandidates);
 	}
 
@@ -540,8 +560,10 @@ function findMatchesForPattern(
 	rankOrder: string[],
 	trace: PatternDetectorTraceEntry[] | undefined,
 	eventIndex: number,
-	options: PatternMatchOptions
+	options: PatternMatchOptions,
+	work: PatternWorkBudget
 ): PatternCandidates[] {
+	work.consume(1 + availableIndices.length);
 	let matchCandidates: PatternCandidates[] = [];
 
 	switch (match.kind) {
@@ -550,41 +572,41 @@ function findMatchesForPattern(
 			break;
 		case 'all_same_rank': {
 			const byRank = toCardMapByKey(cards, availableIndices, (card) => card.rank);
-			matchCandidates = combinationsByRank(byRank, match, rankOrder);
+			matchCandidates = combinationsByRank(byRank, match, rankOrder, work);
 			break;
 		}
 		case 'all_same_suit': {
 			const bySuit = toCardMapByKey(cards, availableIndices, (card) => card.suit);
-			matchCandidates = combinationsByRank(bySuit, match, rankOrder);
+			matchCandidates = combinationsByRank(bySuit, match, rankOrder, work);
 			break;
 		}
 		case 'run':
-			matchCandidates = runCandidates(cards, availableIndices, rankIndex, rankOrder, match);
+			matchCandidates = runCandidates(cards, availableIndices, rankIndex, rankOrder, match, work);
 			break;
 		case 'contains':
 			matchCandidates = containsCandidates(cards, availableIndices, match);
 			break;
 		case 'any': {
 			for (const child of match.matches) {
-				matchCandidates.push(...findMatchesForPattern(child, cards, availableIndices, rankIndex, rankOrder, trace, eventIndex, options));
+				matchCandidates.push(...findMatchesForPattern(child, cards, availableIndices, rankIndex, rankOrder, trace, eventIndex, options, work));
 			}
-			matchCandidates = dedupeByIndices(matchCandidates);
+			matchCandidates = dedupeByIndices(matchCandidates, work);
 			break;
 		}
 		case 'all': {
-			const childMatchLists: PatternCandidates[][] = match.matches.map((child) =>
-				findMatchesForPattern(child, cards, availableIndices, rankIndex, rankOrder, trace, eventIndex, options)
-			);
-			if (childMatchLists.some((childMatches) => childMatches.length === 0)) {
-				matchCandidates = [];
-				break;
+			const childMatchLists: PatternCandidates[][] = [];
+			for (const child of match.matches) {
+				const childMatches = findMatchesForPattern(child, cards, availableIndices, rankIndex, rankOrder, trace, eventIndex, options, work);
+				childMatchLists.push(childMatches);
+				if (childMatches.length === 0) break;
 			}
+			if (childMatchLists.some((childMatches) => childMatches.length === 0)) break;
 			const disallowOverlap = options.disallowOverlap ?? true;
 			const allCandidates: PatternCandidates[] = [];
 			combineCandidateLists(childMatchLists, 0, [], (combined) => {
 				allCandidates.push({ indices: [...combined].sort((a, b) => a - b) });
-			}, disallowOverlap);
-			matchCandidates = dedupeByIndices(allCandidates);
+			}, disallowOverlap, work);
+			matchCandidates = dedupeByIndices(allCandidates, work);
 			break;
 		}
 		default:
@@ -597,32 +619,32 @@ function findMatchesForPattern(
 		count: matchCandidates.length
 	});
 
-	return dedupeByIndices(matchCandidates);
+	return dedupeByIndices(matchCandidates, work);
 }
 
 function checkCapability(pack: PatternRulePack, match: PatternMatchKind): PatternDetectorRuleIssue[] {
 	const issues: PatternDetectorRuleIssue[] = [];
 	if (match.kind === 'card_count' && !pack.capabilities.includes('pattern:count')) {
-		issues.push({ code: 'missing_capability', message: 'pattern:count is not enabled' });
+		addIssues(issues, { code: 'missing_capability', message: 'pattern:count is not enabled' });
 	}
 	if (match.kind === 'all_same_rank' && !pack.capabilities.includes('pattern:all_same_rank')) {
-		issues.push({ code: 'missing_capability', message: 'pattern:all_same_rank is not enabled' });
+		addIssues(issues, { code: 'missing_capability', message: 'pattern:all_same_rank is not enabled' });
 	}
 	if (match.kind === 'run' && !pack.capabilities.includes('pattern:run')) {
-		issues.push({ code: 'missing_capability', message: 'pattern:run is not enabled' });
+		addIssues(issues, { code: 'missing_capability', message: 'pattern:run is not enabled' });
 	}
 	if (match.kind === 'all_same_suit' && !pack.capabilities.includes('pattern:all_same_suit')) {
-		issues.push({ code: 'missing_capability', message: 'pattern:all_same_suit is not enabled' });
+		addIssues(issues, { code: 'missing_capability', message: 'pattern:all_same_suit is not enabled' });
 	}
 	if (match.kind === 'contains' && !pack.capabilities.includes('pattern:contains')) {
-		issues.push({ code: 'missing_capability', message: 'pattern:contains is not enabled' });
+		addIssues(issues, { code: 'missing_capability', message: 'pattern:contains is not enabled' });
 	}
 	if ((match.kind === 'all' || match.kind === 'any') && !pack.capabilities.includes(`composition:${match.kind}` as 'composition:all' | 'composition:any')) {
-		issues.push({ code: 'missing_capability', message: `${match.kind} composition is not enabled` });
+		addIssues(issues, { code: 'missing_capability', message: `${match.kind} composition is not enabled` });
 	}
 	if (match.kind === 'all' || match.kind === 'any') {
 		for (const child of match.matches) {
-			issues.push(...checkCapability(pack, child));
+			addIssues(issues, ...checkCapability(pack, child));
 		}
 	}
 	return issues;
@@ -631,8 +653,12 @@ function checkCapability(pack: PatternRulePack, match: PatternMatchKind): Patter
 export function detectPatterns(
 	cards: CardInput[],
 	rulePack: unknown = createPatternDetectorRulePack(),
-	options: PatternMatchOptions = {}
+	options: PatternMatchOptions = {},
+	parentWork?: PatternWorkBudget
 ): PatternDetectionResult {
+	const work = new PatternWorkBudget(undefined, parentWork);
+	work.consume();
+	assertPatternBudget(cards, rulePack, work);
 	const issues = validatePatternRulePack(rulePack);
 	const trace = options.trace ? [] : undefined;
 	if (issues.length > 0 && options.strictValidation) {
@@ -644,6 +670,7 @@ export function detectPatterns(
 	}
 
 	const resolved = rulePack as PatternRulePack;
+	work.consume(cards.length + resolved.rankOrder.length);
 	const sortedCards = cloneCards(cards);
 	const rankIndex = getRankIndex(resolved.rankOrder);
 
@@ -670,7 +697,7 @@ export function detectPatterns(
 		const validationIssues = checkCapability(resolved, pattern.match);
 		if (validationIssues.length > 0) {
 			const issue = validationIssues.map((item) => item.code).join(',');
-			allIssues.push(...validationIssues.map((validationIssue) => ({
+			addIssues(allIssues, ...validationIssues.map((validationIssue) => ({
 				...validationIssue,
 				ruleId: pattern.id
 			})));
@@ -686,7 +713,8 @@ export function detectPatterns(
 			resolved.rankOrder,
 			trace,
 			i,
-			options
+			options,
+			work
 		);
 
 		if (candidates.length === 0) {
@@ -695,11 +723,14 @@ export function detectPatterns(
 		}
 		const maxFromRule = pattern.maxMatches ?? options.maxMatchesPerRule ?? candidates.length;
 		const cap = Math.max(0, Math.min(candidates.length, maxFromRule));
+		// Charge sorting up front so accounting does not depend on the JS engine's sort algorithm.
+		work.consume(candidates.length * Math.ceil(Math.log2(Math.max(1, candidates.length))));
 		const selectedCandidates = candidates
 			.slice()
 			.sort((left, right) => left.indices.join(',').localeCompare(right.indices.join(',')))
 			.slice(0, cap);
 		for (const candidate of selectedCandidates) {
+			work.consume();
 			result.push({
 				ruleId: pattern.id,
 				indices: candidate.indices,

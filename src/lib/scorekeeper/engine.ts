@@ -1,7 +1,9 @@
+import { addIssues, invalidScoreRules, validRuleId } from './diagnostics';
+import { assertPatternBudget, PatternWorkBudget, SCORING_REPLAY_WORK_LIMIT } from '$lib/gameplay/pattern-budget';
 import { advanceMahjong, settleMahjong, type MahjongPolicy, type MahjongResult, type MahjongProgress } from '../gameplay/mahjong';
 import { emptyRubber, scoreContract, type ContractResult, type RubberState } from '../gameplay/contract-scoring';
 import rulePackSchema from './rulepack-schema.json';
-import { detectPatterns, type PatternMatchOptions, type PatternRulePack } from '$lib/gameplay/pattern-detector';
+import { detectPatterns, validatePatternRulePack, type PatternMatchOptions, type PatternRulePack } from '$lib/gameplay/pattern-detector';
 
 export type CardRank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
 export type CardSuit = 'clubs' | 'diamonds' | 'hearts' | 'spades';
@@ -266,7 +268,7 @@ function deepEqual(left: unknown, right: unknown): boolean {
 }
 
 function recordSchemaIssue(path: string, code: string, message: string, issues: RulePackValidationIssue[]): void {
-	issues.push({ code: `schema:${code}`, message: `${path}: ${message}` });
+	addIssues(issues, { code: `schema:${code}`, message: `${path}: ${message}` });
 }
 
 function validateAgainstSchema(value: unknown, schema: JsonSchema, path: string): RulePackValidationIssue[] {
@@ -289,7 +291,7 @@ function validateAgainstSchema(value: unknown, schema: JsonSchema, path: string)
 		recordSchemaIssue(
 			path,
 			'enum_mismatch',
-			`value ${JSON.stringify(value)} does not match allowed values ${schema.enum.map((candidate) => JSON.stringify(candidate)).join(', ')}`,
+			'value does not match allowed values',
 			issues
 		);
 		return issues;
@@ -363,14 +365,14 @@ function validateAgainstSchema(value: unknown, schema: JsonSchema, path: string)
 
 	if (schema.items && Array.isArray(value)) {
 		for (let i = 0; i < value.length; i++) {
-			issues.push(...validateAgainstSchema(value[i], schema.items, `${path}[${i}]`));
+			addIssues(issues, ...validateAgainstSchema(value[i], schema.items, `${path}[${i}]`));
 		}
 	}
 
 	if (schema.properties && isObject(value)) {
 		for (const [property, propertySchema] of Object.entries(schema.properties)) {
 			if (property in value) {
-				issues.push(...validateAgainstSchema(value[property], propertySchema, `${path}.${property}`));
+				addIssues(issues, ...validateAgainstSchema(value[property], propertySchema, `${path}.${property}`));
 			}
 		}
 
@@ -388,7 +390,7 @@ function validateAgainstSchema(value: unknown, schema: JsonSchema, path: string)
 		const allowed = schema.properties ? new Set(Object.keys(schema.properties)) : new Set<string>();
 		for (const [property, entry] of Object.entries(value)) {
 			if (!allowed.has(property)) {
-				issues.push(...validateAgainstSchema(entry, schema.additionalProperties as JsonSchema, `${path}.${property}`));
+				addIssues(issues, ...validateAgainstSchema(entry, schema.additionalProperties as JsonSchema, `${path}.${property}`));
 			}
 		}
 	}
@@ -492,7 +494,7 @@ export function validateRulePack(rulePack: unknown): RulePackValidationIssue[] {
 	const seenModifierIds = new Set<string>();
 	for (const modifier of resolvedRulePack.modifiers) {
 		if (seenModifierIds.has(modifier.id)) {
-			issues.push({
+			addIssues(issues, {
 				code: 'duplicate_modifier_id',
 				message: `Modifier id "${modifier.id}" is duplicated`
 			});
@@ -501,7 +503,7 @@ export function validateRulePack(rulePack: unknown): RulePackValidationIssue[] {
 
 		const op = modifier.operation.kind;
 		if ((op === 'add' || op === 'multiply' || op === 'clamp_min' || op === 'clamp_max') && !resolvedRulePack.capabilities.includes('value:op-algebra')) {
-			issues.push({
+			addIssues(issues, {
 				code: 'missing_capability_value_op_algebra',
 				message: `Modifier "${modifier.id}" uses operation "${op}" but capability "value:op-algebra" is missing`
 			});
@@ -509,7 +511,7 @@ export function validateRulePack(rulePack: unknown): RulePackValidationIssue[] {
 	}
 
 	if (resolvedRulePack.modifierResolution === 'first_match_wins' && !resolvedRulePack.capabilities.includes('resolution:first-match')) {
-		issues.push({
+		addIssues(issues, {
 			code: 'missing_capability_first_match',
 			message: 'modifierResolution is "first_match_wins" but capability "resolution:first-match" is missing'
 		});
@@ -602,13 +604,29 @@ function normalizeAddRoundEntries(event: Extract<ScoreEvent, { type: 'add_round'
 	}));
 }
 
-function getPatternScoreMap(scoring: PatternScoringRule[]): Map<string, number> {
-	const scoringMap = new Map<string, number>();
-	for (const rule of scoring) {
-		scoringMap.set(rule.patternId, rule.points);
+function validatePatternScoring(patternPack: PatternRulePack, scoring: PatternScoringRule[]): RulePackValidationIssue[] {
+	// Bound recursive validation itself before looking at caller-defined matches.
+	assertPatternBudget([], patternPack);
+	const issues: RulePackValidationIssue[] = [];
+	addIssues(issues, ...validatePatternRulePack(patternPack).map(issue => ({ ...issue, code: `pattern:${issue.code}` })));
+	if (issues.length) return issues;
+	if (!Array.isArray(scoring) || scoring.length > 32) {
+		addIssues(issues, { code: 'pattern:invalid_scoring', message: 'Provide at most 32 pattern scoring mappings.' });
+		return issues;
 	}
-
-	return scoringMap;
+	const mapped = new Set<string>();
+	for (const rule of scoring) {
+		if (!rule || !validRuleId(rule.patternId) || typeof rule.points !== 'number' || !Number.isFinite(rule.points)) {
+			addIssues(issues, { code: 'pattern:invalid_scoring', message: 'Scoring mappings require a valid ID and finite numeric points.' });
+			continue;
+		}
+		if (mapped.has(rule.patternId)) addIssues(issues, { code: 'pattern:duplicate_scoring', message: 'Scoring mappings must have unique pattern IDs.', ruleId: rule.patternId });
+		mapped.add(rule.patternId);
+	}
+	for (const pattern of patternPack.patterns) {
+		if (!mapped.has(pattern.id)) addIssues(issues, { code: 'pattern:unmapped_pattern', message: 'No scoring mapping exists for this pattern.', ruleId: pattern.id });
+	}
+	return issues;
 }
 
 function normalizePatternRoundEntries(event: Extract<ScoreEvent, { type: 'add_pattern_round' }>): PatternRoundEntry[] {
@@ -675,11 +693,17 @@ function applyPatternRoundTotals(
 	patternScoring: PatternScoringRule[],
 	trace: ScoreTraceEntry[] | undefined,
 	eventIndex: number,
+	work: PatternWorkBudget,
 	strictValidation?: boolean,
 	matchOptions: PatternMatchOptions = {}
 ): RulePackValidationIssue[] {
-	const validationIssues: RulePackValidationIssue[] = [];
-	const scoringByRule = getPatternScoreMap(patternScoring);
+	const validationIssues = validatePatternScoring(patternPack, patternScoring);
+	if (validationIssues.length) {
+		if (strictValidation) throw invalidScoreRules(validationIssues[0]);
+		for (const entry of entries) totalsByTarget[targetKey(entry.target)] ??= 0;
+		return validationIssues;
+	}
+	const scoringByRule = new Map(patternScoring.map(rule => [rule.patternId, rule.points]));
 
 	for (const entry of entries) {
 		const key = targetKey(entry.target);
@@ -688,22 +712,17 @@ function applyPatternRoundTotals(
 			...matchOptions,
 			trace: trace !== undefined || matchOptions.trace,
 			strictValidation
-		});
+		}, work);
 
-		validationIssues.push(...detection.issues.map((issue) => ({
+		addIssues(validationIssues, ...detection.issues.map((issue) => ({
 			...issue,
 			code: `pattern:${issue.code}`
 		})));
 
+		if (strictValidation && validationIssues.length) throw invalidScoreRules(validationIssues[0]);
 		for (const match of detection.matches) {
-			const points = scoringByRule.get(match.ruleId);
-			if (points === undefined) {
-				validationIssues.push({
-					code: 'pattern:unmapped_pattern',
-					message: `No pattern scoring rule found for "${match.ruleId}"`
-				});
-				continue;
-			}
+			// Mappings were validated once, before any enumeration.
+			const points = scoringByRule.get(match.ruleId)!;
 
 			roundTotal += points;
 			if (trace) {
@@ -846,12 +865,13 @@ function totalsByPlayerFromTargets(totalsByTarget: Record<string, number>): Reco
 }
 
 export function deriveState(events: ScoreEvent[], rulePack: unknown, options: DeriveStateOptions = {}): ScoreState {
+	const replayWork = new PatternWorkBudget(SCORING_REPLAY_WORK_LIMIT);
 	const validationIssues = validateRulePack(rulePack);
 	const hasSchemaIssue = validationIssues.some(isSchemaIssue);
 	const trace: ScoreTraceEntry[] | undefined = options.trace ? [] : undefined;
 
 	if (options.strictValidation && validationIssues.length > 0) {
-		throw new Error(`Rule pack validation failed: ${validationIssues.map((issue) => issue.code).join(', ')}`);
+		throw invalidScoreRules(validationIssues[0]);
 	}
 
 	if (hasSchemaIssue) {
@@ -930,7 +950,7 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 			return;
 		}
 		if (mutation.type === 'add_pattern_round') {
-			allIssues.push(
+			addIssues(allIssues,
 				...applyPatternRoundTotals(
 					totalsByTarget,
 					normalizePatternRoundEntries(mutation),
@@ -938,6 +958,7 @@ export function deriveState(events: ScoreEvent[], rulePack: unknown, options: De
 					mutation.patternScoring,
 					trace,
 					eventIndex,
+					new PatternWorkBudget(undefined, replayWork),
 					options.strictValidation,
 					mutation.matchOptions
 				)

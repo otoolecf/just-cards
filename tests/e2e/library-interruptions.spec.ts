@@ -1,3 +1,4 @@
+import { signInOwner } from './owner';
 import { test, expect, type Page } from '@playwright/test';
 import type { RoomView } from '../../src/lib/server/room-service';
 async function view(page: Page): Promise<RoomView> {
@@ -47,9 +48,7 @@ test('organize games in both pickers without changing a room snapshot', async ({
 	page,
 	request,
 }) => {
-	const key=process.env.E2E_OWNER_ACCESS_KEY;
-	test.skip(!key, 'Shared-library management requires the test owner key');
-	expect((await page.request.post('/api/owner/session',{data:{key}})).ok()).toBe(true);
+	await signInOwner(page.request, request);
 	const title = `Library ${crypto.randomUUID().slice(0, 8)}`;
 	await page.goto('/play');
 	await page.waitForLoadState('networkidle');

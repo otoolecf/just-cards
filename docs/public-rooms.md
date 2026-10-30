@@ -2,7 +2,7 @@
 
 Anyone can create an unlisted shared table and send its invite URL to family. Room
 and seat credentials remain independent of owner access. No account is required
-for playing, using saved rules, changing house rules, or physical scorekeeping.
+for playing, using saved rules, or physical scorekeeping. Saving shared house rules requires owner access.
 
 ## Capacity and saved games
 
@@ -75,8 +75,8 @@ SameSite=Strict cookie (Secure on HTTPS). **Sign out** clears this browser's coo
 Rotate `OWNER_ACCESS_KEY` to invalidate all existing owner sessions and API clients.
 There is no public signup or user administration. The browser does not store the
 owner key. Only the owner sees AI import forms and controls to rename, archive, restore, or
-delete shared games. Public users can read the catalog, favorite games locally,
-make immutable copies, and create house-rule variants. PATCH/DELETE to individual
+delete shared games. Public users can read the catalog and favorite games locally. Saving copies and
+house-rule variants requires owner access. PATCH/DELETE to individual
 rulesets are also protected by the server hook.
 
 The server hook gates `/api/rulesets/generate`, all `/api/mcp` transports, and
@@ -121,3 +121,11 @@ Set `PUBLIC_APP_URL` when running `npm run docs:build` to render the hosted-app
 link. Follow [Deploy to your own Cloudflare account](./deployment.md) to provision
 your Worker, D1 database and secrets. Local game history and custom rules are not
 copied to production; built-in games are supplied by the app.
+
+## Public security hardening
+
+All shared-library writes, including copies, house rules and review acceptance,
+now require owner sign-in. Favorites and gameplay remain public. Production room
+and physical-score APIs use the admission object's persistent resource registry
+before dispatch; unknown IDs do not create room objects. See
+[deployment security](./security-deployment.md) for legacy-ID registration and limits.

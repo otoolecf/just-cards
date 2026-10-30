@@ -53,7 +53,7 @@
 <details class="jc-panel library" bind:this={panel} bind:open>
  <summary>Manage games</summary>
  <p class="jc-subtle">Rename saved games or use Remove from list to archive them. To bring one back, choose Show archived games, then Restore. Archived games can also be permanently deleted. Built-ins can be duplicated with your own name. Favorites stay on this browser; names and removals update the shared library. Existing games keep their rules.</p>
- {#if !owner}<p class="jc-subtle">Only the owner can rename, archive, restore, or delete shared games. You can still favorite games and make copies. <a class="jc-mode-link" href="/owner">Owner sign in</a></p>{/if}
+ {#if !owner}<p class="jc-subtle">Only the owner can rename, archive, restore, or delete shared games. You can still favorite and play saved games. <a class="jc-mode-link" href="/owner">Owner sign in</a></p>{/if}
  <label>Find a game<input class="jc-control" type="search" bind:value={search} /></label>
  <label class="archive-toggle"><input type="checkbox" bind:checked={showArchived} /> Show archived games</label>
  {#if error}<p role="alert" class="jc-status-error">{error}</p>{/if}
@@ -63,7 +63,7 @@
    <strong>{record.name}</strong><span class="jc-subtle">{record.archived?'Archived':record.id.startsWith('builtin-')?'Built-in':'Saved game'}</span>
    <div class="actions">
     <ScoreButton disabled={busy} onPress={()=>favorite(record.id)}>{favorites.includes(record.id)?'★ Unfavorite':'☆ Favorite'}</ScoreButton>
-    <ScoreButton disabled={busy} onPress={()=>edit(record,'copy')}>Duplicate</ScoreButton>
+    <ScoreButton disabled={busy || !owner} onPress={()=>edit(record,'copy')}>Duplicate</ScoreButton>
     {#if owner && !record.id.startsWith('builtin-')}
      <ScoreButton disabled={busy} onPress={()=>edit(record,'rename')}>Rename</ScoreButton>
      <ScoreButton disabled={busy} onPress={()=>save(record,!record.archived)}>{record.archived?'Restore':'Remove from list'}</ScoreButton>

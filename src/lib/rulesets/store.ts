@@ -28,7 +28,7 @@ export interface RulesetStore {
 		input: RulesetMetadataUpdate,
 	): Promise<RulesetRecord>;
 	create(input: CreateRulesetInput): Promise<RulesetRecord>;
-	list(): Promise<RulesetRecord[]>;
+	list(limit?: number, offset?: number): Promise<RulesetRecord[]>;
 	getById(id: string): Promise<RulesetRecord | undefined>;
 }
 
@@ -94,9 +94,10 @@ class InMemoryRulesetStore implements RulesetStore {
 		this.records.delete(id);
 	}
 
-	async list(): Promise<RulesetRecord[]> {
+	async list(limit = 100, offset = 0): Promise<RulesetRecord[]> {
 		return [...this.records.values()]
 			.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+			.slice(offset, offset + Math.min(100, Math.max(1, limit)))
 			.map(cloneRecord);
 	}
 
@@ -220,14 +221,14 @@ class SqliteRulesetStore implements RulesetStore {
 			);
 	}
 
-	async list(): Promise<RulesetRecord[]> {
+	async list(limit = 100, offset = 0): Promise<RulesetRecord[]> {
 		const rows = this.db
 			.prepare(
 				`SELECT id, name, origin, source_url, notes, bundle_json, created_at, updated_at, archived
 				 FROM rulesets
-				 ORDER BY updated_at DESC`,
+				 ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`,
 			)
-			.all();
+			.all(Math.min(100, Math.max(1, Math.trunc(limit))), Math.max(0, Math.trunc(offset)));
 		return rows.map(rowToRecord);
 	}
 

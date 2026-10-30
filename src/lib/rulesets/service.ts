@@ -1,3 +1,4 @@
+import { safeSourceUrl } from './source-url';
 import { validateGenerationReport } from './generation-report';
 import { createGameplayRulePack, deriveGameState } from '$lib/gameplay/engine';
 import { createRulePack, deriveState } from '$lib/scorekeeper/engine';
@@ -28,7 +29,7 @@ export interface RulesetService {
 		input: RulesetMetadataUpdate,
 	): Promise<RulesetRecord>;
 	createDraft(input: CreateRulesetDraftInput): Promise<RulesetRecord>;
-	list(): Promise<RulesetRecord[]>;
+	list(limit?: number, offset?: number): Promise<RulesetRecord[]>;
 	getById(id: string): Promise<RulesetRecord | undefined>;
 }
 
@@ -204,6 +205,9 @@ class DefaultRulesetService implements RulesetService {
 	constructor(private readonly store: RulesetStore) {}
 
 	async createDraft(input: CreateRulesetDraftInput): Promise<RulesetRecord> {
+		if (typeof input.name !== 'string' || input.name.length > 80) throw new Error('Invalid ruleset name');
+		if (input.sourceUrl !== undefined && !safeSourceUrl(input.sourceUrl)) throw new Error('Source URL must use HTTP or HTTPS without credentials');
+		if (JSON.stringify(input).length > 65536) throw new Error('Ruleset is too large');
 		const name = input.name.trim();
 		if (!name) {
 			throw new Error('name is required');
@@ -252,8 +256,8 @@ class DefaultRulesetService implements RulesetService {
 			);
 		return this.store.updateMetadata(id, { ...input, name: input.name.trim() });
 	}
-	async list(): Promise<RulesetRecord[]> {
-		return this.store.list();
+	async list(limit = 100, offset = 0): Promise<RulesetRecord[]> {
+		return this.store.list(limit, offset);
 	}
 
 	async getById(id: string): Promise<RulesetRecord | undefined> {

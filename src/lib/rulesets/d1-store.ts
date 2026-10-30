@@ -98,9 +98,9 @@ export function createD1RulesetStore(db: RulesetDatabase): RulesetStore {
 					'Game must be archived and unchanged. Reload and try again.',
 				);
 		},
-		async list() {
+		async list(limit = 100, offset = 0) {
 			const { results } = await db
-				.prepare('SELECT * FROM rulesets ORDER BY updated_at DESC, id')
+				.prepare(`SELECT * FROM rulesets ORDER BY updated_at DESC, id LIMIT ${Math.min(100, Math.max(1, Math.trunc(limit)))} OFFSET ${Math.max(0, Math.trunc(offset))}`)
 				.all<Row>();
 			return results.map(decode);
 		},

@@ -46,13 +46,13 @@ describe('owner AI access', () => {
 			),
 		).toBe(false);
 	});
-	it('restricts edits and deletion of the shared catalog without blocking games or copies', () => {
+	it('restricts edits and deletion of the shared catalog without blocking game reads', () => {
   for(const method of ['PATCH','DELETE']) {
    expect(protectedOwnerPath('/api/rulesets/[rulesetId]',method)).toBe(true);
    expect(protectedOwnerPath('/api/rulesets/saved-game',method)).toBe(true);
   }
-  for(const method of ['GET','HEAD','POST']) expect(protectedOwnerPath('/api/rulesets/[rulesetId]',method)).toBe(false);
-  expect(protectedOwnerPath('/api/rulesets/[rulesetId]/house-rules','POST')).toBe(false);
+  for(const method of ['GET','HEAD']) expect(protectedOwnerPath('/api/rulesets/[rulesetId]',method)).toBe(false);
+  expect(protectedOwnerPath('/api/rulesets/[rulesetId]/house-rules','POST')).toBe(true);
  });
 	it('covers direct generation and all MCP/chat transports, leaves family play public', () => {
 		for (const path of [

@@ -1,3 +1,4 @@
+import { signInOwner } from './owner';
 import {
 	test,
 	expect,
@@ -116,6 +117,8 @@ test('Palace chooses face-up cards and plays through its active zone on two phon
 }) => {
 	const f = await openRoom(browser, request, 'builtin-palace-family', 2);
 	for (const page of f.pages) {
+		// Observe the previous player's committed setup before selecting cards.
+		await page.reload();
 		const board = page.getByRole('region', { name: 'Palace table' });
 		await expect(
 			board.getByRole('heading', {
@@ -124,7 +127,9 @@ test('Palace chooses face-up cards and plays through its active zone on two phon
 		).toBeVisible();
 		const cards = board.locator('.cap-row').nth(1).locator('button');
 		for (let i = 0; i < 3; i++) await cards.nth(i).click();
+		const committed = page.waitForResponse(r => r.url().endsWith(`/api/rooms/${f.code}`) && r.request().method() === 'POST');
 		await board.getByRole('button', { name: 'Place three face up' }).click();
+		expect((await committed).ok()).toBe(true);
 	}
 	const guest = f.pages[1],
 		board = guest.getByRole('region', { name: 'Palace table' });
@@ -232,6 +237,7 @@ test('physical Bridge calculates a contract offline, persists it and undoes it',
 test('Solitaire and Palace physical scoring use results, and Palace effects are editable', async ({
 	page,
 }) => {
+	await signInOwner(page.request);
 	await page.goto('/?ruleset=builtin-solitaire');
 	await page.waitForLoadState('networkidle');
 	await expect(page.getByPlaceholder('Player 2', { exact: true })).toHaveCount(
@@ -240,6 +246,7 @@ test('Solitaire and Palace physical scoring use results, and Palace effects are 
 	await page
 		.getByRole('button', { name: 'Create session', exact: true })
 		.click();
+	await page.getByRole('tab', { name: 'Guided result', exact: true }).click();
 	await page
 		.getByRole('button', { name: 'Completed deal (+1)', exact: true })
 		.click();
@@ -252,6 +259,7 @@ test('Solitaire and Palace physical scoring use results, and Palace effects are 
 	await page
 		.getByRole('button', { name: 'Create session', exact: true })
 		.click();
+	await page.getByRole('tab', { name: 'Guided result', exact: true }).click();
 	await page
 		.getByRole('button', { name: 'Save winner (+1)', exact: true })
 		.click();

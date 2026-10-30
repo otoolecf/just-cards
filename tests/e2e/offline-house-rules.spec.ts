@@ -1,3 +1,4 @@
+import { signInOwner } from './owner';
 import { test, expect } from '@playwright/test';
 
 test('physical scores survive offline creation, undo/redo, reload and reconnect', async ({
@@ -81,6 +82,7 @@ test('a saved ten-card house variant drives shared room setup', async ({
 	page,
 	request,
 }) => {
+	await signInOwner(page.request);
 	await page.goto('/play');
 	await page.waitForLoadState('networkidle');
 	await page
@@ -144,6 +146,7 @@ test('a saved ten-card house variant drives shared room setup', async ({
 test('custom Golf values and disabled cancellation apply to guided score entry', async ({
 	page,
 }) => {
+	await signInOwner(page.request);
 	await page.goto('/');
 	await page.waitForLoadState('networkidle');
 	await page.locator('#guided-ruleset').click();
@@ -172,6 +175,7 @@ test('custom Golf values and disabled cancellation apply to guided score entry',
 	await expect(
 		page.getByText('Matching cards in a column cancel.', { exact: false }),
 	).toHaveCount(0);
+	await page.getByRole('tab', { name: 'Guided cards', exact: true }).click();
 	for (const player of ['Player 1', 'Player 2'])
 		for (let n = 0; n < 6; n++)
 			await page

@@ -26,6 +26,10 @@ function sanitizeValue(value: unknown, depth = 0): JsonValue {
 		const record = value as Record<string, unknown>;
 		const output: Record<string, JsonValue> = {};
 		for (const [key, entry] of Object.entries(record)) {
+			if (/url/i.test(key) && typeof entry === 'string') {
+ try {const url=new URL(entry);output[key]=url.origin+url.pathname;} catch {output[key]='[invalid URL]';}
+ continue;
+ }
 			if (SENSITIVE_KEY_PATTERN.test(key)) {
 				output[key] = '[redacted]';
 				continue;

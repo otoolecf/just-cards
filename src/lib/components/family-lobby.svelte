@@ -1,4 +1,6 @@
 <script lang="ts">
+ import OwnerGate from './owner-gate.svelte';
+ import { safeSourceUrl } from '$lib/rulesets/source-url';
 	import BrandWordmark from '$lib/components/brand-wordmark.svelte';
 	import { onMount } from 'svelte';
 	import PlayGuide from './play-guide.svelte';
@@ -15,7 +17,18 @@
 	import ScoreButton from './score-button.svelte';
 	export let rulesets: RulesetRecord[] = familyRulesets();
 	export let selectedRulesetId = rulesets[0]?.id ?? '';
-	let recent: RecentRoom[] = [];
+	let nextCatalogOffset: number | null = rulesets.length >= 100 ? 100 : null;
+ async function moreGames() {
+  if(nextCatalogOffset===null)return;
+  try {
+   const response=await fetch(`/api/rulesets?offset=${nextCatalogOffset}`);
+   if(!response.ok)throw new Error('Could not load more games');
+   const page=await response.json() as {rulesets:RulesetRecord[];nextOffset:number|null};
+   rulesets=[...rulesets,...page.rulesets.filter(r=>!rulesets.some(old=>old.id===r.id))];
+   nextCatalogOffset=page.nextOffset;
+  } catch(e){error=e instanceof Error?e.message:'Could not load more games';}
+ }
+ let recent: RecentRoom[] = [];
 	let savedFamily='';
  let library: RulesetLibrary;
  let favorites:string[]=[];
@@ -136,10 +149,11 @@
 		Have physical cards? <a href={`/?ruleset=${encodeURIComponent(selectedRulesetId)}`} data-sveltekit-reload>Keep score with guided entry.</a>
 	</p>
 	{#each rulesets.filter(r=>r.id===selectedRulesetId && canPlayRuleset(r.bundle) && (r.bundle.runtimeRulePack.tableRules?.layout || r.bundle.runtimeRulePack.tableRules?.meld || r.bundle.runtimeRulePack.tableRules?.shedding)) as original (original.id)}
-		<HouseRulesEditor {original} onSaved={(record)=>{rulesets=[record,...rulesets]; selectedRulesetId=record.id; savedFamily=`Saved ${record.name}. It is selected for your next room.`;}} />
+		<OwnerGate><HouseRulesEditor {original} onSaved={(record)=>{rulesets=[record,...rulesets]; selectedRulesetId=record.id; savedFamily=`Saved ${record.name}. It is selected for your next room.`;}} /></OwnerGate>
 	{/each}
 	{#if savedFamily}<p role="status" class="jc-status-success">{savedFamily}</p>{/if}
-	<RulesetLibrary bind:this={library} {rulesets} {favorites} onDeleted={(id)=>rulesets=rulesets.filter(r=>r.id!==id)} onChanged={updateLibrary} onFavorites={(ids)=>favorites=ids} />
+	{#if nextCatalogOffset !== null}<ScoreButton onPress={moreGames}>Load more games</ScoreButton>{/if}
+ <RulesetLibrary bind:this={library} {rulesets} {favorites} onDeleted={(id)=>rulesets=rulesets.filter(r=>r.id!==id)} onChanged={updateLibrary} onFavorites={(ids)=>favorites=ids} />
 	<RulesetImport
 		onImported={(record) => {
 			rulesets = [record, ...rulesets.filter((r) => r.id !== record.id)];
@@ -164,7 +178,7 @@
                     (['A','2','3','4','5','6','7','8','9','10','J','Q','K'] as CardRank[]).map(rank => [rank,
                         cardValue({rank}, (selected.bundle.runtimeRulePack.scoreRulePack ?? createRulePack()) as RulePack)])
                 )} />
-                {#if selected.sourceUrl}<a href={selected.sourceUrl}>Read source rules</a>{/if}
+                {#if selected.sourceUrl}<a href={safeSourceUrl(selected.sourceUrl)}>Read source rules</a>{/if}
             {/if}
         {/each}
 	</details>

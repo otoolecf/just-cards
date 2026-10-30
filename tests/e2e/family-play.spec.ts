@@ -39,9 +39,12 @@ test('two phones join, choose hidden positions, draw, swap and resume', async ({
 	);
 	for (let slot = 4; slot <= 6; slot++) {
 		await a.getByRole('button', { name: /Draw from stock/ }).click();
+		await expect(a.getByTestId('drawn-card')).toBeVisible();
 		await a.getByRole('button', { name: 'Discard drawn card', exact: true }).click();
 		await b.getByRole('button', { name: /Draw from stock/ }).click();
+		await expect(b.getByTestId('drawn-card')).toBeVisible();
 		await b.getByRole('button', { name: `Your card ${slot}: Hidden`, exact: true }).click();
+		await expect(b.getByRole('button', { name: `Your card ${slot}: Hidden`, exact: true })).toHaveCount(0);
 	}
 	await expect(a.getByRole('heading', { name: 'Round scores', exact: true })).toBeVisible();
 	await expect(b.getByRole('heading', { name: 'Round scores', exact: true })).toBeVisible();
@@ -59,6 +62,7 @@ test('guided physical-card input accepts ranks and preserves editable grid posit
 	await page.getByPlaceholder('Player 1', { exact: true }).fill('Parent');
 	await page.getByPlaceholder('Player 2', { exact: true }).fill('Child');
 	await page.getByRole('button', { name: 'Create session', exact: true }).click();
+	await page.getByRole('tab', { name: 'Guided cards', exact: true }).click();
 	for (const [player, ranks] of [
 		['Parent', ['2', 'K', 'Q', '2', 'A', 'Q']],
 		['Child', ['A', '3', '4', '5', '6', '7']]
@@ -94,6 +98,7 @@ test('guided physical-card input accepts ranks and preserves editable grid posit
 	await page.getByRole('button', { name: 'Redo', exact: true }).click();
 	await expect(page.locator('.status-success')).toHaveText('Redo applied.');
 	await page.reload();
+	await page.getByRole('tab', { name: 'Guided cards', exact: true }).click();
 	await expect(
 		page.getByRole('button', {
 			name: 'Parent-Your six cards: add 2',
@@ -122,6 +127,7 @@ test('500 Rum deals thirteen private cards and completes a stock-draw turn', asy
 	await expect(host.getByText('Child', { exact: true })).toBeVisible();
 	await host.getByRole('button', { name: 'Deal cards' }).click();
 	await expect(guest.getByTestId('my-hand').getByRole('button')).toHaveCount(13);
+	await guest.getByRole('checkbox', { name: /Guided mode/ }).check();
 	await expect(
 		guest.getByText('Starting hand: 13 cards each for 2 players.', { exact: true })
 	).toBeVisible();

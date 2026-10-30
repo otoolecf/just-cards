@@ -1,3 +1,4 @@
+import { signInOwner } from './owner';
 import { test, expect } from '@playwright/test';
 
 for (const game of ['builtin-six-card-golf', 'builtin-500-rum']) {
@@ -26,6 +27,7 @@ for (const game of ['builtin-six-card-golf', 'builtin-500-rum']) {
 }
 
 test('custom ruleset explicitly enables pattern entry and preserves it on resume', async ({ page }) => {
+	await signInOwner(page.request);
 	const { rulesets } = await (await page.request.get('/api/rulesets')).json();
 	const bundle = rulesets.find((r: { id: string }) => r.id === 'builtin-six-card-golf').bundle;
 	bundle.uiProfile.scorekeeper = { patternRound: true };

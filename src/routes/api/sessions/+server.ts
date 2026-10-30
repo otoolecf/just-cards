@@ -2,7 +2,7 @@ import type { RequestHandler } from './$types';
 import { dispatchScore } from '$lib/server/score-dispatch';
 import type { SessionConfig } from '$lib/session/session-store';
 
-export const POST: RequestHandler = async ({ request, platform }) => {
+export const POST: RequestHandler = async ({ request, platform, getClientAddress }) => {
 	const payload = (await request.json().catch(() => ({}))) as {
 		sessionId?: string;
 		config?: SessionConfig;
@@ -11,6 +11,6 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	return dispatchScore(
 		sessionId,
 		{ type: 'create', config: payload.config ?? {} },
-		platform
+		platform, getClientAddress()
 	);
 };

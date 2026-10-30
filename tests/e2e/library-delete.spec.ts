@@ -1,9 +1,6 @@
 import { test, expect } from '@playwright/test';
-test.beforeEach(async ({ page }) => {
- const key=process.env.E2E_OWNER_ACCESS_KEY;
- test.skip(!key,'Shared-library management requires the test owner key');
- expect((await page.request.post('/api/owner/session',{data:{key}})).ok()).toBe(true);
-});
+import { signInOwner } from './owner';
+test.beforeEach(async ({ page, request }) => { await signInOwner(page.request, request); });
 
 test('renames by stable ID, confirms archived deletion and preserves rooms and score sessions', async ({
 	page,
