@@ -126,11 +126,15 @@ APIs). Build/dry-run verification does not deploy anything.
 
 ## Current limits and follow-up work
 
+Track planned improvements in [TODO](../TODO.md).
+
 - Game families outside the explicit executable policy remain draft previews.
   The directory URL is not a rule article; ingestion asks for a specific game URL.
 - MCP gameplay still uses its existing prototype game store. It is not the shared-room
   command API. MCP score leaderboards read the persisted score-session API.
-- No accounts, room expiration, spectator mode, or offline multiplayer. These are separate work from this playable family slice.
+- There are no player accounts, spectator mode, or offline multiplayer. Idle
+  rooms can suspend and release active capacity; saved-room retention and cleanup
+  remain separate work.
 
 ## Family house rules
 

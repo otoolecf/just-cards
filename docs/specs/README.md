@@ -2,6 +2,9 @@
 
 This folder contains feature-level specs written before tests and implementation.
 
+The active backlog lives in [TODO](../../TODO.md). These specifications describe
+feature contracts and test plans; unchecked boxes alone do not indicate outstanding work.
+
 ## Workflow
 
 For each feature:

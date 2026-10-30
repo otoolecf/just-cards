@@ -216,41 +216,11 @@ Safety requirements:
   - clear tap-friendly spacing and compact layout breaks at mobile-first breakpoints.
 - Shared play uses authenticated WebSockets with per-seat projections and reconnect; polling remains a fallback and the scorekeeper transport.
 
-## Phased Delivery Plan
+## Roadmap
 
-## Phase 0: Architecture + Contracts
-
-- Finalize `RulePack` schema.
-- Define room/session/player domain model.
-- Choose first launch games (recommended: Golf + Rummy).
-
-## Phase 1: Scorekeeper MVP
-
-- Room creation/join.
-- Player roster.
-- Round entry with rule-backed scoring.
-- Undo/redo.
-- Standings board.
-
-## Phase 2: Virtual Play MVP
-
-- One fully playable game in real-time.
-- Public/private card visibility.
-- Turn enforcement and action validation.
-- Rejoin/reconnect support.
-
-## Phase 3: Rule Ingestion MVP
-
-- URL ingestion job pipeline.
-- LLM-to-RulePack generation.
-- Schema validation + simulation checks.
-- Draft/publish flow.
-
-## Phase 4: Polish + Expansion
-
-- Additional games.
-- UX polish and onboarding.
-- Performance tuning and observability.
+See [TODO](../TODO.md) for prioritized outstanding work. Scorekeeping, shared
+virtual tables, rule generation and validation are implemented; the sections here
+describe their architecture rather than a list of unfinished delivery phases.
 
 ## When to Re-evaluate AWS
 

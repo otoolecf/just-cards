@@ -84,27 +84,12 @@ Enable users to:
 4. stored ruleset records
 5. live game snapshots
 
-## Phased Plan
+## Remaining work
 
-1. Phase 1: Contracts and eval hardening
-- tighten visibility primitives and setup inference for hidden vs visible hands.
-- add deterministic tests for 500 Rum and Six Card Golf visibility/draw semantics.
-
-2. Phase 2: MCP server scaffold
-- ship initial MCP tools/resources backed by existing backend services.
-
-3. Phase 3: skill-guided sampling pipeline
-- add multi-candidate sampling, compile/validate/rank, and repair loops.
-
-4. Phase 4: ChatGPT app integration
-- wire auth and action/MCP transport.
-- provide generate/explain/open-play flows.
-
-5. Phase 5: AI-seat gameplay
-- implement `suggest_move` + validated move-application loop.
-
-6. Phase 6: operational hardening
-- tracing, budgets, fallback behavior, and production guardrails.
+See [TODO](../TODO.md#follow-up-development) for the active integration backlog.
+MCP transport, authentication, generation, suggestions and render tools are
+implemented. Shared-room gameplay integration remains separate from the prototype
+MCP game store; the implementation below describes the existing interfaces.
 
 ## Success Criteria
 

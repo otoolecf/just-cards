@@ -43,6 +43,8 @@ relative to their document.
 
 ## Contributing
 
+[TODO](../TODO.md) is the prioritized backlog, including photo-assisted scoring.
+
 [Feature specifications](./specs/README.md) describe acceptance criteria and test
 plans. Use the [spec template](./templates/tdd-spec-template.md) and follow
 [repository instructions](../AGENTS.md) when making changes. Update the relevant

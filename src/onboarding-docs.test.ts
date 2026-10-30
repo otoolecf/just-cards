@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const guides = ['README.md', 'docs/deployment.md', 'docs/code-boundaries.md', 'docs/publication-review.md'];
+const guides = ['README.md', 'TODO.md', 'docs/deployment.md', 'docs/code-boundaries.md', 'docs/publication-review.md'];
 const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts;
 
 describe('contributor guides', () => {
@@ -28,7 +28,7 @@ describe('public documentation style', () => {
 			});
 		}
 		const authoringNote = /^_(?:Status|Owner|Date|Last updated|Review date):|^#{1,6} .*\(\d{4}-\d{2}-\d{2}\)|First-pass guide|for this guide.s verification|^Verification:|^Verified locally/m;
-		const files = ['README.md', 'AGENTS.md', ...markdownFiles('docs')];
+		const files = ['README.md', 'TODO.md', 'AGENTS.md', ...markdownFiles('docs')];
 		expect(files.filter((file) => authoringNote.test(readFileSync(file, 'utf8')))).toEqual([]);
 	});
 });
