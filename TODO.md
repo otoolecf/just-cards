@@ -17,12 +17,16 @@ acceptance criteria in linked specs; remove items here when they are delivered.
 
 ## Release and maintenance
 
-- [ ] **Triage dependency advisories.** Assess production reachability and update
-  affected dependencies with regression coverage. See the
-  [publication checklist](./docs/publication-review.md#dependencies).
-- [ ] **Review third-party rule fixtures and public metadata.** Resolve fixture
-  redistribution/attribution and confirm author metadata is intended to be public.
-  See the [publication checklist](./docs/publication-review.md).
+- [ ] **Update dependencies with retained low-severity advisories.** Exposure has
+  been triaged; compatible upgrades and any required framework migration still
+  need regression coverage. See [security operations](./docs/security-deployment.md).
+- [ ] **Resolve historical publisher fixture redistribution.** Current extraction
+  fixtures are original synthetic inputs. Earlier Git revisions retain downloaded
+  publisher pages; decide whether to remove those blobs from public history or
+  resolve permission. See [fixture provenance](./src/lib/rulesets/evals/fixtures/README.md).
+- [ ] **Harden MCP widget rendering and batch AI accounting.** Use safe DOM text
+  and attribute construction for untrusted names/labels, and account for generation
+  calls within JSON-RPC batches. See [MCP limitations](./docs/security-deployment.md#mcp-limitations).
 - [ ] **Verify deployment to a fresh Cloudflare account.** Exercise provisioning,
   D1 migrations, owner setup and the live smoke flow using the
   [deployment guide](./docs/deployment.md). Update the `cf:deploy` shortcut to use

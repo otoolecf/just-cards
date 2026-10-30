@@ -137,7 +137,6 @@ This is a separate documentation build; it does not publish docs with the app.
 - [TODO and planned improvements](./TODO.md)
 
 - [Engine, storage, and hosting boundaries](./docs/code-boundaries.md)
-- [Pre-publication review](./docs/publication-review.md)
 - [Why this project exists](./docs/inspiration.md)
-- [Architecture and roadmap](./docs/architecture.md)
+- [Architecture](./docs/architecture.md)
 - [Documentation index](./docs/README.md)

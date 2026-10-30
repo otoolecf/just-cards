@@ -17,6 +17,10 @@ describe('documentation build', () => {
 				expect(rendered).toContain(`[Hosted app](${url})`);
 				expect(rendered).not.toContain('{{PUBLIC_APP_URL}}');
 				expect(existsSync(join(directory, 'specs/README.md'))).toBe(true);
+				for (const retired of ['publication-review.md', 'publication-results-2026-10-30.md', 'security-audit-2026-10-30.md']) {
+					expect(existsSync(join(directory, retired))).toBe(false);
+				}
+				expect(readFileSync(join(directory, 'security-deployment.md'), 'utf8')).toContain('## MCP limitations');
 			}
 			expect(readFileSync('docs/public-rooms.md', 'utf8')).toBe(source);
 		} finally {

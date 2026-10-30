@@ -1,153 +1,81 @@
-# ChatGPT + MCP Roadmap v0
+# MCP integration
 
-This document defines the implementation roadmap for a ChatGPT-integrated Just Cards experience using MCP tools/resources and MCP sampling.
+Just Cards exposes MCP tools and resources for ruleset generation, inspection,
+prototype gameplay and score rendering. The web app remains the shared-table UI;
+its authoritative rooms are separate from the prototype MCP game store.
 
-## Objective
+## Implemented
 
-Enable users to:
+| Capability | Interface |
+| --- | --- |
+| Generate, validate and inspect rulesets | `generate_ruleset`, `validate_ruleset`, `list_rulesets`, `get_ruleset` |
+| Prototype game snapshots and validated moves | `start_game`, `get_game_state`, `submit_move` |
+| Legal move suggestions and optional AI-seat metadata | `suggest_move`; `ai_seats` on `start_game` |
+| Render prototype tables or physical score standings | `render_game_table`, `render_score_leaderboard` |
 
-1. provide a rules URL or prose in chat,
-2. generate auditable `runtime-bundle/v1` rulesets from that input,
-3. open and play those rulesets in the existing Just Cards play surface,
-4. optionally play against an AI seat with server-validated moves.
+FastMCP handles JSON-RPC through `/api/mcp`, including transport session lifecycle.
+Compatibility routes provide `/api/mcp/sse`, `/api/mcp/messages`, `/api/mcp/tools`,
+`/api/mcp/resources` and `/api/mcp/call`. The protected-resource discovery endpoint
+is `/.well-known/oauth-protected-resource`.
 
-## Architecture Split
+`POST /api/chat/actions` offers `create_from_url`, `explain_rules`,
+`open_playable_table` and `ask_next_move` for custom clients. Tools return structured
+state and identifiers/deep links. The server validates accepted moves; a model
+suggestion or widget interaction cannot replace gameplay validation.
 
-1. `just-cards web app`
-- owns rendering, mobile UX, score/play screens, and room/game state UI.
+## Generation and resources
 
-2. `just-cards backend`
-- owns ruleset persistence, gameplay validation, scoring, and authoritative move application.
+Generation accepts URL or text input and uses the same extraction, review,
+behavioral validation and stored readiness reports as the website. See the
+[generation contract](./ruleset-generation-v0.md). `model_source: "session"`
+requests an injected session sampler; `"server"` requests the configured provider.
+The default server does not install a session sampler, so session requests fall
+back transparently to the server pipeline. There is no assumption that the hosting
+chat application's current model is automatically available to the backend.
 
-3. `just-cards-mcp server`
-- exposes tools and resources so chat agents can use backend capabilities.
+MCP resources include primitive documentation, schemas, stored rulesets, game
+snapshots and trace diagnostics. Resource data and imported rule text are untrusted
+input. Generated rule data is schema-checked; no generated code is executed.
 
-4. `chat model runtime (MCP sampling)`
-- performs extraction/repair/ranking using the in-session model/version.
+## Authentication and budgets
 
-## Skills vs MCP vs MCP Sampling
+MCP/chat routes require owner authorization in addition to MCP bearer-token or
+OAuth authentication. Sign in at `/owner` for browser use; non-browser clients
+supply the owner key as documented in [authentication setup](./mcp-oauth-setup.md).
+Unconfigured protected access stays disabled.
 
-1. Skills (policy/orchestration)
-- define workflow strategy and quality bars:
-  - extraction sequence,
-  - retry/repair logic,
-  - ambiguity handling,
-  - confidence acceptance thresholds.
-- should not perform side effects directly.
+The main configuration inputs are:
 
-2. MCP (capabilities/data bridge)
-- exposes executable tools and readable resources.
-- is the only layer that performs side effects (create ruleset, start game, submit move).
+- `JUST_CARDS_MCP_AUTH_TOKEN`, or the `JUST_CARDS_MCP_OAUTH_*` issuer, JWKS,
+  audience, scope and algorithm settings described in the authentication guide.
+- `JUST_CARDS_MCP_MAX_SOURCE_CHARS` (default 24,000).
+- `JUST_CARDS_MCP_MAX_SERVER_RETRIES` (default 1).
+- `JUST_CARDS_MCP_MAX_TOOL_CALLS_PER_TRACE` (default 32).
+- Server model credentials/settings described in the generation guide.
 
-3. MCP sampling (model reasoning)
-- uses the current in-session model by default for candidate generation and repair loops.
-- consumes primitives/docs/schema context from MCP resources.
+HTTP admission, provider limits and trace/tool limits are distinct. JSON-RPC batches
+can contain multiple generation calls while consuming one HTTP admission unit.
+Configure provider budgets; the HTTP allowance is not a token-spend ceiling.
+See [security operations](./security-deployment.md) for unresolved limitations.
 
-## User-Facing Modes
+## Rendering
 
-1. Web-first
-- user generates rulesets and plays directly in Just Cards UI.
+The render tools use `ui://just-cards/apps/play-table/v1` and
+`ui://just-cards/apps/score-leaderboard/v1`. The FastMCP bridge supplies Apps metadata
+on render tools while leaving structured query tools available. Hosts without
+widget support can consume structured responses and open the web routes.
 
-2. ChatGPT-first
-- user asks ChatGPT app to ingest rules and create game.
-- ChatGPT calls MCP tools, then returns deep links to Just Cards routes.
+Widget HTML still needs safe text/attribute construction for untrusted names,
+labels and messages. Host sandbox behavior is not a substitute for fixing that
+rendering path. Prefer structured tools with untrusted data until this is resolved.
+Detailed input/output and interaction contracts are in [MCP Apps](./mcp-apps-v0.md).
 
-3. BYO-chatbot MCP
-- user runs another MCP-capable client against `just-cards-mcp`.
+## Planned
 
-## MCP Tool Set (Target)
+Connect `start_game`, state reads, moves and suggestions to authoritative shared
+rooms, including room admission and per-seat privacy. The existing prototype tools
+do not join, control or inherit the real-time lifecycle of family rooms.
 
-1. `generate_ruleset`
-2. `validate_ruleset`
-3. `list_rulesets`
-4. `get_ruleset`
-5. `start_game`
-6. `get_game_state`
-7. `submit_move`
-8. `suggest_move`
-
-### Model Source Policy
-
-`generate_ruleset` should support:
-
-1. `model_source: "session"` (default)
-- use MCP sampling and the current in-session model/version.
-
-2. `model_source: "server"` (fallback)
-- use backend-configured models (current nano/mini pipeline) when session sampling is unavailable or explicitly requested.
-
-## MCP Resource Set (Target)
-
-1. primitives KB docs (`rulepack`, `gameplay`, `ui-profile`)
-2. JSON schema artifacts
-3. golden/eval fixture summaries
-4. stored ruleset records
-5. live game snapshots
-
-## Remaining work
-
-See [TODO](../TODO.md#follow-up-development) for the active integration backlog.
-MCP transport, authentication, generation, suggestions and render tools are
-implemented. Shared-room gameplay integration remains separate from the prototype
-MCP game store; the implementation below describes the existing interfaces.
-
-## Success Criteria
-
-1. Generated rulesets render with game-appropriate visibility/flow on mobile without manual rule edits.
-2. ChatGPT can generate and open playable rulesets from URL/prose with explainable diagnostics.
-3. AI-assisted move suggestions are always validated by server gameplay rules before state mutation.
-
-## MCP implementation
-
-Delivered endpoints:
-
-1. FastMCP transport endpoints (auth-aware):
-- `POST /api/mcp` (MCP streamable HTTP / JSON-RPC ingress)
-- `DELETE /api/mcp` (session lifecycle support)
-- `GET /api/mcp` (transport-managed behavior)
-
-2. Compatibility MCP endpoints (auth-aware):
-- `GET /api/mcp/sse` (compatibility redirect to `/api/mcp`)
-- `POST /api/mcp/messages?sessionId=...` (legacy path passthrough)
-- `GET /api/mcp/tools`, `GET /api/mcp/resources`, `POST /api/mcp/call` remain available for custom client workflows.
-
-3. OAuth protected resource metadata:
-- `GET /.well-known/oauth-protected-resource`
-- returns `resource`, `authorization_servers`, `scopes_supported`, and bearer metadata for MCP resource discovery.
-
-4. Chat action endpoint (auth-aware):
-- `POST /api/chat/actions`
-- actions:
-  - `create_from_url`
-  - `explain_rules`
-  - `open_playable_table`
-  - `ask_next_move`
-
-5. AI seat + hardening primitives:
-- `start_game` supports optional `ai_seats`
-- `get_game_state` returns `aiSeats`
-- `suggest_move` supports `mode` (`coach|opponent|dealer_narrator`) and returns legal suggestions only
-- generation budget controls: `maxSourceChars`, `maxServerRetries`, `maxToolCallsPerTrace`
-- trace IDs on tool/action execution, structured server logs, and `just-cards://audit/recent` audit resource
-
-6. MCP Apps render surfaces:
-- render tools:
-  - `render_game_table` (cards/hands/seats/table zones from live game state)
-  - `render_score_leaderboard` (ranked standings from score session state)
-- UI resources:
-  - `ui://just-cards/apps/play-table/v1`
-  - `ui://just-cards/apps/score-leaderboard/v1`
-- FastMCP edge bridge injects Apps metadata into `tools/list` for render tools (`_meta.ui.resourceUri`, `_meta["openai/outputTemplate"]`) while preserving existing query/explore tools.
-
-Environment controls:
-
-1. `JUST_CARDS_MCP_AUTH_TOKEN` (when set, MCP/action routes require bearer token)
-2. OAuth JWT mode:
-- `JUST_CARDS_MCP_OAUTH_ISSUER` (enables OAuth JWT validation mode)
-- `JUST_CARDS_MCP_OAUTH_JWKS_URL` (optional, defaults to `{issuer}/.well-known/jwks.json`)
-- `JUST_CARDS_MCP_OAUTH_AUDIENCE` (optional expected `aud`)
-- `JUST_CARDS_MCP_OAUTH_REQUIRED_SCOPES` (defaults to `mcp:tools mcp:resources`)
-- `JUST_CARDS_MCP_OAUTH_REALM` (optional bearer challenge realm)
-3. `JUST_CARDS_MCP_MAX_SOURCE_CHARS` (default `24000`)
-4. `JUST_CARDS_MCP_MAX_SERVER_RETRIES` (default `1`)
-5. `JUST_CARDS_MCP_MAX_TOOL_CALLS_PER_TRACE` (default `32`)
+Automatic play by AI seats in shared rooms is not delivered by storing prototype
+AI-seat metadata. Further work must preserve server validation, consent and private
+projections. The prioritized integration work is tracked in [TODO](../TODO.md).

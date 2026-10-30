@@ -1,9 +1,10 @@
 # Security deployment and operations
 
-This document accompanies the 2026-10-30 hardening spec. Repository configuration
-is not proof of live dashboard settings. No production deployment was performed.
+Application safeguards and operator responsibilities for a hosted installation.
+Repository configuration does not establish which settings are enabled in a live
+Cloudflare dashboard; verify those settings for your own deployment.
 
-## Mandatory migration before public rollout
+## Upgrading installations with legacy resource IDs
 
 Existing entries from the previous JSON registry migrate automatically to indexed rows.
 On installations without that registry, it starts empty. Existing Durable Object data is preserved,
@@ -73,7 +74,7 @@ production admission using an isolated Wrangler instance. Configure
 `PUBLIC_WRITES_ENABLED=false` to pause API writes (owner session/migration endpoints
 remain available). This does not stop reads, socket connections or existing alarms.
 
-## Before advertising the domain
+## Operator configuration
 
 - Verify the deployed owner key is random, at least 32 characters, and set as a
   secret. Enable repository secret scanning/private vulnerability reporting.
@@ -98,13 +99,25 @@ automatic record retention, source-fetch destination/redirect restrictions and
 live edge/dashboard verification remain follow-up work. Do not describe these as
 deployed protections.
 
+## MCP limitations
+
+- Widget HTML still interpolates untrusted player/ruleset names, labels and status
+  strings into markup. Safe text/attribute construction and browser regressions
+  remain required. Owner authentication does not make that data trusted; prefer
+  structured MCP tools with untrusted inputs. Host sandbox restrictions are not a
+  substitute for fixing template rendering.
+- JSON-RPC batch requests count as one HTTP AI admission request even when they
+  contain multiple generation tool calls. Per-request concurrency/admission does
+  not provide a per-call token-spend ceiling. Configure provider-side budgets;
+  tool-call accounting across batches remains follow-up work.
+
 ## Verification
 
 Run `npm test`, `npm run check`, `npm run build` and `npm audit`. CI runs these checks
 and a full-history Gitleaks scan. The audit job fails on high/critical advisories;
 remaining lower-severity advisories require review rather than silent dismissal.
 
-## Follow-up audit fixes
+## Routing and registry invariants
 
 All API guards use the resolved SvelteKit route, including encoded URLs. Registry
 rows and rate-counter rows are stored separately; denied requests do not rewrite

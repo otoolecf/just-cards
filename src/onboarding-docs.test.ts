@@ -1,8 +1,14 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const guides = ['README.md', 'TODO.md', 'docs/deployment.md', 'docs/code-boundaries.md', 'docs/publication-review.md'];
+function markdownFiles(directory: string): string[] {
+ return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+  const path = `${directory}/${entry.name}`;
+  return entry.isDirectory() ? markdownFiles(path) : entry.name.endsWith('.md') ? [path] : [];
+ });
+}
+const guides = ['README.md', 'TODO.md', 'SECURITY.md', 'AGENTS.md', ...markdownFiles('docs')];
 const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts;
 
 describe('contributor guides', () => {
@@ -19,16 +25,28 @@ describe('contributor guides', () => {
 });
 
 describe('public documentation style', () => {
-	it('omits authoring metadata, dated headings and one-off guide notes', async () => {
-		const { readdirSync } = await import('node:fs');
-		function markdownFiles(directory: string): string[] {
-			return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-				const path = `${directory}/${entry.name}`;
-				return entry.isDirectory() ? markdownFiles(path) : entry.name.endsWith('.md') ? [path] : [];
-			});
-		}
+	it('omits authoring metadata, dated headings and one-off guide notes', () => {
 		const authoringNote = /^_(?:Status|Owner|Date|Last updated|Review date):|^#{1,6} .*\(\d{4}-\d{2}-\d{2}\)|First-pass guide|for this guide.s verification|^Verification:|^Verified locally/m;
-		const files = ['README.md', 'TODO.md', 'AGENTS.md', ...markdownFiles('docs')];
+		const files = guides;
 		expect(files.filter((file) => authoringNote.test(readFileSync(file, 'utf8')))).toEqual([]);
 	});
+});
+
+
+describe('maintained contributor documentation', () => {
+ it('retires launch reports from the current documentation tree', () => {
+  const retired = ['docs/publication-review.md', 'docs/publication-results-2026-10-30.md', 'docs/security-audit-2026-10-30.md'];
+  expect(retired.filter((file) => existsSync(file))).toEqual([]);
+ });
+ it('preserves current MCP and operational limitations', () => {
+  const integration = readFileSync('docs/chatgpt-mcp-roadmap-v0.md', 'utf8');
+  expect(integration).toContain('## Implemented');
+  expect(integration).toContain('## Planned');
+  expect(integration).toContain('prototype');
+  const operations = readFileSync('docs/security-deployment.md', 'utf8');
+  expect(operations).toContain('Widget HTML');
+  expect(operations).toContain('JSON-RPC batch');
+  expect(operations).toContain('source-fetch destination');
+  expect(operations).toContain('automatic record retention');
+ });
 });

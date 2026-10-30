@@ -8,7 +8,6 @@ relative to their document.
 - [Local setup](../README.md#clone-and-run-locally): Run built-in games without credentials.
 - [Deploy your own installation](./deployment.md): Account selection, D1, secrets and live checks.
 - [Engine, storage and hosting boundaries](./code-boundaries.md): Code responsibilities and portability.
-- [Publication checklist](./publication-review.md): Secrets, personal data, dependencies and fixtures.
 - [Project purpose](./inspiration.md): The in-person play and scoring problems this project addresses.
 
 ## Play and scoring
@@ -20,7 +19,7 @@ relative to their document.
 
 ## Architecture and contracts
 
-- [Architecture and roadmap](./architecture.md)
+- [Architecture](./architecture.md)
 - [RulePack schema](./rulepack-v0.md) and [JSON Schema](../src/lib/scorekeeper/rulepack-schema.json)
 - [Gameplay primitives](./gameplay-v0.md)
 - [Primitive authoring reference](./primitives-kb-v0.md)
@@ -37,7 +36,7 @@ relative to their document.
 
 ## MCP integration
 
-- [Integration architecture](./chatgpt-mcp-roadmap-v0.md)
+- [Integration guide](./chatgpt-mcp-roadmap-v0.md)
 - [MCP Apps surfaces](./mcp-apps-v0.md)
 - [Authentication setup](./mcp-oauth-setup.md)
 

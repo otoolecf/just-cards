@@ -1,6 +1,9 @@
 # Feature Specs (TDD)
 
-This folder contains feature-level specs written before tests and implementation.
+This folder retains behavior, contract and design specifications written before
+tests and implementation. Completed cosmetic/setup task notes and release reports
+may be removed from the current tree once their lasting guidance is in maintained
+docs. Previous versions remain available in Git history.
 
 The active backlog lives in [TODO](../../TODO.md). These specifications describe
 feature contracts and test plans; unchecked boxes alone do not indicate outstanding work.

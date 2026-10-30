@@ -59,7 +59,6 @@ WebSockets and disconnect/presence handling. Matching database SQL alone does no
 replace that coordination. Existing local SQLite adapters are development support,
 not a complete alternative production server.
 
-Queues and Workers AI appear in the planning architecture, but are not required
-bindings for the current deployment. Optional generation currently calls an
+Queues and Workers AI are not required bindings for the current deployment. Optional generation currently calls an
 external model API. See the [deployment guide](./deployment.md) and
 [storage contract](./ruleset-storage-v0.md) for operational details.
