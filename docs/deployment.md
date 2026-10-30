@@ -70,8 +70,21 @@ npx wrangler deploy --config .wrangler/deploy.jsonc
 Review and confirm the migration prompt. D1 schema is applied before the Worker
 serves traffic. Durable Object class migrations are applied by Wrangler at deploy.
 The final command prints your live HTTPS URL. These explicit commands use the
-same private config throughout. The current `npm run cf:deploy` shortcut uses the
-source config and deploys before migrating D1; it is not this first-install path.
+same private config throughout. After provisioning the installation, the helper
+runs build, deployment validation, remote D1 migration, then deployment:
+
+```sh
+npm run cf:deploy -- --config .wrangler/deploy.jsonc
+```
+
+The helper requires an existing explicit config and rejects the source template.
+Every Wrangler step uses that same config. A failed build, validation or migration
+stops the sequence before deployment. Migration confirmation stays with Wrangler.
+To build and validate without migrating or publishing:
+
+```sh
+npm run cf:deploy -- --config .wrangler/deploy.jsonc --dry-run
+```
 
 ## 5. Configure optional secrets
 

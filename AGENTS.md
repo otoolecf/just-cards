@@ -25,19 +25,17 @@ Current product scope:
 2. Scorekeeper mode for physical card play without pen/paper.
 3. Rules-as-data foundation so games can be added without hardcoded one-off logic.
 
-Delivery priority:
-
-1. Scorekeeper MVP.
-2. Virtual play MVP.
-3. Rule ingestion/generation workflow.
+Scorekeeping, shared virtual tables and ruleset import are implemented. See
+`TODO.md` for prioritized remaining work and `docs/architecture.md` for current boundaries.
 
 ## Tech Stack and Deployment Target
 
 - Frontend: `SvelteKit` + TypeScript
 - Runtime: Cloudflare Workers (`@sveltejs/adapter-cloudflare`)
 - Real-time state: Durable Objects + WebSockets
-- Persistence: D1
-- Async jobs: Queues
+- Ruleset catalog: D1 through `RulesetStore`
+- Room and score-session persistence: Durable Object SQLite
+- Queues and Workers AI are not required by the current deployment
 - Hosting/deploy: Cloudflare via Wrangler
 
 Default assumption: Cloudflare-first and JavaScript/TypeScript-first unless architecture docs explicitly change.
@@ -64,13 +62,14 @@ Default assumption: Cloudflare-first and JavaScript/TypeScript-first unless arch
    - keep touch targets at least `44px` for interactive controls
 5. For any UI styling changes, update `docs/ui-primitives-v0.md` when the design contract changes.
 
-## Ruleset Persistence (Pre-Cloudflare)
+## Persistence Contracts
 
-1. Use `RulesetStore` abstraction for ruleset persistence; do not bind game logic directly to SQLite/D1 APIs.
-2. Local development/testing should use the SQLite adapter by default (`node:sqlite`) unless explicitly overridden.
-3. Treat local SQLite as the temporary persistence layer until Cloudflare storage adapters are wired.
-4. Cloudflare migration work should swap adapters behind the same interface, not rewrite service/API contracts.
-5. Treat `runtime-bundle/v1` (`runtimeRulePack` + `uiProfile`) as the canonical stored payload.
+1. Use `RulesetStore` for ruleset persistence; do not bind game logic to SQLite/D1 APIs.
+2. Local development/testing uses Node SQLite (`node:sqlite`) by default.
+3. Deployed rulesets use the D1 adapter behind the same interface. Missing production bindings must fail explicitly.
+4. Shared rooms and score sessions persist in Durable Object SQLite; D1 is not the room event store.
+5. Keep storage adapters behind existing service/API contracts. Local SQLite remains supported for development.
+6. Treat `runtime-bundle/v1` (`runtimeRulePack` + `uiProfile`) as the canonical stored payload.
 
 ## Security and Secrets Policy
 

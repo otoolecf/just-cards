@@ -1,14 +1,24 @@
-# just-cards
-
-> **About this project:** Just Cards is a personal side project built to make spontaneous, in-person card games easier. Keeping score in a notes app can be cumbersome, pen and paper aren’t always handy, and sometimes you don’t even have a deck. Just Cards helps fill those gaps so you can spend more time playing while learning unfamiliar games more easily. Substantial portions of the code and documentation were developed with AI assistance. Expect rough edges; bug reports and contributions are welcome.
+# Just Cards
 
 A mobile-first scorekeeper and shared card table for casual, in-person games.
 Use physical cards and enter scores, or join a room to play together on phones.
-Games are described by versioned rule bundles; score totals come from an event log.
 
+**[Try Just Cards](https://justcards.app)** · [Play a virtual table](https://justcards.app/play) · [Contribute](./CONTRIBUTING.md)
+
+![Just Cards virtual-table setup](./docs/images/play-lobby.jpg)
+
+## Built-in games
+
+Six Card Golf, 500 Rum, Solitaire (draw-one Klondike), Bridge (rubber), Palace
+(Bicycle and family variants), and Hong Kong Mahjong. Physical scoring also supports
+manual point entry; virtual play follows each game's supported rules.
+
+Games are described by versioned rule bundles; score totals come from an event log.
 Built with SvelteKit and TypeScript. Cloudflare Workers, Durable Objects, and D1
 are the supported production target. Local development uses SQLite without a
 Cloudflare account. The code is licensed under [MIT](./LICENSE).
+
+> **About this project:** Just Cards is a personal side project built to make spontaneous, in-person card games easier. Keeping score in a notes app can be cumbersome, pen and paper aren’t always handy, and sometimes you don’t even have a deck. Just Cards helps fill those gaps so you can spend more time playing while learning unfamiliar games more easily. Substantial portions of the code and documentation were developed with AI assistance. Expect rough edges; bug reports and contributions are welcome.
 
 ## Clone and run locally
 
@@ -134,8 +144,8 @@ This is a separate documentation build; it does not publish docs with the app.
 
 ## Read next
 
+- [Contributing](./CONTRIBUTING.md)
 - [TODO and planned improvements](./TODO.md)
-
 - [Engine, storage, and hosting boundaries](./docs/code-boundaries.md)
 - [Why this project exists](./docs/inspiration.md)
 - [Architecture](./docs/architecture.md)

@@ -8,7 +8,7 @@ function markdownFiles(directory: string): string[] {
   return entry.isDirectory() ? markdownFiles(path) : entry.name.endsWith('.md') ? [path] : [];
  });
 }
-const guides = ['README.md', 'TODO.md', 'SECURITY.md', 'AGENTS.md', ...markdownFiles('docs')];
+const guides = ['README.md', 'TODO.md', 'SECURITY.md', 'CONTRIBUTING.md', 'AGENTS.md', ...markdownFiles('docs')];
 const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts;
 
 describe('contributor guides', () => {
@@ -48,5 +48,24 @@ describe('maintained contributor documentation', () => {
   expect(operations).toContain('JSON-RPC batch');
   expect(operations).toContain('source-fetch destination');
   expect(operations).toContain('automatic record retention');
+ });
+});
+
+
+describe('developer first impressions', () => {
+ it('shows the live demo, product screenshot and built-in games before setup', () => {
+  const readme=readFileSync('README.md','utf8');
+  const intro=readme.split('## Clone and run locally')[0];
+  expect(intro).toContain('https://justcards.app');
+  expect(intro).toMatch(/!\[[^\]]+\]\(\.\/docs\/images\/[^)]+\)/);
+  for (const game of ['Six Card Golf','500 Rum','Solitaire','Bridge','Palace','Hong Kong Mahjong']) expect(intro).toContain(game);
+  expect(readme).toContain('./CONTRIBUTING.md');
+ });
+ it('describes current storage in the agent contribution contract', () => {
+  const agents=readFileSync('AGENTS.md','utf8');
+  expect(agents).not.toContain('Pre-Cloudflare');
+  expect(agents).not.toContain('until Cloudflare storage adapters are wired');
+  expect(agents).toContain('Durable Object SQLite');
+  expect(agents).toContain('not required');
  });
 });

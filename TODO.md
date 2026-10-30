@@ -29,8 +29,8 @@ acceptance criteria in linked specs; remove items here when they are delivered.
   calls within JSON-RPC batches. See [MCP limitations](./docs/security-deployment.md#mcp-limitations).
 - [ ] **Verify deployment to a fresh Cloudflare account.** Exercise provisioning,
   D1 migrations, owner setup and the live smoke flow using the
-  [deployment guide](./docs/deployment.md). Update the `cf:deploy` shortcut to use
-  the intended deployment config and apply migrations before serving new code.
+  [deployment guide](./docs/deployment.md). The deployment helper now requires an
+  explicit config and applies migrations before serving new code.
 
 ## Follow-up development
 

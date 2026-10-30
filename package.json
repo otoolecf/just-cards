@@ -15,7 +15,7 @@
 		"test:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test",
 		"cf:dev": "npm run build && npm run cf:migrate:local && wrangler dev",
-		"cf:deploy": "npm run build && wrangler deploy && npm run cf:migrate:remote",
+		"cf:deploy": "node scripts/deploy.mjs",
 		"cf:migrate:local": "wrangler d1 migrations apply RULESETS_DB --local",
 		"cf:migrate:remote": "wrangler d1 migrations apply RULESETS_DB --remote",
 		"cf:types": "wrangler types",
