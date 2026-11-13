@@ -5,6 +5,8 @@
 	import { rosterStandings } from '$lib/session/roster-standings';
 	import { correctionForUndo, latestAppliedScore } from '$lib/session/score-correction';
 	import { scoreRoundProgress, roundProgressMetadata } from '$lib/session/score-round-progress';
+	import { resultProfile, scoreIsComplete, scoreHasFinishRule, scoreResult } from '$lib/sharing/results';
+	import ShareResults from '$lib/components/share-results.svelte';
  import OwnerGate from '$lib/components/owner-gate.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import type { PageData } from './$types';
@@ -325,6 +327,11 @@
 	$: roundProgress = activeSessionId && sessionState && summaryInputMode === 'guided'
 		? scoreRoundProgress(sessionState.events.map(event => event.scoreEvent), roundProgressMetadata(activeGuidedProfile, rulesets))
 		: null;
+	$: sharingProfile = resultProfile(activeGuidedProfile, rulesets);
+	$: completedScores = sessionState ? scoreIsComplete(sessionState, sharingProfile) : false;
+	$: hasShareScores = Boolean(sessionState && Object.keys(sessionState.state.totalsByPlayer).length);
+	$: manualSharing = canEditScores && !scoreHasFinishRule(sharingProfile);
+	$: shareGameName = summaryInputMode === 'guided' ? rulesets.find(record => record.id === sharingProfile?.rulesetId)?.name ?? 'Card game' : 'Score sheet';
 	$: guidedEntryZones = scoreEntryZones(activeGuidedProfile);
 	$: rawScoring = (sessionState?.config.scoreInputMode ?? selectedScoreInputMode) === 'raw';
 	$: showPatternRound = rawScoring || activeGuidedProfile?.patternRound === true;
@@ -1326,6 +1333,9 @@
 				</ul>
 			{:else}
 				<p class="empty">No totals yet. Add a round to start.</p>
+			{/if}
+			{#if hasShareScores && (completedScores || manualSharing)}
+				{#key activeSessionId}<ShareResults manual={!completedScores} getResult={() => sessionState ? scoreResult(sessionState, sharingProfile, shareGameName) : null} />{/key}
 			{/if}
 		</section>
 

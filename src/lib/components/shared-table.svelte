@@ -20,6 +20,8 @@
 	import type { RoomView, RoomMutation } from '$lib/server/room-service';
 	import type { TableCommand, VisibleCard } from '$lib/gameplay/table-engine';
 	import RoomControls from './room-controls.svelte';
+	import ShareResults from './share-results.svelte';
+	import { roomResult } from '$lib/sharing/results';
  import ScoreButton from './score-button.svelte';
 	import CardTile from './card-tile.svelte';
  import CapabilityTable from './capability-table.svelte';
@@ -469,6 +471,7 @@
 				</table>
 			{/if}
 			<div class="action-row">
+				{#if self && table?.scores.length}<ShareResults getResult={() => room ? roomResult(room) : null} />{/if}
 				<ScoreButton onPress={leaveClosedRoom}>Leave room</ScoreButton>
 				<ScoreButton variant="primary" onPress={leaveClosedRoom}>Create new room</ScoreButton>
 			</div>
@@ -566,6 +569,7 @@
 						disabled={busy || room.paused || room.seats.length < room.rules.players.min}
 						onPress={() => deal('next_round')}>Deal next round</ScoreButton
 					>{/if}
+				{#if self && table.stage === 'game_end'}<ShareResults getResult={() => room ? roomResult(room) : null} />{/if}
 			</section>
 		{/if}
 		{#if room.rules.tileMahjong}<MahjongTable {room} {busy} {guided} onCommand={command}/>{:else if additional}<CapabilityTable {room} {busy} {guided} onCommand={command}/>{:else}

@@ -250,3 +250,17 @@ blocked: the import-time simulator currently covers grid/meld policies only. Thi
 prevents a new capability from incorrectly inheriting Golf/Rummy readiness checks.
 
 Active rooms have bounded capacity and idle lifetimes; saved games survive suspension. See [public rooms](./public-rooms.md) for resume behavior and owner-only AI access.
+
+## Sharing finished results
+
+Natural `game_end` results and host-ended tables with completed scores offer
+Image and Plain text sharing to seated participants. The export uses only the
+authoritative public final roster, per-hand scores and totals. Past-seat records
+resolve names when needed; players outside the final game roster are not newly
+ranked against it. Unfinished rounds, hidden cards, credentials and room/session
+identifiers are excluded. A solo concession is labelled as such, and Bridge
+partners share a result row without doubling their points.
+
+Rendering, text copying and file sharing happen on the device, with no server
+upload or new room requests. The formats and fallbacks are the same as physical
+scoring. Sharing does not change room state or resume/end the table.
