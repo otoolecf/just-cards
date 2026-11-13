@@ -50,6 +50,7 @@ export interface SessionState {
 }
 
 export interface SessionStateView {
+	shared?: { isScorekeeper: boolean; canTakeOver: boolean; lastSeen: number };
 	sync?: { status: 'synced' | 'offline' | 'conflict' | 'error'; pending: number; message?: string };
 	sessionId: string;
 	createdAt: string;
@@ -144,4 +145,7 @@ async function withDeviceLock<T>(id: string, action: () => Promise<T>): Promise<
 export function savedDeviceSessions(): SessionStateView[] { return deviceClient().list(); }
 export async function forkOfflineSession(id: string): Promise<SessionStateView> {
  return withDeviceLock(id, () => deviceClient().fork(id));
+}
+export async function manageSharedScore(id:string, action:'share'|'claim'|'release'):Promise<SessionStateView> {
+	return withDeviceLock(id,()=>deviceClient().shared(id,action));
 }

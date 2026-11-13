@@ -61,6 +61,11 @@ export function createOfflineScoreClient(
 		}
 	};
 	const view = (c: CachedScore): SessionStateView => {
+		if (c.base.shared && c.pending.length === 0) return {
+			...c.base,
+			shared: {...c.base.shared, ...(c.status !== 'synced' ? {isScorekeeper:false,canTakeOver:false} : {})},
+			sync: {status:c.status,pending:0,message:c.message}
+		};
 		const events: SessionEventRecord[] = [
 			...c.base.events,
 			...c.pending.map((p) => ({
@@ -91,14 +96,16 @@ export function createOfflineScoreClient(
 		};
 	};
 	const json = async <T>(url: string, body?: unknown): Promise<T> => {
+		const id = decodeURIComponent(url.split('/').pop() ?? '');
+		const token = storage.getItem(`jc-score-keeper:${id}`);
 		const response = await request(url, {
 			method: body === undefined ? 'GET' : 'POST',
 			cache: 'no-store',
 			signal: AbortSignal.timeout(8000),
+			headers: {'content-type':'application/json', ...(token ? {authorization:`Bearer ${token}`} : {})},
 			...(body === undefined
 				? {}
 				: {
-						headers: { 'content-type': 'application/json' },
 						body: JSON.stringify(body),
 					}),
 		});
@@ -226,6 +233,14 @@ export function createOfflineScoreClient(
 				throw new Error(
 					'Open this score session online before using it offline.',
 				);
+			if (c.base.shared) {
+				if (!c.base.shared.isScorekeeper) throw new Error('Only the current scorekeeper can edit this room.');
+				// Shared writes never enter an offline outbox or change local totals optimistically.
+				c.base = await json<SessionStateView>(`/api/sessions/${encodeURIComponent(id)}`, {
+					scoreEvent:event, requestId:crypto.randomUUID(), expectedEventCount:c.base.eventCount
+				});
+				c.status='synced';delete c.message;save(c);return view(c);
+			}
 			if (
 				![
 					'add_mahjong',
@@ -259,6 +274,15 @@ export function createOfflineScoreClient(
 			save(c);
 			// Keep the old conflict intact: neither branch is discarded as a side effect.
 			return sync(c);
+		},
+		async shared(id:string, action:'share'|'claim'|'release') {
+			const c=read(id);
+			if (!c) throw new Error('Open this session online first.');
+			await sync(c);
+			if (c.pending.length || c.status !== 'synced') throw new Error('Sync this session online before sharing or handing off.');
+			if (action === 'claim' || (action === 'share' && !storage.getItem(`jc-score-keeper:${id}`))) storage.setItem(`jc-score-keeper:${id}`,crypto.randomUUID());
+			c.base=await json<SessionStateView>(`/api/sessions/${encodeURIComponent(id)}`,{action});
+			c.status='synced';delete c.message;save(c);return view(c);
 		},
 		list() {
 			const items: SessionStateView[] = [];

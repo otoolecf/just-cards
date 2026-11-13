@@ -40,6 +40,11 @@ result-entry forms use the same event model.
 The browser keeps an event-derived snapshot and offline outbox. Idempotent sync,
 event-count conflict detection and cross-tab coordination protect reconnects.
 Conflicts offer explicit copy recovery. Server state is authoritative after sync.
+Synced sheets can be published as shared scoring rooms. Invite viewers poll the
+same state read-only; a persisted, hashed scorekeeper capability protects writes.
+Explicit handoff or a 60-second heartbeat timeout enables atomic takeover and
+revokes the former keeper. Shared edits require online revision checks and bypass
+the offline outbox. Ownership lives alongside the session in Durable Object SQLite.
 The service worker caches the score shell and assets, excluding private room pages
 and APIs. See [scorekeeper rules](./scorekeeper-rules.md).
 

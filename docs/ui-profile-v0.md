@@ -127,6 +127,16 @@ UI; client-side masking alone is not a privacy boundary. Existing `ui-profile/v0
 metadata remains compatible for draft previews and generated guidance. See
 [Shared table v1](./shared-table-v1.md).
 
+## Scoring round progress
+
+Guided scoring also snapshots display-only `roundProgress: { total?: number }`
+from executable table rules for round-end capabilities `all_revealed`, `empty_hand`
+and `empty_all`. A declared `scoring.rounds` supplies the total; otherwise progress
+is open-ended. This metadata belongs to GuidedScoreProfile rather than changing
+`ui-profile/v0`. Bridge, Mahjong and Solitaire retain their separate progress
+systems. Older snapshots without the field can recover display metadata from the
+exact matching catalog ruleset; copied metadata always takes precedence.
+
 ## Separate pattern scoring input
 
 `scorekeeper.patternRound` controls whether a guided score session exposes the

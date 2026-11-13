@@ -34,13 +34,14 @@ function setup() {
 		if (!online) throw new TypeError('Offline');
 		const body = init?.body ? JSON.parse(init.body as string) : null;
 		const id = url === '/api/sessions' ? body.sessionId : url.split('/').pop()!;
+		const keeperHash = new Headers(init?.headers).get('authorization')?.replace(/^Bearer /,'');
 		const result = handleScoreRequest(
 			id,
-			!body
+			{...(!body
 				? { type: 'get' }
 				: url === '/api/sessions'
 					? { type: 'create', config: body.config }
-					: { type: 'append', input: { source: 'scorekeeper', ...body } },
+					: body.action ? {type:body.action} : { type: 'append', input: { source: 'scorekeeper', ...body } }), keeperHash},
 			server,
 		);
 		if (loseResponse) {
@@ -65,6 +66,18 @@ function setup() {
 	};
 }
 describe('offline physical scores', () => {
+	it('keeps shared viewers read-only online and offline and revokes a released keeper', async()=>{
+		const h=setup(), c=h.client(), s=await c.create({players:['Pat']});
+		const shared=await c.shared(s.sessionId,'share');
+		expect(shared.shared?.isScorekeeper).toBe(true);
+		await c.post(s.sessionId,delta(5));
+		h.offline();
+		await expect(c.post(s.sessionId,delta(8))).rejects.toThrow();
+		expect((await c.get(s.sessionId)).shared?.isScorekeeper).toBe(false);
+		h.online();await c.shared(s.sessionId,'release');
+		await expect(c.post(s.sessionId,delta(8))).rejects.toThrow('scorekeeper');
+		expect((await c.get(s.sessionId)).eventCount).toBe(1);
+	});
 	it('creates offline, replays ranks and undo/redo through reload, then syncs exactly once', async () => {
 		const h = setup();
 		h.offline();

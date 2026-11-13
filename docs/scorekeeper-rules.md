@@ -318,3 +318,33 @@ histories also receive bounded replay. Undo can recover a session if the remaini
 active events fit the limits; otherwise simplify the pattern in a new session.
 Existing history is preserved. See [security limits](./security-deployment.md) and
 [the regression specification](./specs/2026-10-30-scoring-work-budget.md).
+## Shared scoring rooms and corrections
+
+Round-based guided sheets prominently display the round being played near the top
+of the page, for example **Round 2 of 9** for Golf. Each manual-point or card-round
+submission records one completed round, even with scores for only part of the
+roster. Bonus-pattern and pool-settlement events do not advance it. Undo/redo and
+corrections replay the same event history, and shared spectators see the same
+progress. After all scheduled rounds have scores, the banner shows completion;
+existing score-entry permissions remain available for corrections or extra rounds.
+Raw calculators do not infer rounds. Fixed totals are copied into the guided
+profile so reload and offline use retain the session's settings.
+
+Undo restores the submitted manual points or card rows for correction, including
+zero and negative values, from the accepted event history. Redo clears that
+correction draft so adding the next round does not repeat the same scores.
+
+A synced personal sheet can become a shared scoring room through **Share scoring
+room**. Its invite opens the same roster, totals and history on another phone,
+with updates polled every three seconds. Invite viewers are read-only. The current
+scorekeeper can **Hand off scoring** immediately; otherwise **Take over scoring**
+appears after 60 seconds without a scorekeeper heartbeat. Visible open scoring
+pages send heartbeats while polling. Returning after a takeover makes the old
+device read-only. Credentials are stored on the scorekeeper's browser, hashed on
+the server, and omitted from invite links and public state.
+
+Shared scoring requires an online, server-accepted write with the current event
+count. It never queues edits offline. Cached shared sheets become read-only when
+disconnected; personal sheets retain offline scoring and copy recovery. Ownership
+and event changes are serialized in the same SessionRepository/CardRoom SQLite
+transaction. Existing unshared session IDs retain their legacy edit capability.

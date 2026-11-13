@@ -102,6 +102,11 @@ Keep visual decisions conservative and consistent with this tone.
 
 No new color tokens are introduced; existing contrast guarantees remain applicable.
 
+Shared scoring reuses `jc-panel`, `jc-control` and `ScoreButton` for invites,
+read-only status and handoff. Spectators see scores/history without entry controls.
+Paused tables present one recovery action at a time (check, return, resume or host
+takeover); waiting is explained in text and deal buttons are hidden until resumed.
+
 `CardTile` supports opt-in dragging in hand-arrangement mode, with equivalent tap
 and keyboard-operated left/right controls. Arrangement selection is separate from
 play selection and stays local to the viewer. `ScoreButton.describedBy` associates
@@ -152,7 +157,13 @@ uses a labelled 44px-minimum touch target and semantic text tokens. Normal mode 
 the default; optional teaching text follows the bound personal preference. Essential
 status, errors, controls and the rules disclosure remain usable in normal mode.
 
-### Stable score rows
+### Score round progress and stable rows
+
+Round-based score sheets show a prominent `Round N` / `Round N of total` status
+banner immediately after the page header. It uses `jc-panel`, the existing
+brand-soft/text contrast pair, XL type and a polite atomic announcement. Shared
+viewers see the same progress. Completion replaces the current-round label when
+the planned rounds have scores; undo can reopen the last round. No tokens change.
 
 Scorekeeper totals follow entry roster order, with separate ordinal rank text using
 existing muted-text and small-type tokens. The list is unordered so row position

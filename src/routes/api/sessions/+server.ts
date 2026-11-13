@@ -11,6 +11,6 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 	return dispatchScore(
 		sessionId,
 		{ type: 'create', config: payload.config ?? {} },
-		platform, getClientAddress()
+		platform, getClientAddress(), request.headers.get('authorization') ?? ''
 	);
 };

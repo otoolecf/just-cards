@@ -1,6 +1,7 @@
 <script lang="ts">
  import type { RoomView, RoomMutation } from '$lib/server/room-service';
  import ScoreButton from './score-button.svelte';
+ import { roomRecoveryAction } from '$lib/gameplay/room-recovery-action';
  export let room:RoomView;
  export let busy=false;
  export let mutate:(input:RoomMutation)=>Promise<boolean>;
@@ -9,6 +10,7 @@
  let privateLink='', privateName='', confirmingUndo=false, copied=false;
  $: me=room.seats.find(s=>s.id===room.selfId);
  $: host=room.selfId===room.hostId;
+ $: recoveryAction=roomRecoveryAction({away:Boolean(me?.away),host,anyAway:room.seats.some(s=>s.away),hostAbsent:room.hostAbsent,sleeping:Boolean(room.sleeping)});
  async function action(type:'pause'|'resume'|'return'|'claim_host'|'undo') {
   if(await mutate({type,revision:room.revision,requestId:crypto.randomUUID()})) confirmingUndo=false;
  }
@@ -24,9 +26,11 @@
 {#if room.paused}<section class="jc-panel controls" aria-label="Paused game" aria-live="polite">
  <h2>{room.sleeping ? 'Table saved' : 'Game paused'}</h2><p>{room.pauseReason}</p>
  <div class="actions">
- {#if room.sleeping}<ScoreButton disabled={busy} onPress={onRefresh}>Check table</ScoreButton>{/if}
- {#if me?.away}<ScoreButton disabled={busy} onPress={()=>action('return')}>I'm back</ScoreButton>{/if}
- {#if host}<ScoreButton variant="primary" disabled={busy || room.seats.some(s=>s.away)} onPress={()=>action('resume')}>Resume game</ScoreButton>{:else if room.hostAbsent && me && !me.away}<ScoreButton disabled={busy} onPress={()=>action('claim_host')}>Take over as host</ScoreButton>{/if}
+ {#if recoveryAction==='check'}<ScoreButton disabled={busy} onPress={onRefresh}>Check table</ScoreButton>
+ {:else if recoveryAction==='return'}<ScoreButton variant="primary" disabled={busy} onPress={()=>action('return')}>I'm back</ScoreButton>
+ {:else if recoveryAction==='resume'}<ScoreButton variant="primary" disabled={busy} onPress={()=>action('resume')}>Resume game</ScoreButton>
+ {:else if recoveryAction==='claim_host'}<ScoreButton disabled={busy} onPress={()=>action('claim_host')}>Take over as host</ScoreButton>
+ {:else}<p class="jc-subtle">{host?'Waiting for away players to return.':'Waiting for the host to resume.'}</p>{/if}
  </div>
  <p class="jc-subtle">Away players can return on their original phone, or the host can make a replacement link below.</p>
 </section>{/if}

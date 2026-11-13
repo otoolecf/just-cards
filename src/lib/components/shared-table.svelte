@@ -521,7 +521,7 @@
 					Share the invite and deal when everyone has joined. {room.rules.players.min}–{room.rules
 						.players.max} players.
 				</p>
-				{#if self === room.hostId}<ScoreButton
+				{#if self === room.hostId && !room.paused}<ScoreButton
 						variant="primary"
 						disabled={busy || room.paused || room.seats.length < room.rules.players.min}
 						onPress={() => deal('start')}>{room.rules.tileMahjong?'Deal tiles':'Deal cards'}</ScoreButton
@@ -556,12 +556,12 @@
 							>{/each}</tbody
 					>
 				</table>
-				{#if self === room.hostId && table.stage === 'game_end'}<ScoreButton
+				{#if self === room.hostId && !room.paused && table.stage === 'game_end'}<ScoreButton
 						variant="primary"
 						disabled={busy || room.paused || room.seats.length < room.rules.players.min}
 						onPress={() => deal('new_game')}>Play again</ScoreButton
 					>{/if}
-				{#if self === room.hostId && table.stage === 'round_end'}<ScoreButton
+				{#if self === room.hostId && !room.paused && table.stage === 'round_end'}<ScoreButton
 						variant="primary"
 						disabled={busy || room.paused || room.seats.length < room.rules.players.min}
 						onPress={() => deal('next_round')}>Deal next round</ScoreButton

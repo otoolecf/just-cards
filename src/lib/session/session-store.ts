@@ -23,6 +23,7 @@ export interface SessionCreateInput {
 }
 
 export interface SessionRecord {
+	shared?: { keeperHash: string; lastSeen: number };
 	id: string;
 	createdAt: string;
 	updatedAt: string;
