@@ -4,6 +4,7 @@
 	import BrandWordmark from '$lib/components/brand-wordmark.svelte';
 	import { rosterStandings } from '$lib/session/roster-standings';
 	import { correctionForUndo, latestAppliedScore } from '$lib/session/score-correction';
+	import { scoreRoundProgress, roundProgressMetadata } from '$lib/session/score-round-progress';
  import OwnerGate from '$lib/components/owner-gate.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import type { PageData } from './$types';
@@ -321,6 +322,9 @@
 		}
 	}
 	$: activeGuidedProfile = resolveActiveGuidedProfile(sessionState, selectedScoreInputMode, selectedRulesetRecord);
+	$: roundProgress = activeSessionId && sessionState && summaryInputMode === 'guided'
+		? scoreRoundProgress(sessionState.events.map(event => event.scoreEvent), roundProgressMetadata(activeGuidedProfile, rulesets))
+		: null;
 	$: guidedEntryZones = scoreEntryZones(activeGuidedProfile);
 	$: rawScoring = (sessionState?.config.scoreInputMode ?? selectedScoreInputMode) === 'raw';
 	$: showPatternRound = rawScoring || activeGuidedProfile?.patternRound === true;
@@ -985,6 +989,14 @@
 			<a href="/play" class="jc-mode-link">Play</a>
 		</nav>
 	</header>
+	{#if roundProgress}
+		<section class="jc-panel score-round-banner" role="status" aria-label="Round progress" aria-atomic="true">
+			<h2>{roundProgress.label}</h2>
+			<p>{roundProgress.complete
+				? `${roundProgress.total} scheduled rounds · ${roundProgress.completed} scored`
+				: canEditScores ? 'Enter scores for this round when everyone has finished playing.' : 'Waiting for scores for this round.'}</p>
+		</section>
+	{/if}
 
 	<section class="panel">
 		<div class="status">
@@ -1566,6 +1578,21 @@ run: 5"
 </main>
 
 <style>
+	.score-round-banner {
+		background: var(--jc-brand-soft);
+		color: var(--jc-text);
+		padding: 16px;
+		margin-bottom: 16px;
+	}
+	.score-round-banner h2 {
+		font-size: var(--jc-type-xl);
+		line-height: 1.15;
+		margin: 0;
+	}
+	.score-round-banner p {
+		font-size: var(--jc-type-sm);
+		margin: 8px 0 0;
+	}
 	.event-panel summary {
 		min-height: 44px;
 		padding: 10px 0;

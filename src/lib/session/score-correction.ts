@@ -1,13 +1,16 @@
 import type { CardInput, ScoreEvent } from '$lib/scorekeeper/engine';
 
-export function latestAppliedScore(events: ScoreEvent[]): ScoreEvent | undefined {
+export function appliedScoreEvents(events: ScoreEvent[]): ScoreEvent[] {
 	const applied: ScoreEvent[] = [], undone: ScoreEvent[] = [];
 	for (const event of events) {
 		if (event.type === 'undo') { const last = applied.pop(); if (last) undone.push(last); }
 		else if (event.type === 'redo') { const last = undone.pop(); if (last) applied.push(last); }
 		else { applied.push(event); undone.length = 0; }
 	}
-	return applied.at(-1);
+	return applied;
+}
+export function latestAppliedScore(events: ScoreEvent[]): ScoreEvent | undefined {
+	return appliedScoreEvents(events).at(-1);
 }
 const suits: Record<string,string> = {hearts:'H',diamonds:'D',clubs:'C',spades:'S'};
 const cardText = (cards:CardInput[]) => cards.map(c=>`${c.rank}${c.suit ? suits[c.suit] : ''}`).join(' ');

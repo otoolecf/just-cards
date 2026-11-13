@@ -320,6 +320,16 @@ Existing history is preserved. See [security limits](./security-deployment.md) a
 [the regression specification](./specs/2026-10-30-scoring-work-budget.md).
 ## Shared scoring rooms and corrections
 
+Round-based guided sheets prominently display the round being played near the top
+of the page, for example **Round 2 of 9** for Golf. Each manual-point or card-round
+submission records one completed round, even with scores for only part of the
+roster. Bonus-pattern and pool-settlement events do not advance it. Undo/redo and
+corrections replay the same event history, and shared spectators see the same
+progress. After all scheduled rounds have scores, the banner shows completion;
+existing score-entry permissions remain available for corrections or extra rounds.
+Raw calculators do not infer rounds. Fixed totals are copied into the guided
+profile so reload and offline use retain the session's settings.
+
 Undo restores the submitted manual points or card rows for correction, including
 zero and negative values, from the accepted event history. Redo clears that
 correction draft so adding the next round does not repeat the same scores.

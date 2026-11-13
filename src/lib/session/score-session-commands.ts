@@ -187,6 +187,8 @@ export interface GuidedScoreSpecialRuleColumnPairZero {
 export type GuidedScoreSpecialRule = GuidedScoreSpecialRuleColumnPairZero;
 
 export interface GuidedScoreProfile {
+ /** Display-only round progress copied from the ruleset when a sheet is created. */
+ roundProgress?: { total?: number };
  tileMahjong?: import('../gameplay/mahjong').MahjongPolicy;
  roundScoring?:'contract'|'outcome'|'solo_outcome'|'mahjong';
 	rulesetId: string;
@@ -406,6 +408,9 @@ export function deriveGuidedScoreProfileFromBundle(
 ): GuidedScoreProfile {
 	const table = bundle.runtimeRulePack.tableRules;
 	if (table) return {
+ ...( ['all_revealed', 'empty_hand', 'empty_all'].includes(table.roundEnd)
+  ? {roundProgress: table.scoring.rounds === undefined ? {} : {total: table.scoring.rounds}}
+  : {}),
  ...(table.tileMahjong?{roundScoring:'mahjong' as const,tileMahjong:structuredClone(table.tileMahjong)}:table.contract?{roundScoring:'contract' as const}:table.patience?{roundScoring:'solo_outcome' as const}:table.shedding?{roundScoring:'outcome' as const}:{}),
 		patternRound: bundle.uiProfile.scorekeeper?.patternRound === true,
 		rulesetId, winDirection: table.scoring.lowWins ? 'low_wins' : 'high_wins',
