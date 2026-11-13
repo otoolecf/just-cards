@@ -8,6 +8,7 @@ async function capture(page:Page,name:string) {
 	await mkdir(dir,{recursive:true});
 	await page.screenshot({path:resolve(dir,`${name}.png`),fullPage:true});
 	await page.getByRole('status',{name:'Round progress',exact:true}).screenshot({path:resolve(dir,`${name}-banner.png`)});
+	if(name==='rounds-complete')await page.getByRole('button',{name:'Add round',exact:true}).locator('..').locator('..').screenshot({path:resolve(dir,`${name}-entry.png`)});
 	await writeFile(resolve(dir,`${name}.json`),JSON.stringify({url:page.url(),capturedAt:new Date().toISOString()},null,2));
 }
 
@@ -50,13 +51,29 @@ test('Golf round progress stays prominent and synchronized through correction an
 		await expectRound(a,round===9?'9 rounds complete':`Round ${round+1} of 9`);
 	}
 	await expectRound(b,'9 rounds complete');
+	const addRound=a.getByRole('button',{name:'Add round',exact:true});
+	await expect(addRound).toBeDisabled();
+	await a.getByRole('tab',{name:'Guided cards',exact:true}).click();
+	await expect(addRound).toBeDisabled();
+	await a.getByRole('tab',{name:'Manual points',exact:true}).click();
+	await expect(a.getByRole('button',{name:'Undo',exact:true})).toBeEnabled();
 	await capture(a,'rounds-complete');
 	await a.getByRole('button',{name:'Undo',exact:true}).click();
 	await expectRound(a,'Round 9 of 9');await expectRound(b,'Round 9 of 9');
 	await expect(a.getByRole('spinbutton',{name:'Alice',exact:true})).toHaveValue('9');
 	await expect(a.getByRole('spinbutton',{name:'Bob',exact:true})).toHaveValue('0');
+	await expect(addRound).toBeEnabled();
 	await a.getByRole('button',{name:'Redo',exact:true}).click();
 	await expectRound(a,'9 rounds complete');
+	await expect(addRound).toBeDisabled();
+	await a.getByRole('button',{name:'Undo',exact:true}).click();
+	await expect(addRound).toBeEnabled();
+	await a.getByRole('spinbutton',{name:'Alice',exact:true}).fill('10');
+	await addRound.click();
+	await expectRound(a,'9 rounds complete');await expectRound(b,'9 rounds complete');
+	await expect(addRound).toBeDisabled();
+	await a.reload();await expectRound(a,'9 rounds complete');
+	await expect(addRound).toBeDisabled();
 	for(const page of [a,b])expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 	await first.close();await second.close();
 });

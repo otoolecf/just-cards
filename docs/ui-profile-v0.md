@@ -129,10 +129,11 @@ metadata remains compatible for draft previews and generated guidance. See
 
 ## Scoring round progress
 
-Guided scoring also snapshots display-only `roundProgress: { total?: number }`
+Guided scoring also snapshots `roundProgress: { total?: number }`
 from executable table rules for round-end capabilities `all_revealed`, `empty_hand`
 and `empty_all`. A declared `scoring.rounds` supplies the total; otherwise progress
-is open-ended. This metadata belongs to GuidedScoreProfile rather than changing
+is open-ended. A fixed total also gates the scoring Add round control once reached;
+Undo reopens the final round for correction. This metadata belongs to GuidedScoreProfile rather than changing
 `ui-profile/v0`. Bridge, Mahjong and Solitaire retain their separate progress
 systems. Older snapshots without the field can recover display metadata from the
 exact matching catalog ruleset; copied metadata always takes precedence.

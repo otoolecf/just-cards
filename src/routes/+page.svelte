@@ -558,7 +558,7 @@
   try{sessionState=await postSessionEvent(activeSessionId,event);setFeedback('success','Result saved.');}catch(e){setFeedback('error',e instanceof Error?e.message:'Unable to save result');}finally{isPosting=false;}
  }
 	async function submitAddRound(): Promise<void> {
-		if (!activeSessionId || isPosting) {
+		if (!activeSessionId || isPosting || roundProgress?.complete) {
 			return;
 		}
 		isPosting = true;
@@ -1477,8 +1477,11 @@ Bob: 2D 3D 4D"
 					</Tabs.Content>
 				</Tabs.Root>
 
+				{#if roundProgress?.complete}
+					<p class="hint">All scheduled rounds are scored. Undo the last round to correct it.</p>
+				{/if}
 				<div class="button-row">
-					{#if !(addRoundMode==='guided' && activeGuidedProfile?.roundScoring)}<ScoreButton variant="primary" type="button" onPress={() => void submitAddRound()} disabled={isPosting}>
+					{#if !(addRoundMode==='guided' && activeGuidedProfile?.roundScoring)}<ScoreButton variant="primary" type="button" onPress={() => void submitAddRound()} disabled={isPosting || roundProgress?.complete === true}>
 						Add round
 					</ScoreButton>{/if}
 					<ScoreButton type="button" onPress={() => void submitUndo()} disabled={isPosting}>Undo</ScoreButton>
