@@ -159,6 +159,16 @@ status, errors, controls and the rules disclosure remain usable in normal mode.
 
 ### Score round progress and stable rows
 
+`ShareResults` reuses ScoreButton, `jc-panel`, `jc-mode-links`, `jc-mode-link` and
+`jc-control`. A keyboard-operable Image / Plain text tab choice displays a locally
+rendered result or a read-only selectable text preview. A 44px name checkbox and
+explicit close action retain accessibility. Errors and status messages are live.
+The PNG uses the existing design-primitives palette and typography, fixed to the
+light export surface so attachments have stable contrast. Best/middle/last/tied
+hand fills use brand/text-on-brand, brand-soft/text, surface-muted/text-muted and
+surface-elevated/text-muted; numeric values remain readable without color meaning.
+The centered winner is factual, not a promotional headline. No tokens are added.
+
 Round-based score sheets show a prominent `Round N` / `Round N of total` status
 banner immediately after the page header. It uses `jc-panel`, the existing
 brand-soft/text contrast pair, XL type and a polite atomic announcement. Shared

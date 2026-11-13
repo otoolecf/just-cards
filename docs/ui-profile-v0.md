@@ -137,6 +137,11 @@ is open-ended. This metadata belongs to GuidedScoreProfile rather than changing
 systems. Older snapshots without the field can recover display metadata from the
 exact matching catalog ruleset; copied metadata always takes precedence.
 
+Optional `GuidedScoreProfile.targetScore` likewise copies `tableRules.scoring.target`
+for completion and result sharing. Missing legacy display metadata can be filled
+only from the exact catalog ruleset. Sharing uses declared outcome, contract and
+tile capabilities for solo/partnership/match results; no game-name branches apply.
+
 ## Separate pattern scoring input
 
 `scorekeeper.patternRound` controls whether a guided score session exposes the

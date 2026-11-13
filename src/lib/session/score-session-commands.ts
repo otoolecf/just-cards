@@ -189,6 +189,8 @@ export type GuidedScoreSpecialRule = GuidedScoreSpecialRuleColumnPairZero;
 export interface GuidedScoreProfile {
  /** Display-only round progress copied from the ruleset when a sheet is created. */
  roundProgress?: { total?: number };
+ /** Optional copied finish threshold for physical score sheets. */
+ targetScore?: number;
  tileMahjong?: import('../gameplay/mahjong').MahjongPolicy;
  roundScoring?:'contract'|'outcome'|'solo_outcome'|'mahjong';
 	rulesetId: string;
@@ -408,6 +410,7 @@ export function deriveGuidedScoreProfileFromBundle(
 ): GuidedScoreProfile {
 	const table = bundle.runtimeRulePack.tableRules;
 	if (table) return {
+ ...(table.scoring.target === undefined ? {} : {targetScore:table.scoring.target}),
  ...( ['all_revealed', 'empty_hand', 'empty_all'].includes(table.roundEnd)
   ? {roundProgress: table.scoring.rounds === undefined ? {} : {total: table.scoring.rounds}}
   : {}),

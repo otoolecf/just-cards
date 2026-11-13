@@ -320,6 +320,26 @@ Existing history is preserved. See [security limits](./security-deployment.md) a
 [the regression specification](./specs/2026-10-30-scoring-work-budget.md).
 ## Shared scoring rooms and corrections
 
+Completed score sheets offer **Share results** with Image and Plain text formats.
+Fixed rounds, copied target scores, completed rubbers/matches and single-deal result
+capabilities determine automatic completion. Other sheets offer **Finish & share**
+so the scorekeeper can choose when to export; this does not close or pause the
+session. Read-only viewers can share automatically completed results.
+
+Sharing captures the currently displayed accepted/local score history. PNGs are
+drawn on the device from public score data and existing design tokens, with a
+centered winner, standings and numeric scores per hand. Text puts the winner on
+line three and includes every hand and final total without emoji. Tie results and
+partnerships are explicit; solo concessions do not declare a winner. Names can be
+replaced with neutral player/team labels. Bonus adjustments remain in totals and
+are identified when they differ from the listed hand sums.
+
+No result page, image upload, room invite or extra score request is created.
+Native image/text sharing is used when available, with image download and
+selectable/copyable text fallbacks. Long images show at most the most recent 36
+hands with an explicit range; plain text retains the whole history. Oversized
+images fail back to text. Sharing neither freezes the room nor changes scores.
+
 Round-based guided sheets prominently display the round being played near the top
 of the page, for example **Round 2 of 9** for Golf. Each manual-point or card-round
 submission records one completed round, even with scores for only part of the
