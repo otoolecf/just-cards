@@ -102,6 +102,11 @@ Keep visual decisions conservative and consistent with this tone.
 
 No new color tokens are introduced; existing contrast guarantees remain applicable.
 
+Shared scoring reuses `jc-panel`, `jc-control` and `ScoreButton` for invites,
+read-only status and handoff. Spectators see scores/history without entry controls.
+Paused tables present one recovery action at a time (check, return, resume or host
+takeover); waiting is explained in text and deal buttons are hidden until resumed.
+
 `CardTile` supports opt-in dragging in hand-arrangement mode, with equivalent tap
 and keyboard-operated left/right controls. Arrangement selection is separate from
 play selection and stays local to the viewer. `ScoreButton.describedBy` associates

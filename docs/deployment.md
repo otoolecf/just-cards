@@ -127,6 +127,35 @@ and an ignored `.dev.vars` containing this installation's owner key; see
 
 ## Updating and troubleshooting
 
+### Isolated staging
+
+Use a separate ignored `.wrangler/staging.json` deployment config. Give it a
+different Worker name (for example `just-cards-staging`), set `workers_dev: true`,
+and remove production `routes`. Create a separate D1 database and bind its ID in
+that config; never reuse the production database ID. Keep Durable Object bindings
+local to the staging Worker (no production `script_name`) so room/session data and
+admission state use separate namespaces. Copy the existing class migration tags.
+Do not copy production secrets; built-in scoring and play need none.
+
+Run checks/build, dry-run deployment, D1 migrations and deploy with the staging
+config explicitly. The existing helper accepts that config:
+
+```sh
+npm run cf:deploy -- --config .wrangler/staging.json
+```
+
+Verify against the staging URL printed by Wrangler. The regression suite can
+capture screenshots directly from that deployed site:
+
+```sh
+PLAYWRIGHT_BASE_URL=https://your-staging-worker.workers.dev \
+STAGING_EVIDENCE_DIR=.output/staging-evidence \
+npx playwright test tests/e2e/scoring-rooms.spec.ts
+```
+
+This does not deploy to the production Worker or attach its custom domain. Keep
+resource identifiers in ignored configs; do not commit them.
+
 Before each update, run tests/check/build, review new migrations, merge any binding
 changes from `wrangler.jsonc` into your ignored config, then use the same explicit
 remote-migration and deploy commands. Do not reset Durable Object migration tags.

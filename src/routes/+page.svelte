@@ -3,6 +3,7 @@
 	import { scoreTitle, scoreDescription } from '$lib/site/metadata';
 	import BrandWordmark from '$lib/components/brand-wordmark.svelte';
 	import { rosterStandings } from '$lib/session/roster-standings';
+	import { correctionForUndo, latestAppliedScore } from '$lib/session/score-correction';
  import OwnerGate from '$lib/components/owner-gate.svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import type { PageData } from './$types';
@@ -41,6 +42,7 @@
 		createSession,
 		savedDeviceSessions,
 		forkOfflineSession,
+		manageSharedScore,
 		getSessionState,
 		postSessionEvent,
 		type SessionStateView
@@ -83,6 +85,20 @@
 	}
 	let joinSessionId = '';
 	let sessionState: SessionStateView | null = null;
+	let scoreInvite = '';
+	let inviteCopied = false;
+	$: canEditScores = !sessionState?.shared || sessionState.shared.isScorekeeper;
+	$: if (activeSessionId && typeof location !== 'undefined') scoreInvite = `${location.origin}/?score=${encodeURIComponent(activeSessionId)}`;
+	async function sharedAction(action:'share'|'claim'|'release') {
+		if(isPosting) return;isPosting=true;
+		try {sessionState=await manageSharedScore(activeSessionId,action);setFeedback('success',action==='release'?'Scoring handed off.':action==='claim'?'You are now the scorekeeper.':'Scoring room ready to share.');}
+		catch(e){setFeedback('error',e instanceof Error?e.message:'Unable to update scoring room');}
+		finally{isPosting=false;}
+	}
+	async function copyScoreInvite() {
+		try {await navigator.clipboard.writeText(scoreInvite);inviteCopied=true;}
+		catch {setFeedback('error','Copy the scoring invite from the field above.');}
+	}
 	let lastSynced = '';
 	let isPolling = false;
 	let isBusy = false;
@@ -350,6 +366,7 @@
 	}
 
 	async function loadSession(force = false): Promise<void> {
+		if (sessionState?.shared && document.hidden && !force) return;
 		if (!activeSessionId || isBusy) {
 			return;
 		}
@@ -701,7 +718,19 @@
 		isPosting = true;
 		setFeedback('loading', 'Undoing...');
 		try {
+			const events=sessionState?.events.map(e=>e.scoreEvent) ?? [];
+			const correction=correctionForUndo(events);
+			const previous=latestAppliedScore(events);
 			sessionState = await postSessionEvent(activeSessionId, { type: 'undo' });
+			if(correction){
+				clearInputsAfterSubmit();addRoundMode=correction.mode;
+				if(correction.mode==='delta')manualDeltaById=correction.points;
+				else playerCardsById=correction.cards;
+			} else if(previous?.type==='add_pattern_round') {
+				patternTargetId=previous.entries[0]?.target.id??'';
+				patternCardsText=previous.entries[0]?.cards.map(c=>`${c.rank}${c.suit?.[0]?.toUpperCase()??''}`).join(' ')??'';
+				patternScoringText=previous.patternScoring.map(r=>`${r.patternId}: ${r.points}`).join('\n');
+			}
 			lastSynced = new Date().toLocaleTimeString();
 			setFeedback('success', 'Undo applied.');
 		} catch (error) {
@@ -719,6 +748,7 @@
 		setFeedback('loading', 'Redoing...');
 		try {
 			sessionState = await postSessionEvent(activeSessionId, { type: 'redo' });
+			clearInputsAfterSubmit();
 			lastSynced = new Date().toLocaleTimeString();
 			setFeedback('success', 'Redo applied.');
 		} catch (error) {
@@ -746,6 +776,7 @@
 	function resetSession(): void {
 		refreshDeviceSessions();
 		activeSessionId = '';
+		const url=new URL(location.href);url.searchParams.delete('score');history.replaceState(history.state,'',url.pathname+url.search+url.hash);
 		localStorage.removeItem('jc-score-session');
 		joinSessionId = '';
 		sessionState = null;
@@ -930,7 +961,7 @@
 		if (requested && rulesets.some(r => r.id === requested && !r.archived)) {
 			selectedRulesetId = requested; selectedScoreInputMode = 'guided'; return cleanup;
 		}
-		const saved = localStorage.getItem('jc-score-session');
+		const saved = new URL(location.href).searchParams.get('score') ?? localStorage.getItem('jc-score-session');
 		if (saved) { joinSessionId = saved; void joinSession(); }
 		return cleanup;
 	});
@@ -1253,6 +1284,22 @@
 			<ScoreButton onPress={() => void loadSession()} disabled={isBusy || isPosting}>Refresh</ScoreButton>
 			<ScoreButton onPress={() => void resetSession()} disabled={isPosting}>Close session</ScoreButton>
 		</div>
+		<section class="panel" aria-label="Scoring room">
+			{#if sessionState?.shared}
+				<h2>Scoring room</h2>
+				<p role="status">{canEditScores?'You are the scorekeeper.':'Watching scores · read only'}</p>
+				<label for="score-invite">Invite everyone to watch</label>
+				<input id="score-invite" class="jc-control" readonly value={scoreInvite} />
+				<div class="button-row"><ScoreButton onPress={copyScoreInvite}>{inviteCopied?'Invite copied':'Copy scoring invite'}</ScoreButton>
+				{#if canEditScores}<ScoreButton disabled={isPosting} onPress={()=>sharedAction('release')}>Hand off scoring</ScoreButton>
+				{:else if sessionState.shared.canTakeOver && sessionState.sync?.status==='synced'}<ScoreButton variant="primary" disabled={isPosting} onPress={()=>sharedAction('claim')}>Take over scoring</ScoreButton>{/if}</div>
+				{#if !canEditScores && !sessionState.shared.canTakeOver}<p class="jc-subtle">The scorekeeper can hand off now. Takeover becomes available after their scoring page is inactive for 60 seconds.</p>{/if}
+				<p class="jc-subtle">Scores update automatically. Shared scoring needs a connection; keep this page open and visible while keeping score.</p>
+			{:else}
+				<h2>Share scoring</h2><p>Let everyone watch on their own phone. Only the scorekeeper can edit.</p>
+				<ScoreButton onPress={()=>sharedAction('share')} disabled={isPosting || sessionState?.sync?.status!=='synced'}>Share scoring room</ScoreButton>
+			{/if}
+		</section>
 
 		<section class="panel score-spotlight">
 			<h2>Current score</h2>
@@ -1283,11 +1330,12 @@
 			{/if}
 		</section>
 
+		{#if canEditScores}
 			<section class="panel">
 				<h2>Add round</h2>
 				<Tabs.Root bind:value={addRoundMode} class="segmented">
 					<Tabs.List>
-						{#if activeScoreInputMode() === 'guided'}
+						{#if summaryInputMode === 'guided'}
 							<Tabs.Trigger
 								value="guided"
 								class={`mode-trigger ${addRoundMode === 'guided' ? 'active' : ''}`.trim()}
@@ -1295,7 +1343,7 @@
 								{activeGuidedProfile?.roundScoring?'Guided result':'Guided cards'}
 							</Tabs.Trigger>
 						{/if}
-						{#if activeScoreInputMode() === 'raw'}
+						{#if summaryInputMode === 'raw'}
 							<Tabs.Trigger
 								value="rows"
 								class={`mode-trigger ${addRoundMode === 'rows' ? 'active' : ''}`.trim()}
@@ -1494,6 +1542,7 @@ run: 5"
 		</details>
 		{/if}
 
+		{/if}
 		<section class="panel event-panel">
 			<details>
 				<summary><h2>Recent events ({sessionState?.eventCount ?? 0})</h2></summary>
