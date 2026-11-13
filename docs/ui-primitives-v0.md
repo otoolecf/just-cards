@@ -173,7 +173,9 @@ Round-based score sheets show a prominent `Round N` / `Round N of total` status
 banner immediately after the page header. It uses `jc-panel`, the existing
 brand-soft/text contrast pair, XL type and a polite atomic announcement. Shared
 viewers see the same progress. Completion replaces the current-round label when
-the planned rounds have scores; undo can reopen the last round. No tokens change.
+the planned rounds have scores. At that point Add round uses ScoreButton's existing
+disabled state, with a hint explaining how Undo reopens the final round for
+correction. Undo and Redo retain their usual availability. No tokens change.
 
 Scorekeeper totals follow entry roster order, with separate ordinal rank text using
 existing muted-text and small-type tokens. The list is unordered so row position

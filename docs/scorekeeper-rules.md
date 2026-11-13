@@ -341,12 +341,18 @@ hands with an explicit range; plain text retains the whole history. Oversized
 images fail back to text. Sharing neither freezes the room nor changes scores.
 
 Round-based guided sheets prominently display the round being played near the top
-of the page, for example **Round 2 of 9** for Golf. Each manual-point or card-round
+of the page. Once the configured round count is reached, **Add round** is disabled
+for both guided cards and manual points. **Undo** remains available and restores the
+final round's scores for correction; re-adding or redoing it disables entry again.
+The limit follows the event-derived banner state after reload or shared updates.
+Sheets without a fixed round count remain open for additional rounds.
+
+The round banner shows the current round, for example **Round 2 of 9** for Golf. Each manual-point or card-round
 submission records one completed round, even with scores for only part of the
 roster. Bonus-pattern and pool-settlement events do not advance it. Undo/redo and
 corrections replay the same event history, and shared spectators see the same
 progress. After all scheduled rounds have scores, the banner shows completion;
-existing score-entry permissions remain available for corrections or extra rounds.
+undoing a round reopens score entry for corrections.
 Raw calculators do not infer rounds. Fixed totals are copied into the guided
 profile so reload and offline use retain the session's settings.
 

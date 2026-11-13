@@ -187,7 +187,7 @@ export interface GuidedScoreSpecialRuleColumnPairZero {
 export type GuidedScoreSpecialRule = GuidedScoreSpecialRuleColumnPairZero;
 
 export interface GuidedScoreProfile {
- /** Display-only round progress copied from the ruleset when a sheet is created. */
+ /** Round progress and entry limit copied from the ruleset when a sheet is created. */
  roundProgress?: { total?: number };
  /** Optional copied finish threshold for physical score sheets. */
  targetScore?: number;
